@@ -19,3 +19,16 @@ To (locally) reproduce this project, do the following:
 
 This will install all necessary packages for you to be able to run the scripts and
 everything should work out of the box.
+
+
+# ideas
+
+* Each agent has a function that has a match-case structure 
+* The state is probabilistic, there are facts that have more probability than others, e.g. with a normal distribution
+* properties of state are linked like a bayes tree
+
+
+
+# support
+
+* [Weibull distribution](https://youtu.be/ustgf9D7d5Q?t=894)
