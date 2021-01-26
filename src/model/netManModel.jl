@@ -107,7 +107,9 @@ end
 function agent_step!(a::Agent,model)
     #placeholder
     if model.ticks == 5 && a.id == 6
-        a.color = :blue
+        a.color = :pink
+    else
+        a.color = :lightblue
     end
 end
 
@@ -118,6 +120,8 @@ function agent_step!(a::SimNE,model)
     #placeholder
     if model.ticks == 5 && a.id == 3
         a.color = :red
+    else
+        a.color = :gray
     end
 end
 
@@ -152,7 +156,7 @@ function run_model(n,args,properties;agent_data)
             collect_agent_data!(df, model, agent_data, i)
         end
     println(model)
-    gif(anim, plots_dir*"animation.gif", fps = 5), df
+    gif(anim, plots_dir*"animation.gif", fps = 1), df
 end
 
 function agent_color(a)

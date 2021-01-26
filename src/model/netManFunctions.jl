@@ -146,24 +146,25 @@ function plotabm_networks(
         ,titlefontsize=1
         ,titlefontcolor=:white
     )
-    @show model.ticks
-    @show [ getindex(model,get_control_agent(i,model)).color for i in 1:nv(model.ctl_graph) ]
+    
+    annotate!((-0.4,0.75,Plots.text("Asset Network", 11, :black, :center)))
 
     ctl_p = graphplot(
         model.ctl_graph
         ,names = [ get_control_agent(i,model) for i in 1:nv(model.ctl_graph) ]
         , method = :circular
         ,size=(300,200)
-        ,node_weights = [ i > 9 ? 1 : 30 for i in 1:nv(model.ctl_graph)]
+        ,node_weights = [ i > 9 ? 0.5 : 30 for i in 1:nv(model.ctl_graph)]
         ,nodeshape = :circle
-        ,nodecolor = [ getindex(model,get_control_agent(i,model)).color == :red ? 2 : 1 for i in 1:nv(model.ctl_graph) ]
+        ,nodecolor = [ getindex(model,get_control_agent(i,model)).color for i in 1:nv(model.ctl_graph) ]
         ,markerstrokecolor = :dimgray
         ,edgecolor=:dimgray
         ,markerstrokewidth = 1.1
         ,node_size=nsize
         ,edgestyle = :dot
     )
-    
+    annotate!((-0.4,0.72,Plots.text("Control Network", 11, :black, :center)))
+
     p = Plots.plot(ctl_p,ntw_p, layout=l, size=(300,600))
     
     return p
