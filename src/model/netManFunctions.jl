@@ -96,3 +96,84 @@ Find agent in the model given the id
 function find_agent(id,model)
     first(filter(a->a.id == id,Set(allagents(model))))
 end
+
+"""
+    load the graph of the network to control
+"""
+
+function load_network_graph()
+    Random.seed!(123)
+    ntw = smallgraph("house")#watts_strogatz(25,4,0.8)
+    #gplot(ntw,layout=circular_layout,nodelabel=nodes(ntw))
+    return ntw
+end
+
+
+"""
+    load the graph of the control system
+"""
+
+function load_control_graph()
+    Random.seed!(123)
+    ntw = complete_graph(5)# watts_strogatz(25,4,0.8)
+    #gplot(ntw,layout=circular_layout,nodelabel=nodes(ntw))
+    return ntw
+end
+
+
+
+function plotabm_networks(
+    model;
+    kwargs...,
+)
+
+    nsize = 0.13
+    lwidth = 0.5
+
+    l = @layout [a{1w};b]
+    ntw_p = graphplot(
+        model.ntw_graph
+        ,names = 1:nv(model.ntw_graph)
+        , method = :circular
+        ,size=(300,200)
+        ,node_weights = [ i > 9 ? 5 : 30 for i in 1:nv(model.ntw_graph)]
+        ,nodeshape = :hexagon
+        ,nodecolor = [ getindex(model,i).color for i in 1:nv(model.ntw_graph) ]
+        ,markerstrokecolor = :dimgray
+        ,edgecolor=:dimgray
+        ,markerstrokewidth = 1.1
+        ,node_size=nsize
+        ,titlefontsize=1
+        ,titlefontcolor=:white
+    )
+    @show model.ticks
+    @show [ getindex(model,get_control_agent(i,model)).color for i in 1:nv(model.ctl_graph) ]
+
+    ctl_p = graphplot(
+        model.ctl_graph
+        ,names = [ get_control_agent(i,model) for i in 1:nv(model.ctl_graph) ]
+        , method = :circular
+        ,size=(300,200)
+        ,node_weights = [ i > 9 ? 1 : 30 for i in 1:nv(model.ctl_graph)]
+        ,nodeshape = :circle
+        ,nodecolor = [ getindex(model,get_control_agent(i,model)).color == :red ? 2 : 1 for i in 1:nv(model.ctl_graph) ]
+        ,markerstrokecolor = :dimgray
+        ,edgecolor=:dimgray
+        ,markerstrokewidth = 1.1
+        ,node_size=nsize
+        ,edgestyle = :dot
+    )
+    
+    p = Plots.plot(ctl_p,ntw_p, layout=l, size=(300,600))
+    
+    return p
+
+end
+
+function get_control_agent(asset_id::Int,model)
+    return model.mapping[asset_id]
+end
+
+function set_control_agent!(asset_id::Int, agent_id::Int, model)
+    model.mapping[asset_id] = agent_id
+end

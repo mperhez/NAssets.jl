@@ -1,8 +1,9 @@
-using Agents, AgentsPlots, Plots#, LightGraphs, SimpleWeightedGraphs, GraphPlot
+using Agents, AgentsPlots, Plots, LightGraphs, SimpleWeightedGraphs, GraphPlot, GraphRecipes
 using CSV
 using DataFrames
 using Random
 using Match
+
 
 include("netManAbm.jl")
 
@@ -13,10 +14,16 @@ plots_dir = "plots/"
 args = Dict()
 params = Dict()
 
+
+ntw_graph = load_network_graph()
+ctl_graph = load_control_graph()
+
 n = 10
 args[:q]=10
 args[:Τ]=10
 args[:ΔΦ]=1
+args[:ntw_graph]=ntw_graph
+args[:ctl_graph]=ctl_graph
 # params[:graph] = swg
 #adata = [:phase,:color]
 adata = [:pos]
