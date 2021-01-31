@@ -103,7 +103,8 @@ end
 
 function load_network_graph()
     Random.seed!(123)
-    ntw = smallgraph("house")#watts_strogatz(25,4,0.8)
+    #ntw = smallgraph("house")
+    ntw = watts_strogatz(10,4,0.8)
     #gplot(ntw,layout=circular_layout,nodelabel=nodes(ntw))
     return ntw
 end
@@ -115,7 +116,7 @@ end
 
 function load_control_graph()
     Random.seed!(123)
-    ntw = complete_graph(5)# watts_strogatz(25,4,0.8)
+    ntw = complete_graph(10)# watts_strogatz(25,4,0.8)
     #gplot(ntw,layout=circular_layout,nodelabel=nodes(ntw))
     return ntw
 end
@@ -136,7 +137,7 @@ function plotabm_networks(
         ,names = 1:nv(model.ntw_graph)
         , method = :circular
         ,size=(300,200)
-        ,node_weights = [ i > 9 ? 5 : 30 for i in 1:nv(model.ntw_graph)]
+        ,node_weights = [ i > 9 ? 1 : 10 for i in 1:nv(model.ntw_graph)]
         ,nodeshape = :hexagon
         ,nodecolor = [ getindex(model,i).color for i in 1:nv(model.ntw_graph) ]
         ,markerstrokecolor = :dimgray
@@ -154,7 +155,7 @@ function plotabm_networks(
         ,names = [ get_control_agent(i,model) for i in 1:nv(model.ctl_graph) ]
         , method = :circular
         ,size=(300,200)
-        ,node_weights = [ i > 9 ? 0.5 : 30 for i in 1:nv(model.ctl_graph)]
+        ,node_weights = [ i > 9 ? 1 : 1 for i in 1:nv(model.ctl_graph)]
         ,nodeshape = :circle
         ,nodecolor = [ getindex(model,get_control_agent(i,model)).color for i in 1:nv(model.ctl_graph) ]
         ,markerstrokecolor = :dimgray
@@ -162,6 +163,7 @@ function plotabm_networks(
         ,markerstrokewidth = 1.1
         ,node_size=nsize
         ,edgestyle = :dot
+        ,curves = false
     )
     annotate!((-0.4,0.72,Plots.text("Control Network", 11, :black, :center)))
 

@@ -6,13 +6,15 @@ Self-organising agent
 abstract type SOAgent <: AbstractAgent end
 abstract type SimAsset <: AbstractAgent end
 abstract type State end
+abstract type Packet end
 
 """
     "Real" state of the asset
 """
 mutable struct SimpleAssetState <: State
     color::Symbol
-    condition_trj::Array{Float64,2}    
+    condition_trj::Array{Float64,2}
+    queue::Channel{Packet}
 end
 
 """
@@ -73,8 +75,8 @@ end
 #     Agent(id,pos,state)
 # end
 
-function SimpleAssetState(condition_trj::Array{Float64,2})
-    SimpleAssetState(:blue,condition_trj)
+function NetworkAssetState(condition_trj::Array{Float64,2})
+    NetworkAssetState(:blue,condition_trj,Channel{DPacket}(),Vector{Flow}())
 end
 
 function SimpleAgState(condition_trj::Array{Float64,2}, health_trj::Vector{Float64})
@@ -82,7 +84,7 @@ function SimpleAgState(condition_trj::Array{Float64,2}, health_trj::Vector{Float
 end
 
 function SimNE(id,nid,state)
-     SimNE(id,nid,:gray,0.3,state)
+     SimNE(id,nid,:lightgray,0.3,state)
 end
 function Agent(id,nid,state)
     Agent(id,nid,:lightblue,0.1,state)

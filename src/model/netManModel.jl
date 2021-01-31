@@ -15,7 +15,8 @@ function initialize(args,user_props;grid_dims=(3,3),seed=0)
         :ΔΦ => args[:ΔΦ],
         :ntw_graph => args[:ntw_graph],
         :ctl_graph => args[:ctl_graph],
-        :mapping => Dict{Int64,Int64}()
+        :mapping => Dict{Int64,Int64}(),
+        :pkt_per_tick => 5 # How may packets can be processed per tick
     )
 
     Random.seed!(seed)
@@ -55,7 +56,7 @@ function create_agents!(model)
     # create SimNE
     for i in 1:nv(model.properties[:ntw_graph])
         #next_fire = rand(0:0.2:model.:Τ)
-        s0 = SimpleAssetState(zeros(2,2))
+        s0 = NetworkAssetState(zeros(2,2))
         id = nextid(model)
         @show i
         a = add_agent_pos!(
@@ -91,6 +92,12 @@ end
 function model_step!(model)
     model.ticks += 1
     
+    pkt = DPacket(1,1,7,10,model.ticks,4)
+
+    net_elm = find_agent(1,model)
+    put!(net_elm.state.queue,(0,pkt))
+
+
     # @show model.ticks
     # for a in allagents(model)
     #     #pulse(a,model)
@@ -118,11 +125,12 @@ end
 """
 function agent_step!(a::SimNE,model)
     #placeholder
-    if model.ticks == 5 && a.id == 3
-        a.color = :red
-    else
-        a.color = :gray
-    end
+    # if model.ticks == 5 && a.id == 3
+    #     a.color = :red
+    # else
+    #     a.color = :lightgray
+    # end
+    in_packet_processing(a,model)
 end
 
 """
