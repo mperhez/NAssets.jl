@@ -1,4 +1,4 @@
-
+export State
 """
 Self-organising agent
 """
@@ -54,16 +54,7 @@ mutable struct Agent <: SOAgent
     state::SimpleAgState
 end
 
-"""
-    Simulated Physical Network Element
-"""
-mutable struct SimNE <: SimAsset
-    id::Int64
-    pos::Int64
-    color::Symbol
-    size::Float16
-    state::SimpleAssetState
-end
+
 
 # function Agent(id,phase)
 #     #:blue,phase,[],0,1,id,zeros((2,2))
@@ -75,17 +66,12 @@ end
 #     Agent(id,pos,state)
 # end
 
-function NetworkAssetState(condition_trj::Array{Float64,2})
-    NetworkAssetState(:blue,condition_trj,Channel{DPacket}(),Vector{Flow}())
-end
+
 
 function SimpleAgState(condition_trj::Array{Float64,2}, health_trj::Vector{Float64})
     SimpleAgState(:red,condition_trj,health_trj)
 end
 
-function SimNE(id,nid,state)
-     SimNE(id,nid,:lightgray,0.3,state)
-end
 function Agent(id,nid,state)
     Agent(id,nid,:lightblue,0.1,state)
 end

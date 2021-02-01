@@ -1,4 +1,7 @@
 export ϕ
+
+@enum ControlModel CENTRALISED=1 DISTRIBUTED=2
+
 function ϕ(t,T,pulse)
     α = 0.5
     Β = 0.5
@@ -116,14 +119,12 @@ end
 
 function load_control_graph()
     Random.seed!(123)
-    ntw = complete_graph(10)# watts_strogatz(25,4,0.8)
+    ntw = complete_graph(1)# watts_strogatz(25,4,0.8)
     #gplot(ntw,layout=circular_layout,nodelabel=nodes(ntw))
     return ntw
 end
 
-
-
-function plotabm_networks(
+function plotabm_networks_multi(
     model;
     kwargs...,
 )
@@ -173,10 +174,64 @@ function plotabm_networks(
 
 end
 
+
+function plotabm_networks_mono(
+    model;
+    kwargs...,
+)
+
+    nsize = 0.13
+    lwidth = 0.5
+
+    l = @layout [a{1w};b]
+    ntw_p = graphplot(
+        model.ntw_graph
+        ,names = 1:nv(model.ntw_graph)
+        , method = :circular
+        ,size=(300,200)
+        ,node_weights = [ i > 9 ? 1 : 10 for i in 1:nv(model.ntw_graph)]
+        ,nodeshape = :hexagon
+        ,nodecolor = [ getindex(model,i).color for i in 1:nv(model.ntw_graph) ]
+        ,markerstrokecolor = :dimgray
+        ,edgecolor=:dimgray
+        ,markerstrokewidth = 1.1
+        ,node_size=nsize
+        ,titlefontsize=1
+        ,titlefontcolor=:white
+    )
+    
+    annotate!((-0.4,0.75,Plots.text("Asset Network", 11, :black, :center)))
+
+    #p = Plots.plot(ntw_p, layout=l, size=(300,600))
+    
+    return ntw_p
+
+end
+
+function plotabm_networks(
+    model;
+    kwargs...
+)
+    if nv(model.ctl_graph) > 1
+        return plotabm_networks_multi(model;kwargs...)
+    else
+        return plotabm_networks_mono(model;kwargs...)
+    end
+end
+
+
+
 function get_control_agent(asset_id::Int,model)
     return model.mapping[asset_id]
 end
 
+function get_controlled_assets(agent_id::Int,model)
+    assets = filter(k->model.mapping[k] == agent_id,keys(model.mapping))
+    println("assets controlled by $(agent_id) are: $(length(assets))")
+    return assets
+end
+
 function set_control_agent!(asset_id::Int, agent_id::Int, model)
+    #find_agent(asset_id,model).controller_id = agent_id
     model.mapping[asset_id] = agent_id
 end
