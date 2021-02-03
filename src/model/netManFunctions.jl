@@ -227,11 +227,20 @@ end
 
 function get_controlled_assets(agent_id::Int,model)
     assets = filter(k->model.mapping[k] == agent_id,keys(model.mapping))
-    println("assets controlled by $(agent_id) are: $(length(assets))")
+    #println("assets controlled by $(agent_id) are: $(length(assets))")
     return assets
 end
 
 function set_control_agent!(asset_id::Int, agent_id::Int, model)
-    #find_agent(asset_id,model).controller_id = agent_id
+    getindex(model,asset_id).controller_id = agent_id
+    #TODO Consider removing this line below
+    #To avoid putting info in model
     model.mapping[asset_id] = agent_id
+end
+
+function flow_table(a::AbstractAgent)
+    @match a begin
+        a::SimNE => a.state.flow_table
+        _ => []
+    end
 end

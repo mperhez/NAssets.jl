@@ -10,13 +10,14 @@ function initialize(args,user_props;grid_dims=(3,3),seed=0)
     # Global model props
     default_props = Dict(
         :ticks => 0,# # time unit
+        :pkt_id => 0,
         :pulses=>pulses,
         :Τ => args[:Τ], # Max time steps to fire
         :ΔΦ => args[:ΔΦ],
         :ntw_graph => args[:ntw_graph],
         :ctl_graph => args[:ctl_graph],
         :mapping => Dict{Int64,Int64}(),
-        :pkt_per_tick => 5, # How may packets can be processed per tick
+        :pkt_per_tick => 500, # How many packets are processsed per tick
         :ctrl_model => CENTRALISED
     )
 
@@ -37,26 +38,25 @@ Simplest create agents
 """
 
 function create_agents!(model)
-    
+    a_params = Dict(:pkt_per_tick=>model.pkt_per_tick)    
     # create SimNE
     for i in 1:nv(model.properties[:ntw_graph])
         #next_fire = rand(0:0.2:model.:Τ)
         s0 = NetworkAssetState(zeros(2,2))
         id = nextid(model)
-        @show i
+        # @show i
         a = add_agent_pos!(
-                SimNE(id,i,s0),model
+                SimNE(id,i,s0,a_params),model
             )
-        if a.id == 1 ; init_switch(a,model) end
     end
 
     #create control agents 1:1
     for i in 1:nv(model.properties[:ctl_graph])
         #next_fire = rand(0:0.2:model.:Τ)
-        s0 = SimpleAgState(zeros((2,2)),Vector{Float64}())
+        s0 = SDNCtlAgState(zeros((2,2)),Vector{Float64}())
         id = nextid(model)
         a = add_agent_pos!(
-                Agent(id,i,s0),model
+                Agent(id,i,s0,a_params),model
             )
         ##assign controller to SimNE
         if model.ctrl_model == CENTRALISED
@@ -66,12 +66,9 @@ function create_agents!(model)
         else
             set_control_agent!(i,id,model)
         end
-        get_controlled_assets(id,model)    
     end
 
-    
-    
-
+    init_agents!(model)
     # for i in 1:nv(model.properties[:ntw_graph])
     #     @show get_node_agents(i, model)
     # end
@@ -87,23 +84,31 @@ end
 """
 function model_step!(model)
     model.ticks += 1
-    @show model.ticks
-    pkt = DPacket(1,1,7,10,model.ticks,4)
+    #@show model.ticks
+    
+    for i =1:100
+        pkt = create_pkt(1,7,model)
+        sne = getindex(model,1)
+        put!(sne.state.queue,(model.ticks,1,0,pkt))
+    end
+    print("[$(model.ticks)] 100 pkts generated")
 
-    net_elm = find_agent(1,model)
-    put!(net_elm.state.queue,(0,pkt))
-    print("Has put element")
+    #print("Has sent packet to $(sne.id)")
 
    # @show model.ticks
     for a in allagents(model)
     #     #pulse(a,model)
     #     println(a.state.condition_trj)
-        @match a begin
-            a::SimNE => 
-                        isready(a.state.queue) ? in_packet_processing(a,model) : println("queue of $(a.id) is empty")
-            _ => continue
-        end
+        # @match a begin
+        #     a::SimNE => 
+        isready(a.state.queue) ? in_packet_processing(a,model) : nothing #println("queue of $(a.id) is empty")
+        #     _ => continue
+        # end
      end
+     for a in allagents(model)
+        pending_pkt_handler(a,model)
+     end
+
     # for a in allagents(model)
     #     #process_pulses(a,model)
     # end
@@ -155,12 +160,12 @@ function run_model(n,args,properties; agent_data, model_data)
             collect_agent_data!(df, model, agent_data, i)
             collect_model_data!(df_m, model, model_data, i)
         end
-    println(model)
+    println("PRINTING HERE")
     gif(anim, plots_dir*"animation.gif", fps = 1), df, df_m
 end
 
 function agent_color(a)
-    @show typeof(a)
+    #@show typeof(a)
     return :blue#a.color
 end
         
@@ -170,3 +175,122 @@ end
    
 #    return [c.shape for c in a] 
 # end
+
+function init_agents!(model)
+    # for a in sort(allagents(model))
+    #     init_agent(a,model)
+    # end
+
+    #force ordered start
+
+    ids = [a.id for a in allagents(model)]
+    
+    for id in sort(ids)
+        init_agent!(getindex(model,id),model)
+    end
+end
+
+function init_agent!(a::Agent,model)
+    nes = get_controlled_assets(a.id,model)
+    g = model.ntw_graph
+    
+    a.state.paths = all_k_shortest_paths(model.ntw_graph)
+
+    #@show a.state.paths
+    #"discover" ports and links of each asset
+    # for ne in nes
+    #     println(find_agent(ne,model).state.port_edge_list)
+    # end
+    # for v in vertices(model.ntw_graph)
+    #     println(" Edges of $(v) are $(all_neighbors(model.ntw_graph,v))")
+    #     #println(" Edges: $(e)")
+    # end
+end
+
+
+function init_agent!(a::SimNE,model)
+    nbs = all_neighbors(model.ntw_graph,a.id)
+    push!(a.state.port_edge_list,(0,"h$(a.id)")) # link to a host of the same id
+    for i in 1:size(nbs,1)
+        push!(a.state.port_edge_list,(i,"s$(nbs[i])"))
+    end
+
+    init_switch(a,model)
+end
+
+function all_k_shortest_paths(g::AbstractGraph)
+    return [ (first(i.paths...),last(i.paths...),i.paths...) 
+        for i in 
+            filter( x -> !isnothing(x), 
+                    [ s != d ? 
+                        #returns YenState with distances of each path
+                        yen_k_shortest_paths(g,s,d) : nothing 
+                        for s in vertices(g), d in vertices(g) ]
+                ) ]
+end
+
+"""
+msg: SimNE.id, in_port, DPacket
+"""
+function in_packet_handler(a::Agent,msg::Tuple{Int64,Int64,Int64,DPacket},model)
+    dpid = msg[2] # aka SimNE.id aka switch.id
+    in_port = msg[3]
+    dst = msg[4].dst
+    src = msg[4].src
+    path = []
+
+    if dpid != dst
+        paths = filter(p-> p[1] == src && p[2] == dst ,a.state.paths)
+        path = !isempty(paths) ? paths[1] : []
+    end
+    
+    install_flow(dpid,in_port,path,model)
+
+end
+
+# function install_flows(a::SimNE,paths,model)
+#     (2, 1, [2, 10, 1])
+
+
+# end
+
+function install_flow(in_dpid,in_port_start,path,model)
+    # println("install flow: $(in_dpid) - $(in_port_start) - $(path)")
+    if !isempty(path)
+        pairs = diag([j == i + 1 ? (path[3][i],path[3][j]) : nothing for i=1:size(path[3],1)-1, j=2:size(path[3],1)])
+        
+        prev_sne_id = path[1]
+        for p in pairs
+            sne = getindex(model,p[1])
+            prev_sne = getindex(model,prev_sne_id)
+    #        in_port = filter(x->x[2]=="s$(p[2])",sne.state.port_edge_list)[1][1]
+            port_dst = filter(x->x[2]=="s$(p[2])",sne.state.port_edge_list)[1]
+            out_port = port_dst[1]
+            # dst = getindex(model,parse(Int64,port_dst[2][2]))
+            # puertos = filter(x->x[2]=="s$(p[1])",dst.state.port_edge_list)
+            # println("Puertos $(puertos) in $(dst.id)")
+            # puerto = puertos[1][1]
+            in_port = p[1] == path[1] ? in_port_start : filter(x->x[2]=="s$(prev_sne_id)",sne.state.port_edge_list)[1][1]
+            r_src = path[1]
+            r_dst = path[2]
+            
+            fw = Flow(sne.id,MRule(string(in_port),string(r_src),string(r_dst)),[out_port],(ticks,pkt,sne_src,sne_dst)->forward(ticks,pkt,sne_src,sne_dst))
+            println("[$(model.ticks)] Installing flow: $(p[1]) - $(fw.match_rule)")
+            push!(sne.state.flow_table,fw)
+            prev_sne_id = sne.id
+        end
+    else
+        sne = getindex(model,in_dpid)
+        #TODO how to make the rule to be regardless of port in
+        fw =Flow(in_dpid,MRule("*","*",string(in_dpid)),[0],(ticks,pkt,src_sne)->forward(ticks,pkt,src_sne))
+        println("[$(model.ticks)]  Installing flow to $(in_dpid): $(fw.match_rule)")
+        push!(sne.state.flow_table,fw)
+    end
+#TODO: take every pair of vertices in the path and install install_flows
+   # push!(a.state.flow_table,Flow(a.id,MRule(in_port,path[1],path[2]),(pkt)->forward(pkt,out_port)))
+end
+
+function create_pkt(src::Int64,dst::Int64,model)
+    model.pkt_id += 1
+    return DPacket(model.pkt_id,src,dst,0,model.:ticks,100)
+end

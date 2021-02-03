@@ -27,6 +27,8 @@ mutable struct SimpleAgState <: State
     health_trj::Vector{Float64}
 end
 
+
+
 #fireflystate
 mutable struct FFAgState <: State
     color::Symbol
@@ -41,17 +43,6 @@ mutable struct FFAgState <: State
     health_trj::Vector{Float64}
     #pulse_strategy::Symbol # FIFO, NEAR, MIXED
     #ϕ
-end
-
-"""
-    Control Agent
-"""
-mutable struct Agent <: SOAgent
-    id::Int64
-    pos::Int64
-    color::Symbol
-    size::Float16
-    state::SimpleAgState
 end
 
 
@@ -70,10 +61,6 @@ end
 
 function SimpleAgState(condition_trj::Array{Float64,2}, health_trj::Vector{Float64})
     SimpleAgState(:red,condition_trj,health_trj)
-end
-
-function Agent(id,nid,state)
-    Agent(id,nid,:lightblue,0.1,state)
 end
 
 
