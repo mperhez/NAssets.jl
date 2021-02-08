@@ -18,7 +18,9 @@ function initialize(args,user_props;grid_dims=(3,3),seed=0)
         :ctl_graph => args[:ctl_graph],
         :mapping => Dict{Int64,Int64}(),
         :pkt_per_tick => 500, # How many packets are processsed per tick
-        :ctrl_model => CENTRALISED
+        :ctrl_model => CENTRALISED,
+        :pkt_size => 1500,
+        :freq => 30 # frequency of monitoring
     )
 
     Random.seed!(seed)
@@ -86,13 +88,7 @@ function model_step!(model)
     model.ticks += 1
     #@show model.ticks
     
-    for i =1:100
-        pkt = create_pkt(1,7,model)
-        sne = getindex(model,1)
-        put!(sne.state.queue,(model.ticks,1,0,pkt))
-    end
-    print("[$(model.ticks)] 100 pkts generated")
-
+    generate_traffic(model)
     #print("Has sent packet to $(sne.id)")
 
    # @show model.ticks
@@ -107,7 +103,21 @@ function model_step!(model)
      end
      for a in allagents(model)
         pending_pkt_handler(a,model)
+        @match a begin
+            a::SimNE, if model.ticks%model.freq == 0 && size(a.state.in_pkt_trj,1) >= (model.freq - 1) end =>
+                        # @show model.ticks, a.state.in_pkt_trj
+                        push!(a.statistics, create_statistic(a,model))
+            _ => nothing
+        end
+
+
      end
+
+
+    #  if model.ticks == 80
+    #     rem_vertex!(model.ntw_graph,3)
+    #  end
+
 
     # for a in allagents(model)
     #     #process_pulses(a,model)
@@ -255,7 +265,7 @@ end
 # end
 
 function install_flow(in_dpid,in_port_start,path,model)
-    # println("install flow: $(in_dpid) - $(in_port_start) - $(path)")
+    println("install flow: $(in_dpid) - $(in_port_start) - $(path)")
     if !isempty(path)
         pairs = diag([j == i + 1 ? (path[3][i],path[3][j]) : nothing for i=1:size(path[3],1)-1, j=2:size(path[3],1)])
         
@@ -292,5 +302,32 @@ end
 
 function create_pkt(src::Int64,dst::Int64,model)
     model.pkt_id += 1
-    return DPacket(model.pkt_id,src,dst,0,model.:ticks,100)
+    return DPacket(model.pkt_id,src,dst,1500,model.:ticks,100)
 end
+
+function generate_traffic(model)
+
+    q_pkts = abs(round(10rand(Normal(1,0.1))))
+    #q_pkts = 100
+    #src,dst = samplepair(1:nv(model.ntw_graph)) # can be replaced for random pair
+    src,dst = (1,7)
+    for i =1:q_pkts
+        pkt = create_pkt(src,dst,model)
+        sne = getindex(model,src)
+        put!(sne.state.queue,(model.ticks,src,0,pkt)) # always from port 0
+    end
+
+   # println("[$(model.ticks)] $(q_pkts) pkts generated")
+end
+
+function create_statistic(a::SimNE,model)
+    t₋₁ = (model.ticks - model.freq + 1)
+    t₀ = model.ticks
+    b₋₁ = length(a.state.in_pkt_trj)- model.freq-1 > 0 ? sum(a.state.in_pkt_trj[1:(end-model.freq-1)]) * model.pkt_size : first(a.state.in_pkt_trj) * model.pkt_size
+    b₀ = sum(a.state.in_pkt_trj[1:end]) * model.pkt_size
+
+    return NEStatistics(
+                     model.ticks,a.id
+                    ,throughput(b₋₁,b₀,t₋₁,t₀)
+                    ,0.0)
+end                    

@@ -244,3 +244,12 @@ function flow_table(a::AbstractAgent)
         _ => []
     end
 end
+
+function statistics(a::AbstractAgent)
+    @match a begin
+        a::SimNE =>
+            a.statistics
+
+        _ => []
+    end
+end

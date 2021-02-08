@@ -21,6 +21,14 @@ mutable struct DPacket <: Packet
     hop_limit::Int64
 end
 
+
+mutable struct NEStatistics 
+    tick::Int64
+    ne_id::Int64
+    throughput_in::Float64
+    throughput_out::Float64
+end
+
 mutable struct NetworkAssetState <: State
     color::Symbol
     port_edge_list::Vector{Tuple{Int64,String}}
@@ -30,10 +38,11 @@ mutable struct NetworkAssetState <: State
     queue::Channel{Tuple{Int64,Int64,Int64,DPacket}} # 
     flow_table::Vector{Flow}
     pending::Vector{Tuple{Int64,Int64,Int64,DPacket}}
+    requested_ctl::Vector{Tuple{Int64,Int64}} # flows requested to controller
 end
 
 function NetworkAssetState(condition_trj::Array{Float64,2})
-    NetworkAssetState(:blue,Vector{Tuple{Int64,String}}(),condition_trj,Vector{Int64}(),Vector{Int64}(),Channel{Tuple{Int64,Int64,Int64,DPacket}}(1000),Vector{Flow}(),Vector{Tuple{Int64,Int64,Int64,DPacket}}())
+    NetworkAssetState(:blue,Vector{Tuple{Int64,String}}(),condition_trj,Vector{Int64}(),Vector{Int64}(),Channel{Tuple{Int64,Int64,Int64,DPacket}}(1000),Vector{Flow}(),Vector{Tuple{Int64,Int64,Int64,DPacket}}(),Vector{Tuple{Int64,Int64}}())
 end
 
 mutable struct SDNCtlAgState <: State
@@ -80,9 +89,10 @@ mutable struct SimNE <: SimAsset
     state::NetworkAssetState
     controller_id::Int64
     params::Dict{Symbol,Any}
+    statistics::Vector{NEStatistics}
 end
 function SimNE(id,nid,state,params)
-     SimNE(id,nid,:lightgray,0.3,state,-1,params) #initialise SimNE with a placeholder in the controller
+     SimNE(id,nid,:lightgray,0.3,state,-1,params,Vector{NEStatistics}()) #initialise SimNE with a placeholder in the controller
 end
 
 function ask_controller(sne::SimNE,a::Agent,msg::Tuple{Int64,Int64,Int64,DPacket})
@@ -91,12 +101,12 @@ function ask_controller(sne::SimNE,a::Agent,msg::Tuple{Int64,Int64,Int64,DPacket
 end
 
 function forward(ticks::Int64,msg::Tuple{Int64,Int64,Int64,DPacket},src::SimNE)
-    println("Packet $(msg[4].id) delivered")
+    #println("Packet $(msg[4].id) delivered")
 end
 
 function forward(ticks::Int64,msg::Tuple{Int64,Int64,Int64,DPacket},src::SimNE,dst::SimNE)
-    in_ports = filter(p->p[2]=="s$(dst.id)",src.state.port_edge_list)
-    # println("fw, from $(src.id) to $(dst.id) msg: $msg")
+    in_ports = filter(p->p[2]=="s$(src.id)",dst.state.port_edge_list)
+    #println("fw, from $(src.id) to $(dst.id) msg: $msg, in port will be $(in_ports)")
     # println("ports table: $(dst.state.port_edge_list)")
     # println("in ports: $in_ports")
     in_port = in_ports[1][1]
@@ -136,7 +146,9 @@ function in_packet_processing(a::AbstractAgent,model)
 
     for i in 1:a.params[:pkt_per_tick]
         msg = isready(a.state.queue) ? take!(a.state.queue) : break
-        # println("[$(model.ticks)]($(a.id)) Processing packet $(msg)")
+        # if model.ticks < 3
+        #     println("[$(model.ticks)]($(a.id)) Processing packet $(msg)")
+        # end
         in_pkt_count += 1
         out_pkt_count += process_msg(a,msg,model)
     end
@@ -153,16 +165,24 @@ end
 
 function process_msg(a::SimNE,msg::Tuple{Int64,Int64,Int64,DPacket},model)
     out_pkt_count = 0
+
+    # if a.id == 10 && model.ticks < 10
+    #     println("[$(model.ticks)]($(a.id)) Found this msg $(msg)")
+    #     println("[$(model.ticks)]($(a.id)) Found this ports $(a.state.port_edge_list)")
+    #     println("[$(model.ticks)]($(a.id)) Found this table $(a.state.flow_table)")
+    # end
+
     flow = filter(fw -> 
                             ( fw.match_rule.src == string(msg[4].src) || fw.match_rule.src == "*" )
                             && (fw.match_rule.in_port == string(msg[3]) || fw.match_rule.in_port == "*" )
                             && (fw.match_rule.dst == string(msg[4].dst) || fw.match_rule.dst == "*")
                             , a.state.flow_table)
-
+    #println("[[$(model.ticks)]($(a.id)) flow==> $(flow)")
     if !isempty(flow)
 
         if flow[1].params[1][1] != 0
-            dst_id = parse(Int64,filter(x->x[1]==flow[1].params[1],a.state.port_edge_list)[1][2][2])
+            dst_id = parse(Int64,filter(x->x[1]==flow[1].params[1],a.state.port_edge_list)[1][2][2:end])
+            # println("New destinatio is $(dst_id) ")
             dst = getindex(model,dst_id)
             flow[1].action(model.ticks,msg,a,dst)
         else
@@ -171,8 +191,14 @@ function process_msg(a::SimNE,msg::Tuple{Int64,Int64,Int64,DPacket},model)
         flow[1].action == forward ? out_pkt_count += 1 : out_pkt_count
         #@show flow
     else
-        controller = getindex(model,a.controller_id)
-        ask_controller(a,controller,msg)
+
+        similar_requests = filter(r->r == (msg[4].src,msg[4].dst),a.state.requested_ctl)
+
+        if isempty(similar_requests)
+            controller = getindex(model,a.controller_id)
+            ask_controller(a,controller,msg)
+            push!(a.state.requested_ctl,(msg[4].src,msg[4].dst))
+        end
         #return package to queue as it does not know what to do with it
         push!(a.state.pending,msg)
     end
@@ -226,3 +252,11 @@ end
 # function controller_id(a::AbstractAgent)
 #     return typeof(a) == SimNE ?  a.controller_id : 0
 # end
+
+
+function throughput(bytes₋₁,bytes₀, τ₋₁,τ₀)
+    Δτ = τ₀ - τ₋₁
+    Δbytes = bytes₀ - bytes₋₁
+    println("Δbytes: $(bytes₀)  - $(bytes₋₁) / Δτ: $(Δτ)")
+    return Δτ > 0 && Δbytes >= 0 ? Δbytes / Δτ : 0
+end
