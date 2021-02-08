@@ -114,9 +114,7 @@ function model_step!(model)
      end
 
 
-    #  if model.ticks == 80
-    #     rem_vertex!(model.ntw_graph,3)
-    #  end
+   
 
 
     # for a in allagents(model)
@@ -242,19 +240,17 @@ end
 """
 msg: SimNE.id, in_port, DPacket
 """
-function in_packet_handler(a::Agent,msg::Tuple{Int64,Int64,Int64,DPacket},model)
-    dpid = msg[2] # aka SimNE.id aka switch.id
-    in_port = msg[3]
-    dst = msg[4].dst
-    src = msg[4].src
+function in_packet_handler(a::Agent,msg::OFMessage,model)
+    dst = msg.data.dst
+    src = msg.data.src
     path = []
 
-    if dpid != dst
+    if msg.dpid != dst
         paths = filter(p-> p[1] == src && p[2] == dst ,a.state.paths)
         path = !isempty(paths) ? paths[1] : []
     end
     
-    install_flow(dpid,in_port,path,model)
+    install_flow(msg.dpid,msg.in_port,path,model)
 
 end
 
@@ -285,7 +281,7 @@ function install_flow(in_dpid,in_port_start,path,model)
             r_dst = path[2]
             
             fw = Flow(sne.id,MRule(string(in_port),string(r_src),string(r_dst)),[out_port],(ticks,pkt,sne_src,sne_dst)->forward(ticks,pkt,sne_src,sne_dst))
-            println("[$(model.ticks)] Installing flow: $(p[1]) - $(fw.match_rule)")
+            println("[$(model.ticks)] {A} Installing flow: $(p[1]) - $(fw.match_rule)")
             push!(sne.state.flow_table,fw)
             prev_sne_id = sne.id
         end
@@ -293,7 +289,7 @@ function install_flow(in_dpid,in_port_start,path,model)
         sne = getindex(model,in_dpid)
         #TODO how to make the rule to be regardless of port in
         fw =Flow(in_dpid,MRule("*","*",string(in_dpid)),[0],(ticks,pkt,src_sne)->forward(ticks,pkt,src_sne))
-        println("[$(model.ticks)]  Installing flow to $(in_dpid): $(fw.match_rule)")
+        println("[$(model.ticks)]  {B} Installing flow to $(in_dpid): $(fw.match_rule)")
         push!(sne.state.flow_table,fw)
     end
 #TODO: take every pair of vertices in the path and install install_flows
@@ -314,7 +310,8 @@ function generate_traffic(model)
     for i =1:q_pkts
         pkt = create_pkt(src,dst,model)
         sne = getindex(model,src)
-        put!(sne.state.queue,(model.ticks,src,0,pkt)) # always from port 0
+        put!(sne.state.queue,OFMessage(model.ticks,src,0,pkt)) # always from port 0
+        #put!(sne.state.queue,(model.ticks,src,0,pkt)) # always from port 0
     end
 
    # println("[$(model.ticks)] $(q_pkts) pkts generated")

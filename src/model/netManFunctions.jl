@@ -253,3 +253,26 @@ function statistics(a::AbstractAgent)
         _ => []
     end
 end
+
+
+function drop_node(model)
+    #-1 pick node to remove
+    #0 on_switch event
+    #1remove from network
+    #2in controller: update topology and paths
+    #in switch detect path/port not available and ask controller
+
+    dpn = 3 # dropping node
+    dpt = 80 # dropping time
+
+    if model.ticks == dpt
+        for nb in all_neighbors(model.ntw_graph,dpn)
+            on_switch_event(nb,DROP_NODE)
+        end
+        
+        rem_vertex!(model.ntw_graph,dpn)
+
+    end
+    
+end
+

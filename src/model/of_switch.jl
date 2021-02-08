@@ -1,15 +1,17 @@
+@enum Ofp_Event EventOFPPortStatus=1 
+@enum Ofp_Protocol begin
+    OFPR_ACTION
+    OFPPR_DELETE
+end
+#@enum Ofp_Config_Flag EventOFPPortStatus=1 
+
+
+
 #if has come from in_port and src, going to dst
 mutable struct MRule 
     in_port::String
     src::String
     dst::String
-end
-
-mutable struct Flow 
-    dpid::Int64 # datapath id
-    match_rule::MRule
-    params::Vector{Any}
-    action # out_port, TODO: Check if other actions are needed
 end
 
 mutable struct DPacket <: Packet
@@ -19,6 +21,40 @@ mutable struct DPacket <: Packet
     size::Int64 # in bytes
     time_sent::Int64
     hop_limit::Int64
+end
+
+
+abstract type CTLMessage end
+
+mutable struct OFMessage <: CTLMessage
+    ticks::Int
+    dpid::Int # sender of msg,  aka SimNE.id aka switch.id
+    in_port::Int # (Optional) sender's input port
+    reason::Ofp_Protocol
+    data::Any
+end
+
+function OFMessage(ticks::Int,dpid::Int,reason::Ofp_Protocol)
+    return OFMessage(ticks,dpid,-1,reason,nothing)
+end
+
+"""
+    Message with default reason: Forward
+"""
+function OFMessage(ticks::Int,dpid::Int,in_port::Int,data::DPacket)
+    return OFMessage(ticks,dpid,in_port,OFPR_ACTION,data)
+end
+
+mutable struct OFEvent
+    msg::OFMessage    
+end
+
+
+mutable struct Flow 
+    dpid::Int64 # datapath id
+    match_rule::MRule
+    params::Vector{Any}
+    action # out_port, TODO: Check if other actions are needed
 end
 
 
@@ -35,14 +71,14 @@ mutable struct NetworkAssetState <: State
     condition_trj::Array{Float64,2}
     in_pkt_trj::Vector{Int64}
     out_pkt_trj::Vector{Int64}
-    queue::Channel{Tuple{Int64,Int64,Int64,DPacket}} # 
+    queue::Channel{CTLMessage} # 
     flow_table::Vector{Flow}
-    pending::Vector{Tuple{Int64,Int64,Int64,DPacket}}
+    pending::Vector{CTLMessage}
     requested_ctl::Vector{Tuple{Int64,Int64}} # flows requested to controller
 end
 
 function NetworkAssetState(condition_trj::Array{Float64,2})
-    NetworkAssetState(:blue,Vector{Tuple{Int64,String}}(),condition_trj,Vector{Int64}(),Vector{Int64}(),Channel{Tuple{Int64,Int64,Int64,DPacket}}(1000),Vector{Flow}(),Vector{Tuple{Int64,Int64,Int64,DPacket}}(),Vector{Tuple{Int64,Int64}}())
+    NetworkAssetState(:blue,Vector{Tuple{Int64,String}}(),condition_trj,Vector{Int64}(),Vector{Int64}(),Channel{CTLMessage}(1000),Vector{Flow}(),Vector{CTLMessage}(),Vector{Tuple{Int64,Int64}}())
 end
 
 mutable struct SDNCtlAgState <: State
@@ -52,11 +88,11 @@ mutable struct SDNCtlAgState <: State
     paths::Vector{Tuple{Int64,Int64,Array{Int64}}}
     in_pkt_trj::Vector{Int64}
     out_pkt_trj::Vector{Int64}
-    queue::Channel{Tuple{Int64,Int64,Int64,DPacket}}
+    queue::Channel{CTLMessage}
 end
 
 function SDNCtlAgState(condition_trj::Array{Float64,2}, health_trj::Vector{Float64})
-    SDNCtlAgState(:red,condition_trj,health_trj,Vector{Tuple{Int64,Int64,Array{Int64}}}(),Vector{Int64}(),Vector{Int64}(),Channel{Tuple{Int64,Int64,Int64,DPacket}}(500))
+    SDNCtlAgState(:red,condition_trj,health_trj,Vector{Tuple{Int64,Int64,Array{Int64}}}(),Vector{Int64}(),Vector{Int64}(),Channel{CTLMessage}(500))
 end
 
 
@@ -95,22 +131,25 @@ function SimNE(id,nid,state,params)
      SimNE(id,nid,:lightgray,0.3,state,-1,params,Vector{NEStatistics}()) #initialise SimNE with a placeholder in the controller
 end
 
-function ask_controller(sne::SimNE,a::Agent,msg::Tuple{Int64,Int64,Int64,DPacket})
-    put!(a.state.queue,(msg[1],sne.id,msg[3],msg[4]))
+function ask_controller(sne::SimNE,a::Agent,msg::CTLMessage)
+    #put!(a.state.queue,(msg.ticks,sne.id,msg.in_port,msg.data))
+    println("[$(msg.ticks)]($(sne.id)) Asking controller -> $(msg)")
+    put!(a.state.queue,OFMessage(msg.ticks,sne.id,msg.in_port,msg.data))
     #TODO in_processing msgs of controller to install flow for uknown dst
 end
 
-function forward(ticks::Int64,msg::Tuple{Int64,Int64,Int64,DPacket},src::SimNE)
+function forward(ticks::Int64,msg::CTLMessage,src::SimNE)
     #println("Packet $(msg[4].id) delivered")
 end
 
-function forward(ticks::Int64,msg::Tuple{Int64,Int64,Int64,DPacket},src::SimNE,dst::SimNE)
+function forward(ticks::Int64,msg::CTLMessage,src::SimNE,dst::SimNE)
     in_ports = filter(p->p[2]=="s$(src.id)",dst.state.port_edge_list)
     #println("fw, from $(src.id) to $(dst.id) msg: $msg, in port will be $(in_ports)")
     # println("ports table: $(dst.state.port_edge_list)")
     # println("in ports: $in_ports")
     in_port = in_ports[1][1]
-    put!(dst.state.queue,(ticks,src.id,in_port,msg[4]))
+    ##put!(dst.state.queue,(ticks,src.id,in_port,msg))
+    put!(dst.state.queue,OFMessage(ticks,src.id,in_port,msg.data))
     # target = filter(p->p[1]==out_port,sne.state.port_edge_list)
     # if !isempty(target)
     #     println("The target is: $(target)")
@@ -143,8 +182,8 @@ end
 function in_packet_processing(a::AbstractAgent,model)
     in_pkt_count = 0
     out_pkt_count = 0
-
     for i in 1:a.params[:pkt_per_tick]
+        #println("[$(model.ticks)]($(a.id)) -> processing $i")
         msg = isready(a.state.queue) ? take!(a.state.queue) : break
         # if model.ticks < 3
         #     println("[$(model.ticks)]($(a.id)) Processing packet $(msg)")
@@ -158,24 +197,25 @@ function in_packet_processing(a::AbstractAgent,model)
 end
 
 
-function process_msg(a::Agent,msg::Tuple{Int64,Int64,Int64,DPacket},model)
+function process_msg(a::Agent,msg::CTLMessage,model)
+    println("[$(model.ticks)]($(a.id)) -> processing $msg")
     in_packet_handler(a,msg,model)
     return 0
 end
 
-function process_msg(a::SimNE,msg::Tuple{Int64,Int64,Int64,DPacket},model)
+function process_msg(a::SimNE,msg::CTLMessage,model)
     out_pkt_count = 0
 
-    # if a.id == 10 && model.ticks < 10
+    # if a.id == 7 && model.ticks > 99
     #     println("[$(model.ticks)]($(a.id)) Found this msg $(msg)")
     #     println("[$(model.ticks)]($(a.id)) Found this ports $(a.state.port_edge_list)")
     #     println("[$(model.ticks)]($(a.id)) Found this table $(a.state.flow_table)")
     # end
 
     flow = filter(fw -> 
-                            ( fw.match_rule.src == string(msg[4].src) || fw.match_rule.src == "*" )
-                            && (fw.match_rule.in_port == string(msg[3]) || fw.match_rule.in_port == "*" )
-                            && (fw.match_rule.dst == string(msg[4].dst) || fw.match_rule.dst == "*")
+                            ( fw.match_rule.src == string(msg.data.src) || fw.match_rule.src == "*" )
+                            && (fw.match_rule.in_port == string(msg.in_port) || fw.match_rule.in_port == "*" )
+                            && (fw.match_rule.dst == string(msg.data.dst) || fw.match_rule.dst == "*")
                             , a.state.flow_table)
     #println("[[$(model.ticks)]($(a.id)) flow==> $(flow)")
     if !isempty(flow)
@@ -192,12 +232,13 @@ function process_msg(a::SimNE,msg::Tuple{Int64,Int64,Int64,DPacket},model)
         #@show flow
     else
 
-        similar_requests = filter(r->r == (msg[4].src,msg[4].dst),a.state.requested_ctl)
+        similar_requests = filter(r->r == (msg.data.src,msg.data.dst),a.state.requested_ctl)
 
         if isempty(similar_requests)
             controller = getindex(model,a.controller_id)
             ask_controller(a,controller,msg)
-            push!(a.state.requested_ctl,(msg[4].src,msg[4].dst))
+            push!(a.state.requested_ctl,(msg.data.src,msg.data.dst))
+            #push!(a.state.requested_ctl,(msg[4].src,msg[4].dst))
         end
         #return package to queue as it does not know what to do with it
         push!(a.state.pending,msg)
@@ -207,11 +248,13 @@ end
 
 function pending_pkt_handler(a::AbstractAgent,model)
     @match a begin
-        a::SimNE => begin
+        a::SimNE, if !isempty(a.state.pending) end => begin
+                        #println("[$(model.ticks)]($(a.id)) BEFORE pending_pkt_handler: $(size(a.state.pending))")
                         for msg in a.state.pending
                             put!(a.state.queue,msg)
                         end
                         empty!(a.state.pending)
+                        #println("[$(model.ticks)]($(a.id)) AFTER pending_pkt_handler: $(size(a.state.pending))")
                     end
         _ => nothing
     end
@@ -259,4 +302,30 @@ function throughput(bytes₋₁,bytes₀, τ₋₁,τ₀)
     Δbytes = bytes₀ - bytes₋₁
     println("Δbytes: $(bytes₀)  - $(bytes₋₁) / Δτ: $(Δτ)")
     return Δτ > 0 && Δbytes >= 0 ? Δbytes / Δτ : 0
+end
+
+function link_down(a::SimNE,dpn_id::Int,model)
+    #remove from list of ports
+    new_port_edge_list = []
+    for p in a.state.port_edge_list
+        if p[2]!="s"*string(dpn_id)
+            push!(new_port_edge_list,p)
+        end
+    end
+    a.state.port_edge_list = new_port_edge_list
+
+    #remove 
+    
+
+
+end
+
+function trigger_of_event(a::Agent,ev_type::Ofp_Event)
+   msg = OFMessage(ticks,a.id,ev_type)
+   put!(a.state.queue,msg)
+end
+
+#Controller method to handle changes in port switches
+function port_status_handler(a::Agent,event::Ofp_Event)
+
 end
