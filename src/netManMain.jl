@@ -7,6 +7,7 @@ using LinearAlgebra
 using StatsBase
 using Distributions
 using StatsPlots
+using SparseArrays
 
 include("netManAbm.jl")
 
@@ -31,7 +32,7 @@ args[:ctl_graph]=ctl_graph
 # params[:graph] = swg               
 #adata = [:phase,:color]
 adata = [:pos,in_pkt_trj,out_pkt_trj,flow_table,statistics]
-mdata = [:mapping]
+mdata = [:mapping_ctl_ntw]
 anim,result_agents,result_model = run_model(n,args,params; agent_data = adata, model_data = mdata)
 
 CSV.write(data_dir*"exp_raw/"*"steps_agents.csv",result_agents)

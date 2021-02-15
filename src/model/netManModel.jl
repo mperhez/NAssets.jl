@@ -16,7 +16,8 @@ function initialize(args,user_props;grid_dims=(3,3),seed=0)
         :ΔΦ => args[:ΔΦ],
         :ntw_graph => args[:ntw_graph],
         :ctl_graph => args[:ctl_graph],
-        :mapping => Dict{Int64,Int64}(),
+        :mapping_ctl_ntw => Dict{Int64,Int64}(), # mapping between (Ctl) Agent and SimNE
+        :mapping_ntw_sne => Dict{Int64,Int64}(), #mapping btwn the underlying network and the corresponding simNE agent 
         :pkt_per_tick => 500, # How many packets are processsed per tick
         :ctrl_model => CENTRALISED,
         :pkt_size => 1500,
@@ -30,6 +31,7 @@ function initialize(args,user_props;grid_dims=(3,3),seed=0)
     space = GraphSpace(props[:ntw_graph])
     agent_types = Union{SimNE,Agent}
     model = ABM(agent_types, space; scheduler = random_activation, properties = props)
+
     #create 
     create_agents!(model)
     model
@@ -50,6 +52,8 @@ function create_agents!(model)
         a = add_agent_pos!(
                 SimNE(id,i,s0,a_params),model
             )
+        # create initial mapping btwn network and SimNE
+        model.mapping_ntw_sne[i] = i   
     end
 
     #create control agents 1:1
@@ -69,6 +73,8 @@ function create_agents!(model)
             set_control_agent!(i,id,model)
         end
     end
+
+    
 
     init_agents!(model)
     # for i in 1:nv(model.properties[:ntw_graph])
@@ -97,7 +103,7 @@ function model_step!(model)
     #     println(a.state.condition_trj)
         # @match a begin
         #     a::SimNE => 
-        isready(a.state.queue) ? in_packet_processing(a,model) : nothing #println("queue of $(a.id) is empty")
+        a.state.up && isready(a.state.queue) ? in_packet_processing(a,model) : nothing #println("queue of $(a.id) is empty")
         #     _ => continue
         # end
      end
@@ -109,14 +115,10 @@ function model_step!(model)
                         push!(a.statistics, create_statistic(a,model))
             _ => nothing
         end
-
-
      end
 
-
-   
-
-
+     
+     drop_node(model)
     # for a in allagents(model)
     #     #process_pulses(a,model)
     # end
@@ -169,7 +171,8 @@ function run_model(n,args,properties; agent_data, model_data)
             collect_model_data!(df_m, model, model_data, i)
         end
     println("PRINTING HERE")
-    gif(anim, plots_dir*"animation.gif", fps = 1), df, df_m
+    println("Space: $(model.space)")
+    gif(anim, plots_dir*"animation.gif", fps = 5), df, df_m
 end
 
 function agent_color(a)
@@ -217,7 +220,8 @@ end
 
 
 function init_agent!(a::SimNE,model)
-    nbs = all_neighbors(model.ntw_graph,a.id)
+    #print("Initialisation of SimNE agent $(a.id)")
+    nbs = all_neighbors(model.ntw_graph,get_address(a.id,model))
     push!(a.state.port_edge_list,(0,"h$(a.id)")) # link to a host of the same id
     for i in 1:size(nbs,1)
         push!(a.state.port_edge_list,(i,"s$(nbs[i])"))
@@ -241,6 +245,8 @@ end
 msg: SimNE.id, in_port, DPacket
 """
 function in_packet_handler(a::Agent,msg::OFMessage,model)
+
+    println("[$(model.ticks)]($(a.id)) msg-> $(msg)")
     dst = msg.data.dst
     src = msg.data.src
     path = []
@@ -251,7 +257,6 @@ function in_packet_handler(a::Agent,msg::OFMessage,model)
     end
     
     install_flow(msg.dpid,msg.in_port,path,model)
-
 end
 
 # function install_flows(a::SimNE,paths,model)
@@ -327,4 +332,4 @@ function create_statistic(a::SimNE,model)
                      model.ticks,a.id
                     ,throughput(b₋₁,b₀,t₋₁,t₀)
                     ,0.0)
-end                    
+end 

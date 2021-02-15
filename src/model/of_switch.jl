@@ -1,7 +1,9 @@
-@enum Ofp_Event EventOFPPortStatus=1 
+@enum Ofp_Event begin
+    EventOFPPortStatus
+end
 @enum Ofp_Protocol begin
-    OFPR_ACTION
-    OFPPR_DELETE
+    OFPR_ACTION = 1
+    OFPPR_DELETE = 2
 end
 #@enum Ofp_Config_Flag EventOFPPortStatus=1 
 
@@ -66,6 +68,7 @@ mutable struct NEStatistics
 end
 
 mutable struct NetworkAssetState <: State
+    up::Bool
     color::Symbol
     port_edge_list::Vector{Tuple{Int64,String}}
     condition_trj::Array{Float64,2}
@@ -78,10 +81,11 @@ mutable struct NetworkAssetState <: State
 end
 
 function NetworkAssetState(condition_trj::Array{Float64,2})
-    NetworkAssetState(:blue,Vector{Tuple{Int64,String}}(),condition_trj,Vector{Int64}(),Vector{Int64}(),Channel{CTLMessage}(1000),Vector{Flow}(),Vector{CTLMessage}(),Vector{Tuple{Int64,Int64}}())
+    NetworkAssetState(true,:blue,Vector{Tuple{Int64,String}}(),condition_trj,Vector{Int64}(),Vector{Int64}(),Channel{CTLMessage}(1000),Vector{Flow}(),Vector{CTLMessage}(),Vector{Tuple{Int64,Int64}}())
 end
 
 mutable struct SDNCtlAgState <: State
+    up::Bool
     color::Symbol
     condition_trj::Array{Float64,2}
     health_trj::Vector{Float64}
@@ -92,7 +96,7 @@ mutable struct SDNCtlAgState <: State
 end
 
 function SDNCtlAgState(condition_trj::Array{Float64,2}, health_trj::Vector{Float64})
-    SDNCtlAgState(:red,condition_trj,health_trj,Vector{Tuple{Int64,Int64,Array{Int64}}}(),Vector{Int64}(),Vector{Int64}(),Channel{CTLMessage}(500))
+    SDNCtlAgState(true,:red,condition_trj,health_trj,Vector{Tuple{Int64,Int64,Array{Int64}}}(),Vector{Int64}(),Vector{Int64}(),Channel{CTLMessage}(500))
 end
 
 
@@ -133,7 +137,7 @@ end
 
 function ask_controller(sne::SimNE,a::Agent,msg::CTLMessage)
     #put!(a.state.queue,(msg.ticks,sne.id,msg.in_port,msg.data))
-    println("[$(msg.ticks)]($(sne.id)) Asking controller -> $(msg)")
+    #println("[$(msg.ticks)]($(sne.id)) Asking controller -> $(msg)")
     put!(a.state.queue,OFMessage(msg.ticks,sne.id,msg.in_port,msg.data))
     #TODO in_processing msgs of controller to install flow for uknown dst
 end
@@ -198,12 +202,30 @@ end
 
 
 function process_msg(a::Agent,msg::CTLMessage,model)
-    println("[$(model.ticks)]($(a.id)) -> processing $msg")
-    in_packet_handler(a,msg,model)
+    #println("[$(model.ticks)]($(a.id)) -> processing $(msg.reason)")
+    
+    @match msg.reason begin
+        Ofp_Protocol(1) =>  
+                        begin
+                            #println("[$(model.ticks)]($(a.id)) -> match one")
+                            in_packet_handler(a,msg,model)
+                        end
+        Ofp_Protocol(2) => 
+                            begin
+                                #println("[$(model.ticks)]($(a.id)) -> match two")
+                                port_delete_handler(a,msg,model)
+                            end
+                            
+        _ => begin
+            println("[$(model.ticks)]($(a.id)) -> match default")
+            end
+    end
+
     return 0
 end
 
 function process_msg(a::SimNE,msg::CTLMessage,model)
+    #print("[$(model.ticks)]($(a.id)) Processing Msg $(msg)")
     out_pkt_count = 0
 
     # if a.id == 7 && model.ticks > 99
@@ -300,32 +322,49 @@ end
 function throughput(bytes₋₁,bytes₀, τ₋₁,τ₀)
     Δτ = τ₀ - τ₋₁
     Δbytes = bytes₀ - bytes₋₁
-    println("Δbytes: $(bytes₀)  - $(bytes₋₁) / Δτ: $(Δτ)")
+    #println("Δbytes: $(bytes₀)  - $(bytes₋₁) / Δτ: $(Δτ)")
     return Δτ > 0 && Δbytes >= 0 ? Δbytes / Δτ : 0
 end
 
-function link_down(a::SimNE,dpn_id::Int,model)
+function link_down!(sne_id::Int,dpn_id::Int,model)
     #remove from list of ports
+    sne = getindex(model,sne_id)
     new_port_edge_list = []
-    for p in a.state.port_edge_list
+    dpn_port = -1
+    for p in sne.state.port_edge_list
         if p[2]!="s"*string(dpn_id)
             push!(new_port_edge_list,p)
+        else
+            dpn_port = p[1]
         end
     end
-    a.state.port_edge_list = new_port_edge_list
+    sne.state.port_edge_list = new_port_edge_list
+    new_flow_table = []
+    for f in sne.state.flow_table
+        if  ~(dpn_port in f.params)
+            push!(new_flow_table,f)
+        end    
+    end
+    sne.state.flow_table = new_flow_table
+    #sne.state.flow_table = sne.state.flow_table - filter(f->dpn_port in f.params,sne.state.flow_table)[1]
 
-    #remove 
-    
-
-
+    controller = getindex(model,sne.controller_id)
+    trigger_of_event!(model.ticks,controller,EventOFPPortStatus)
 end
 
-function trigger_of_event(a::Agent,ev_type::Ofp_Event)
-   msg = OFMessage(ticks,a.id,ev_type)
+function trigger_of_event!(ticks::Int,a::Agent,ev_type::Ofp_Event)
+    msg = @match ev_type begin
+        EventOFPPortStatus =>
+                            OFMessage(ticks,a.id,OFPPR_DELETE)
+    end
    put!(a.state.queue,msg)
 end
 
-#Controller method to handle changes in port switches
-function port_status_handler(a::Agent,event::Ofp_Event)
+# #Controller method to handle changes in port switches
+# function port_status_handler(a::Agent,event::Ofp_Event)
 
+# end
+
+function port_delete_handler(a::Agent,msg::OFMessage,model)
+    init_agent!(a,model)
 end

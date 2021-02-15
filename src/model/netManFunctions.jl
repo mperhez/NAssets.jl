@@ -135,12 +135,12 @@ function plotabm_networks_multi(
     l = @layout [a{1w};b]
     ntw_p = graphplot(
         model.ntw_graph
-        ,names = 1:nv(model.ntw_graph)
+        ,names = [get_sne_id(i,model) for i=1:nv(model.ntw_graph)]
         , method = :circular
         ,size=(300,200)
-        ,node_weights = [ i > 9 ? 1 : 10 for i in 1:nv(model.ntw_graph)]
+        ,node_weights = [ get_sne_id(i,model) > 9 ? 1 : 10 for i in 1:nv(model.ntw_graph)]
         ,nodeshape = :hexagon
-        ,nodecolor = [ getindex(model,i).color for i in 1:nv(model.ntw_graph) ]
+        ,nodecolor = [ getindex(model,get_sne_id(i,model)).color for i in 1:nv(model.ntw_graph) ]
         ,markerstrokecolor = :dimgray
         ,edgecolor=:dimgray
         ,markerstrokewidth = 1.1
@@ -183,24 +183,24 @@ function plotabm_networks_mono(
     nsize = 0.13
     lwidth = 0.5
 
-    l = @layout [a{1w};b]
+   # l = @layout [a{1w};b]
     ntw_p = graphplot(
         model.ntw_graph
-        ,names = 1:nv(model.ntw_graph)
+        ,names = [get_sne_id(i,model) for i=1:nv(model.ntw_graph)]
         , method = :circular
         ,size=(300,200)
-        ,node_weights = [ i > 9 ? 1 : 10 for i in 1:nv(model.ntw_graph)]
+        ,node_weights = [ get_sne_id(i,model) > 9 ? 1 : 10 for i in 1:nv(model.ntw_graph)]  #[ i > 9 ? 1 : 10 for i in 1:nv(model.ntw_graph)]
         ,nodeshape = :hexagon
-        ,nodecolor = [ getindex(model,i).color for i in 1:nv(model.ntw_graph) ]
+        ,nodecolor = [ getindex(model,get_sne_id(i,model)).color for i in 1:nv(model.ntw_graph) ]
         ,markerstrokecolor = :dimgray
         ,edgecolor=:dimgray
         ,markerstrokewidth = 1.1
         ,node_size=nsize
-        ,titlefontsize=1
-        ,titlefontcolor=:white
+        #,titlefontsize=1
+       # ,titlefontcolor=:black
     )
     
-    annotate!((-0.4,0.75,Plots.text("Asset Network", 11, :black, :center)))
+    #annotate!((-0.4,0.75,Plots.text("Asset Network", 11, :black, :center)))
 
     #p = Plots.plot(ntw_p, layout=l, size=(300,600))
     
@@ -222,11 +222,11 @@ end
 
 
 function get_control_agent(asset_id::Int,model)
-    return model.mapping[asset_id]
+    return model.mapping_ctl_ntw[asset_id]
 end
 
 function get_controlled_assets(agent_id::Int,model)
-    assets = filter(k->model.mapping[k] == agent_id,keys(model.mapping))
+    assets = filter(k->model.mapping_ctl_ntw[k] == agent_id,keys(model.mapping_ctl_ntw))
     #println("assets controlled by $(agent_id) are: $(length(assets))")
     return assets
 end
@@ -235,7 +235,7 @@ function set_control_agent!(asset_id::Int, agent_id::Int, model)
     getindex(model,asset_id).controller_id = agent_id
     #TODO Consider removing this line below
     #To avoid putting info in model
-    model.mapping[asset_id] = agent_id
+    model.mapping_ctl_ntw[asset_id] = agent_id
 end
 
 function flow_table(a::AbstractAgent)
@@ -262,17 +262,92 @@ function drop_node(model)
     #2in controller: update topology and paths
     #in switch detect path/port not available and ask controller
 
-    dpn = 3 # dropping node
+    dpn_ids = [3] # dropping node id
     dpt = 80 # dropping time
 
     if model.ticks == dpt
-        for nb in all_neighbors(model.ntw_graph,dpn)
-            on_switch_event(nb,DROP_NODE)
+
+        for dpn_id in dpn_ids
+            for nb in all_neighbors(model.ntw_graph,get_address(dpn_id,model))
+                link_down!(get_sne_id(nb,model),dpn_id,model)
+            end
+            #remove 
+            dpn_ag = getindex(model,dpn_id)
+            #kill_agent!(dpn_ag,model)
+            dpn_ag.state.up = false
+            delete!(model.mapping_ctl_ntw,dpn_id)
+            #remove_vertices!(model.ntw_graph,[get_address(i,model) for i in dpn_ids])
+            model.ntw_graph = remove_vertex(model.ntw_graph,get_address(dpn_id,model))
+            update_addresses_removal!(dpn_id,model)
         end
         
-        rem_vertex!(model.ntw_graph,dpn)
-
+        
     end
     
 end
 
+function remove_vertex(g::AbstractGraph,dpn_id::Int)
+    sm_g = sparse(g)
+    sm_new_g = spzeros((nv(g)-1),(nv(g)-1))
+    for i=1:nv(g)
+        for j=1:nv(g)
+            #println(" $i,$j value: $(sparse(ntw)[i,j])")
+                x,y =   i < dpn_id && j < dpn_id ? (i,j) : 
+                        i < dpn_id && j > dpn_id ? (i,j-1) : 
+                        i > dpn_id && j < dpn_id ? (i-1,j) : 
+                        i > dpn_id && j > dpn_id ? (i-1,j-1) : (0,0)
+                
+                if x > 0 && y > 0
+                    sm_new_g[x,y] = sm_g[i,j]
+                    sm_new_g[y,x] = sm_g[j,i]
+                end
+        end
+    end
+    #[i >=dpn_id ? labels[i] = i+1 : labels[i] = i  for i in keys(labels)]
+    return SimpleGraph(sm_new_g)
+end
+
+function remove_vertices(g::AbstractGraph,dpn_ids::Array{Int})
+    new_g = g
+    for dpn_id in dpn_ids
+        new_g = remove_vertex!(new_g,dpn_id)
+    end
+    return new_g
+end
+"""
+Given a SimNE id it returns its ntw node address.
+"""
+function get_address(sne_id::Int,model)::Int
+    res = filter(p->p[2] == sne_id,pairs(model.mapping_ntw_sne))
+    #println(" Pair? $res")
+    return !isempty(res) ? first(keys(res)) : -1
+end
+
+"""
+Given a ntw node address it returns the corresponding SimNE id
+"""
+function get_sne_id(address::Int,model)::Int
+    return model.mapping_ntw_sne[address]
+end
+
+function update_sne_address!(sne_id::Int,new_address::Int,model)
+    #curr_address = get_address(sne_id,model)
+    model.mapping_ntw_sne[new_address] = sne_id
+end
+
+"""
+Update (ntw node) addresses of SimNE agents after removal of a given SimNE
+"""
+function update_addresses_removal!(dpn_id::Int,model)
+    available_addr = get_address(dpn_id,model)
+    #println("Current length of g: $(nv(model.ntw_graph))")
+    for addr::Int=available_addr:nv(model.ntw_graph)
+        #println("Address $addr and its type: $(typeof(addr))")
+        update_sne_address!(
+            get_sne_id(addr+1,model),
+            addr,
+            model
+            )
+    end
+    delete!(model.mapping_ntw_sne,length(model.ntw_graph)+1)
+end
