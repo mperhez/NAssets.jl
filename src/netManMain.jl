@@ -8,6 +8,7 @@ using StatsBase
 using Distributions
 using StatsPlots
 using SparseArrays
+using DelimitedFiles
 
 include("netManAbm.jl")
 
@@ -31,21 +32,33 @@ args[:ntw_graph]=ntw_graph
 args[:ctl_graph]=ctl_graph
 # params[:graph] = swg               
 #adata = [:phase,:color]
-adata = [:pos,in_pkt_trj,out_pkt_trj,flow_table,statistics]
+adata = [get_state_trj]
 mdata = [:mapping_ctl_ntw]
 anim,result_agents,result_model = run_model(n,args,params; agent_data = adata, model_data = mdata)
 
-CSV.write(data_dir*"exp_raw/"*"steps_agents.csv",result_agents)
-CSV.write(data_dir*"exp_raw/"*"steps_model.csv",result_model)
+ags = last(result_agents,q_agents)["get_state_trj"]
+
+ags_1 = vcat([ [ split(string(j-1)*";"*replace(to_string(ags[i][j]),"NetworkAssetState(" => ""),";") for j=1:length(ags[i])] for i=1:length(ags) ]...)
+
+#ags_1 = [ split(string(i-1)*";"*replace(to_string(ags[j][i]),"NetworkAssetState(" => ""),";") for j=1:length(ags)] for i=1:length(ags[j]) ]
+writedlm(data_dir*"exp_raw/"*"steps_agents.csv",ags_1,';') 
+
+#print(ags[7][end])
 
 
 
-ags = last(result_agents,q_agents)
+
+#CSV.write(data_dir*"exp_raw/"*"steps_agents.csv",ags)
+#CSV.write(data_dir*"exp_raw/"*"steps_model.csv",result_model)
+
+
+
+
  
 # for  i=1:size(ags,1)
 #     r[!,i]
 # end
-
+#print(ags)
 
 
 # p = plot(title="Data Traffic")
@@ -54,16 +67,16 @@ ags = last(result_agents,q_agents)
 # end
 
 
-df_stats = DataFrame(tick=Int[],ne_id=Int[],throughput_in=Float64[])
-for  i=1:size(ags,1)
-    for r in ags[i,:statistics]
-        push!(df_stats,(r.tick,r.ne_id,r.throughput_in))
-    end
-    #push!(df_stats, ags[i,:statistics].ticks,ags[i,:statistics].ne_id,ags[i,:statistics].throughput_in)
-end
+# df_stats = DataFrame(tick=Int[],ne_id=Int[],throughput_in=Float64[])
+# for  i=1:size(ags,1)
+#     for r in ags[i,:statistics]
+#         push!(df_stats,(r.tick,r.ne_id,r.throughput_in))
+#     end
+#     #push!(df_stats, ags[i,:statistics].ticks,ags[i,:statistics].ne_id,ags[i,:statistics].throughput_in)
+# end
 
-@df df_stats plot(:tick,:throughput_in,group=:ne_id,m=".")
-png("tpt_plot.png")
+# @df df_stats plot(:tick,:throughput_in,group=:ne_id,m=".")
+# png("tpt_plot.png")
 
 
 #

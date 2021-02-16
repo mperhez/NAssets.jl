@@ -46,11 +46,10 @@ function create_agents!(model)
     # create SimNE
     for i in 1:nv(model.properties[:ntw_graph])
         #next_fire = rand(0:0.2:model.:Τ)
-        s0 = NetworkAssetState(zeros(2,2))
         id = nextid(model)
         # @show i
         a = add_agent_pos!(
-                SimNE(id,i,s0,a_params),model
+                SimNE(id,i,a_params),model
             )
         # create initial mapping btwn network and SimNE
         model.mapping_ntw_sne[i] = i   
@@ -59,10 +58,9 @@ function create_agents!(model)
     #create control agents 1:1
     for i in 1:nv(model.properties[:ctl_graph])
         #next_fire = rand(0:0.2:model.:Τ)
-        s0 = SDNCtlAgState(zeros((2,2)),Vector{Float64}())
         id = nextid(model)
         a = add_agent_pos!(
-                Agent(id,i,s0,a_params),model
+                Agent(id,i,a_params),model
             )
         ##assign controller to SimNE
         if model.ctrl_model == CENTRALISED
@@ -99,26 +97,20 @@ function model_step!(model)
 
    # @show model.ticks
     for a in allagents(model)
+        init_state!(a)
     #     #pulse(a,model)
-    #     println(a.state.condition_trj)
         # @match a begin
         #     a::SimNE => 
-        a.state.up && isready(a.state.queue) ? in_packet_processing(a,model) : nothing #println("queue of $(a.id) is empty")
+        is_up(a) && is_ready(a) ? in_packet_processing(a,model) : nothing #println("queue of $(a.id) is empty")
         #     _ => continue
         # end
      end
      for a in allagents(model)
         pending_pkt_handler(a,model)
-        @match a begin
-            a::SimNE, if model.ticks%model.freq == 0 && size(a.state.in_pkt_trj,1) >= (model.freq - 1) end =>
-                        # @show model.ticks, a.state.in_pkt_trj
-                        push!(a.statistics, create_statistic(a,model))
-            _ => nothing
-        end
      end
 
      
-     drop_node(model)
+     soft_drop_node(model)
     # for a in allagents(model)
     #     #process_pulses(a,model)
     # end
@@ -207,31 +199,24 @@ function init_agent!(a::Agent,model)
     
     a.state.paths = all_k_shortest_paths(model.ntw_graph)
 
-    #@show a.state.paths
-    #"discover" ports and links of each asset
-    # for ne in nes
-    #     println(find_agent(ne,model).state.port_edge_list)
-    # end
-    # for v in vertices(model.ntw_graph)
-    #     println(" Edges of $(v) are $(all_neighbors(model.ntw_graph,v))")
-    #     #println(" Edges: $(e)")
-    # end
 end
 
 
 function init_agent!(a::SimNE,model)
     #print("Initialisation of SimNE agent $(a.id)")
     nbs = all_neighbors(model.ntw_graph,get_address(a.id,model))
-    push!(a.state.port_edge_list,(0,"h$(a.id)")) # link to a host of the same id
+    
+    push_ep_entry!(a,(0,"h$(a.id)")) # link to a host of the same id
+    
     for i in 1:size(nbs,1)
-        push!(a.state.port_edge_list,(i,"s$(nbs[i])"))
+        push_ep_entry!(a,(i,"s$(nbs[i])"))
     end
 
     init_switch(a,model)
 end
 
 function all_k_shortest_paths(g::AbstractGraph)
-    return [ (first(i.paths...),last(i.paths...),i.paths...) 
+    return [ !isempty(i.paths) ? (first(i.paths...),last(i.paths...),i.paths...) : (-1,-1,[])
         for i in 
             filter( x -> !isnothing(x), 
                     [ s != d ? 
@@ -274,20 +259,15 @@ function install_flow(in_dpid,in_port_start,path,model)
         for p in pairs
             sne = getindex(model,p[1])
             prev_sne = getindex(model,prev_sne_id)
-    #        in_port = filter(x->x[2]=="s$(p[2])",sne.state.port_edge_list)[1][1]
-            port_dst = filter(x->x[2]=="s$(p[2])",sne.state.port_edge_list)[1]
+            port_dst = filter(x->x[2]=="s$(p[2])",get_port_edge_list(sne))[1]
             out_port = port_dst[1]
-            # dst = getindex(model,parse(Int64,port_dst[2][2]))
-            # puertos = filter(x->x[2]=="s$(p[1])",dst.state.port_edge_list)
-            # println("Puertos $(puertos) in $(dst.id)")
-            # puerto = puertos[1][1]
-            in_port = p[1] == path[1] ? in_port_start : filter(x->x[2]=="s$(prev_sne_id)",sne.state.port_edge_list)[1][1]
+            in_port = p[1] == path[1] ? in_port_start : filter(x->x[2]=="s$(prev_sne_id)",get_port_edge_list(sne))[1][1]
             r_src = path[1]
             r_dst = path[2]
             
             fw = Flow(sne.id,MRule(string(in_port),string(r_src),string(r_dst)),[out_port],(ticks,pkt,sne_src,sne_dst)->forward(ticks,pkt,sne_src,sne_dst))
             println("[$(model.ticks)] {A} Installing flow: $(p[1]) - $(fw.match_rule)")
-            push!(sne.state.flow_table,fw)
+            push_flow!(sne,fw)
             prev_sne_id = sne.id
         end
     else
@@ -295,10 +275,8 @@ function install_flow(in_dpid,in_port_start,path,model)
         #TODO how to make the rule to be regardless of port in
         fw =Flow(in_dpid,MRule("*","*",string(in_dpid)),[0],(ticks,pkt,src_sne)->forward(ticks,pkt,src_sne))
         println("[$(model.ticks)]  {B} Installing flow to $(in_dpid): $(fw.match_rule)")
-        push!(sne.state.flow_table,fw)
+        push_flow!(sne,fw)
     end
-#TODO: take every pair of vertices in the path and install install_flows
-   # push!(a.state.flow_table,Flow(a.id,MRule(in_port,path[1],path[2]),(pkt)->forward(pkt,out_port)))
 end
 
 function create_pkt(src::Int64,dst::Int64,model)
@@ -315,21 +293,8 @@ function generate_traffic(model)
     for i =1:q_pkts
         pkt = create_pkt(src,dst,model)
         sne = getindex(model,src)
-        put!(sne.state.queue,OFMessage(model.ticks,src,0,pkt)) # always from port 0
-        #put!(sne.state.queue,(model.ticks,src,0,pkt)) # always from port 0
+        push_msg!(sne,OFMessage(model.ticks,src,0,pkt)) # always from port 0
     end
 
    # println("[$(model.ticks)] $(q_pkts) pkts generated")
 end
-
-function create_statistic(a::SimNE,model)
-    t₋₁ = (model.ticks - model.freq + 1)
-    t₀ = model.ticks
-    b₋₁ = length(a.state.in_pkt_trj)- model.freq-1 > 0 ? sum(a.state.in_pkt_trj[1:(end-model.freq-1)]) * model.pkt_size : first(a.state.in_pkt_trj) * model.pkt_size
-    b₀ = sum(a.state.in_pkt_trj[1:end]) * model.pkt_size
-
-    return NEStatistics(
-                     model.ticks,a.id
-                    ,throughput(b₋₁,b₀,t₋₁,t₀)
-                    ,0.0)
-end 

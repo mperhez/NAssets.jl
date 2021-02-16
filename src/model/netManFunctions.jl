@@ -140,7 +140,7 @@ function plotabm_networks_multi(
         ,size=(300,200)
         ,node_weights = [ get_sne_id(i,model) > 9 ? 1 : 10 for i in 1:nv(model.ntw_graph)]
         ,nodeshape = :hexagon
-        ,nodecolor = [ getindex(model,get_sne_id(i,model)).color for i in 1:nv(model.ntw_graph) ]
+        ,nodecolor = [ is_up(getindex(model,get_sne_id(i,model))) ? :lightblue : :red for i in 1:nv(model.ntw_graph) ]
         ,markerstrokecolor = :dimgray
         ,edgecolor=:dimgray
         ,markerstrokewidth = 1.1
@@ -158,7 +158,7 @@ function plotabm_networks_multi(
         ,size=(300,200)
         ,node_weights = [ i > 9 ? 1 : 1 for i in 1:nv(model.ctl_graph)]
         ,nodeshape = :circle
-        ,nodecolor = [ getindex(model,get_control_agent(i,model)).color for i in 1:nv(model.ctl_graph) ]
+        ,nodecolor = [ getindex(model,get_control_agent(i,model)).state.color for i in 1:nv(model.ctl_graph) ]
         ,markerstrokecolor = :dimgray
         ,edgecolor=:dimgray
         ,markerstrokewidth = 1.1
@@ -191,11 +191,12 @@ function plotabm_networks_mono(
         ,size=(300,200)
         ,node_weights = [ get_sne_id(i,model) > 9 ? 1 : 10 for i in 1:nv(model.ntw_graph)]  #[ i > 9 ? 1 : 10 for i in 1:nv(model.ntw_graph)]
         ,nodeshape = :hexagon
-        ,nodecolor = [ getindex(model,get_sne_id(i,model)).color for i in 1:nv(model.ntw_graph) ]
+        ,nodecolor = [ is_up(getindex(model,get_sne_id(i,model))) ? :lightgray : :red for i in 1:nv(model.ntw_graph) ]
         ,markerstrokecolor = :dimgray
-        ,edgecolor=:dimgray
+        ,edgecolor= model.ticks < 1 ? :red : :dimgray
         ,markerstrokewidth = 1.1
         ,node_size=nsize
+        ,palette = [:lightgray, :red]
         #,titlefontsize=1
        # ,titlefontcolor=:black
     )
@@ -238,24 +239,38 @@ function set_control_agent!(asset_id::Int, agent_id::Int, model)
     model.mapping_ctl_ntw[asset_id] = agent_id
 end
 
-function flow_table(a::AbstractAgent)
-    @match a begin
-        a::SimNE => a.state.flow_table
-        _ => []
+function soft_drop_node(model)
+    #-1 pick node to remove
+    #0 on_switch event
+    #1remove from network
+    #2in controller: update topology and paths
+    #in switch detect path/port not available and ask controller
+
+    dpn_ids = [3] # dropping node id
+    dpt = 80 # dropping time
+
+    if model.ticks == dpt
+
+        for dpn_id in dpn_ids
+            for nb in all_neighbors(model.ntw_graph,get_address(dpn_id,model))
+                link_down!(get_sne_id(nb,model),dpn_id,model)
+            end
+            #soft remove 
+            dpn_ag = getindex(model,dpn_id)
+            set_down!(dpn_ag)
+            delete!(model.mapping_ctl_ntw,dpn_id)
+            model.ntw_graph = soft_remove_vertex(model.ntw_graph,get_address(dpn_id,model))
+            
+        end
+        
+        
     end
+    
 end
 
-function statistics(a::AbstractAgent)
-    @match a begin
-        a::SimNE =>
-            a.statistics
-
-        _ => []
-    end
-end
 
 
-function drop_node(model)
+function hard_drop_node(model)
     #-1 pick node to remove
     #0 on_switch event
     #1remove from network
@@ -274,7 +289,7 @@ function drop_node(model)
             #remove 
             dpn_ag = getindex(model,dpn_id)
             #kill_agent!(dpn_ag,model)
-            dpn_ag.state.up = false
+            set_down!(dpn_ag)
             delete!(model.mapping_ctl_ntw,dpn_id)
             #remove_vertices!(model.ntw_graph,[get_address(i,model) for i in dpn_ids])
             model.ntw_graph = remove_vertex(model.ntw_graph,get_address(dpn_id,model))
@@ -284,6 +299,23 @@ function drop_node(model)
         
     end
     
+end
+
+function soft_remove_vertex(g::AbstractGraph,dpn_id::Int)
+    sm_g = sparse(g)
+    sm_new_g = deepcopy(sm_g)
+
+    [ if i == dpn_id || j == dpn_id ; sm_new_g[i,j] = 0 end for i=1:nv(g), j=1:nv(g)]
+
+    # for i=1:nv(g)
+    #     for j=1:nv(g)
+    #         if i == dpn_id || j == dpn_id
+    #             new_ntw[i,j] = 0
+    #         end
+    #     end
+    # end
+    #[i >=dpn_id ? labels[i] = i+1 : labels[i] = i  for i in keys(labels)]
+    return SimpleGraph(sm_new_g)
 end
 
 function remove_vertex(g::AbstractGraph,dpn_id::Int)
@@ -351,3 +383,4 @@ function update_addresses_removal!(dpn_id::Int,model)
     end
     delete!(model.mapping_ntw_sne,length(model.ntw_graph)+1)
 end
+
