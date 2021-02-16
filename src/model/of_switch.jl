@@ -218,11 +218,11 @@ function process_msg(a::SimNE,msg::CTLMessage,model)
     #print("[$(model.ticks)]($(a.id)) Processing Msg $(msg)")
     out_pkt_count = 0
 
-    if a.id == 1 && model.ticks > 80 && model.ticks < 90
-        println("[$(model.ticks)]($(a.id)) Found this msg $(msg)")
-        println("[$(model.ticks)]($(a.id)) Found this ports $(get_state(a).port_edge_list)")
-        println("[$(model.ticks)]($(a.id)) Found this table $(get_state(a).flow_table)")
-    end
+    # if a.id == 1 && model.ticks > 80 && model.ticks < 90
+    #     println("[$(model.ticks)]($(a.id)) Found this msg $(msg)")
+    #     println("[$(model.ticks)]($(a.id)) Found this ports $(get_state(a).port_edge_list)")
+    #     println("[$(model.ticks)]($(a.id)) Found this table $(get_state(a).flow_table)")
+    # end
 
     flow = filter(fw -> 
                             ( fw.match_rule.src == string(msg.data.src) || fw.match_rule.src == "*" )
@@ -245,7 +245,7 @@ function process_msg(a::SimNE,msg::CTLMessage,model)
     else
         reattempt = 5
         similar_requests = filter(r->(r[2],r[3]) == (msg.data.src,msg.data.dst) && (model.ticks - r[1]) < reattempt,a.requested_ctl)
-        println("[$(model.ticks)]($(a.id)) Similar requests $(similar_requests)")
+        #println("[$(model.ticks)]($(a.id)) Similar requests $(similar_requests)")
         if isempty(similar_requests)
             controller = getindex(model,a.controller_id)
             ask_controller(a,controller,msg)
@@ -471,4 +471,12 @@ function to_string(s::NetworkAssetState)
             sep * string(s.in_pkt) *
             sep * string(s.out_pkt) *
             sep * string(s.flow_table)
+end
+
+function get_throughput(sne::SimNE)::Int
+    return get_state(sne).in_pkt
+end
+
+function get_throughput(a::Agent)::Int
+    return 0
 end

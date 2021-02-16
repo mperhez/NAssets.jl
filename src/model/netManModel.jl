@@ -21,7 +21,8 @@ function initialize(args,user_props;grid_dims=(3,3),seed=0)
         :pkt_per_tick => 500, # How many packets are processsed per tick
         :ctrl_model => CENTRALISED,
         :pkt_size => 1500,
-        :freq => 30 # frequency of monitoring
+        :freq => 30, # frequency of monitoring
+        :N=>args[:N]
     )
 
     Random.seed!(seed)
@@ -149,7 +150,8 @@ function run_model(n,args,properties; agent_data, model_data)
             # #Graph space properties
             # , method = :circular, node_size = 0.2
             # , 
-            size = (600, 600), showaxis = false
+            size = (1000, 600),
+            showaxis = false
     )
 
     #p = plotabm(model; plotkwargs...)
@@ -157,7 +159,8 @@ function run_model(n,args,properties; agent_data, model_data)
     df_m = init_model_dataframe(model,model_data)
     anim = @animate for i in 0:n
             p = plotabm_networks(model; plotkwargs...)
-            title!(p, "step $(i)")
+            title!(p, "step $(i)",position=(10,1))
+            #annotate!((1,1,Plots.text("step $(i)", 11, :black, :center)))
             step!(model, agent_step!,model_step!)
             collect_agent_data!(df, model, agent_data, i)
             collect_model_data!(df_m, model, model_data, i)

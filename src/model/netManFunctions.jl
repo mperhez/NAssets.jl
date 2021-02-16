@@ -180,15 +180,37 @@ function plotabm_networks_mono(
     kwargs...,
 )
 
-    nsize = 0.13
+    nsize = 0.4
     lwidth = 0.5
 
-   # l = @layout [a{1w};b]
+    l =  @layout([A{0.01h}; [B C ; D E]])  #(2,2) #@layout [a{1w} [grid(1,2) b{0.2h}] ] #@layout [a{1w};(1,2)]
+
+    title = plot(title = "Plot title", grid = false, showaxis = false, ticks=false, bottom_margin = -50Plots.px)
+
+    ctl_p = plot(circle_shape(0,0,0.1)
+                 , seriestype = [:shape]
+                 , lw=0.5 
+                 , c=:lightblue
+                 , linecolor=:black
+                 , legend = false
+                 #, fillalpha = 0.5
+                 , aspect_ratio = 1
+                 , showaxis = false
+                 ,xlims=[-1,1]
+                 ,ylims=[-1,1]
+                 ,grid = false
+                 ,ticks=false
+                 ,titlefontcolor=:white
+                )
+    annotate!((-1,0.72,Plots.text("Single Controller", 11, :black, :center)))
+
+    ctl_r = plot(title="false", titlefontcolor=:white ,showaxis = false, ticks=false,grid=false)
+
     ntw_p = graphplot(
         model.ntw_graph
         ,names = [get_sne_id(i,model) for i=1:nv(model.ntw_graph)]
         , method = :circular
-        ,size=(300,200)
+       # ,size=(300,200)
         ,node_weights = [ get_sne_id(i,model) > 9 ? 1 : 10 for i in 1:nv(model.ntw_graph)]  #[ i > 9 ? 1 : 10 for i in 1:nv(model.ntw_graph)]
         ,nodeshape = :hexagon
         ,nodecolor = [ is_up(getindex(model,get_sne_id(i,model))) ? :lightgray : :red for i in 1:nv(model.ntw_graph) ]
@@ -198,14 +220,22 @@ function plotabm_networks_mono(
         ,node_size=nsize
         ,palette = [:lightgray, :red]
         #,titlefontsize=1
-       # ,titlefontcolor=:black
+        ,titlefontcolor=:white
     )
     
-    #annotate!((-0.4,0.75,Plots.text("Asset Network", 11, :black, :center)))
+    annotate!((-0.7,0.75,Plots.text("Asset Network", 11, :black, :center)))
 
-    #p = Plots.plot(ntw_p, layout=l, size=(300,600))
+    tpt_p = plot(title="tpt",titlefontcolor=:white,ylims=[0,30])
+    for i=1:nv(model.ntw_graph)
+        sne = getindex(model,get_sne_id(i,model))
+        tpt_p = plot!([ s.in_pkt for s in sne.state_trj ],xlims=[0,model.N])
+    end
     
-    return ntw_p
+    annotate!((-1,33,Plots.text("Throughput", 11, :black, :center)))
+
+    p = Plots.plot(title,ctl_p,ctl_r,ntw_p,tpt_p, layout=l, size=(800,600))
+    
+    return p#ntw_p
 
 end
 
@@ -384,3 +414,7 @@ function update_addresses_removal!(dpn_id::Int,model)
     delete!(model.mapping_ntw_sne,length(model.ntw_graph)+1)
 end
 
+function circle_shape(h,k,r)
+    θ = LinRange(0,2*π, 500)
+    h .+ r*sin.(θ), k .+ r*cos.(θ)
+end
