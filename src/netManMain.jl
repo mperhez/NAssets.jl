@@ -34,15 +34,25 @@ args[:ctl_graph]=ctl_graph
 # params[:graph] = swg               
 #adata = [:phase,:color]
 adata = [get_state_trj]
-mdata = [:mapping_ctl_ntw]
+mdata = [:mapping_ctl_ntw,get_state_trj]
 anim,result_agents,result_model = run_model(n,args,params; agent_data = adata, model_data = mdata)
 
 ags = last(result_agents,q_agents)["get_state_trj"]
-
 ags_1 = vcat([ [ split(string(j-1)*";"*replace(to_string(ags[i][j]),"NetworkAssetState(" => ""),";") for j=1:length(ags[i])] for i=1:length(ags) ]...)
 
+model_data = last(result_model)["get_state_trj"]
+model_data = [ (m.tick,m.links_load) for m in model_data ]
+
 #ags_1 = [ split(string(i-1)*";"*replace(to_string(ags[j][i]),"NetworkAssetState(" => ""),";") for j=1:length(ags)] for i=1:length(ags[j]) ]
-writedlm(data_dir*"exp_raw/"*"steps_agents.csv",ags_1,';') 
+open(data_dir*"exp_raw/"*"steps_agents.csv", "w") do io
+    # writedlm(io, ["tick;id;port-edge;count1;count2;count3;flowtable"], ';')
+    writedlm(io,ags_1,';') 
+end;
+
+open(data_dir*"exp_raw/"*"steps_model.csv", "w") do io
+    writedlm(io,model_data,';') 
+end;
+
 
 #print(ags[7][end])
 

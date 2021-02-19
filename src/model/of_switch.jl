@@ -5,6 +5,10 @@ end
     OFPR_ACTION = 1
     OFPPR_DELETE = 2
 end
+@enum OFS_Action begin
+    OFS_Output = 1
+end
+
 #@enum Ofp_Config_Flag EventOFPPortStatus=1 
 
 
@@ -56,7 +60,7 @@ mutable struct Flow
     dpid::Int64 # datapath id
     match_rule::MRule
     params::Vector{Any}
-    action # out_port, TODO: Check if other actions are needed
+    action::OFS_Action # out_port, TODO: Check if other actions are needed
 end
 
 
@@ -143,14 +147,16 @@ function ask_controller(sne::SimNE,a::Agent,msg::CTLMessage)
     #TODO in_processing msgs of controller to install flow for unknown dst
 end
 
-function forward(ticks::Int64,msg::CTLMessage,src::SimNE)
+function forward(msg::CTLMessage,src::SimNE,model)
     #println("Packet $(msg[4].id) delivered")
+    out_pkt_count = get_state(src).out_pkt + 1
+    set_out_pkt!(src,out_pkt_count)
 end
 
-function forward(ticks::Int64,msg::CTLMessage,src::SimNE,dst::SimNE)
+function forward(msg::CTLMessage,src::SimNE,dst::SimNE,model)
     in_ports = filter(p->p[2]=="s$(src.id)",get_port_edge_list(dst))
     in_port = in_ports[1][1]
-    push_msg!(dst,OFMessage(ticks,src.id,in_port,msg.data))
+    push_msg!(src,dst,OFMessage(model.ticks,src.id,in_port,msg.data),model)
     #@show msg out_port
 end
 
@@ -182,12 +188,11 @@ function in_packet_processing(a::AbstractAgent,model)
         # if model.ticks < 3
         #     println("[$(model.ticks)]($(a.id)) Processing packet $(msg)")
         # end
-        in_pkt_count += 1
-        out_pkt_count += process_msg(a,msg,model)
+        # in_pkt_count += 1
+        # out_pkt_count += 
+        process_msg(a,msg,model)
     end
 
-    set_in_pkt!(a,in_pkt_count)
-    set_out_pkt!(a,out_pkt_count)
 end
 
 
@@ -210,8 +215,6 @@ function process_msg(a::Agent,msg::CTLMessage,model)
             println("[$(model.ticks)]($(a.id)) -> match default")
             end
     end
-
-    return 0
 end
 
 function process_msg(a::SimNE,msg::CTLMessage,model)
@@ -236,11 +239,13 @@ function process_msg(a::SimNE,msg::CTLMessage,model)
             dst_id = parse(Int64,filter(x->x[1]==flow[1].params[1],get_port_edge_list(a))[1][2][2:end])
             # println("New destinatio is $(dst_id) ")
             dst = getindex(model,dst_id)
-            flow[1].action(model.ticks,msg,a,dst)
+            #flow[1].action(model.ticks,msg,a,dst)
+            forward(msg,a,dst,model)
         else
-            flow[1].action(model.ticks,msg,a)
+           # flow[1].action(model.ticks,msg,a)
+           forward(msg,a,model)
         end
-        flow[1].action == forward ? out_pkt_count += 1 : out_pkt_count
+        # flow[1].action == OFS_Output ? out_pkt_count += 1 : out_pkt_count
         #@show flow
     else
         reattempt = 5
@@ -254,10 +259,12 @@ function process_msg(a::SimNE,msg::CTLMessage,model)
         #return package to queue as it does not know what to do with it
         push!(a.pending,msg)
     end
-    return out_pkt_count
 end
 
 function pending_pkt_handler(a::AbstractAgent,model)
+    if model.ticks in 80:1:90 && a.id == 10
+        println("[$(model.ticks)] pending: $(length(a.pending))")
+    end
     @match a begin
         a::SimNE, if !isempty(a.pending) end => begin
                         #println("[$(model.ticks)]($(a.id)) BEFORE pending_pkt_handler: $(size(a.state.pending))")
@@ -331,7 +338,7 @@ function get_state(sme::SimNE)
 end
 
 function init_state!(sme::SimNE)
-    new_state = !isnothing(get_state(sme)) ? deepcopy(get_state(sme)) : NetworkAssetState(sme.id)
+    new_state = deepcopy(get_state(sme)) #!isnothing(get_state(sme)) ? deepcopy(get_state(sme)) : NetworkAssetState(sme.id)
     new_state.in_pkt = 0
     new_state.out_pkt = 0
     push!(sme.state_trj,new_state)
@@ -413,11 +420,36 @@ end
 
 
 """
-    push OF message to simNE
+    push OF message to from src SimNE to dst SimNE
 """
-function push_msg!(sne::SimNE,msg::OFMessage)
-    put!(sne.queue,msg)
+function push_msg!(src::SimNE,dst::SimNE,msg::OFMessage,model)
+    #put!(sne.queue,msg)
+    #println("[$(model.ticks)] msgs: $(model.ntw_links_msgs)")
+    l = (get_address(src.id,model),get_address(dst.id,model))
+    l = l[1] < l[2] ? l : (l[2],l[1])
+    if !haskey(model.ntw_links_msgs,l)
+        init_link_msg!(l,model)
+    end
+    link_queue = last(model.ntw_links_msgs[l])
+    push!(link_queue,msg)
+    links_load = get_state(model).links_load
+    current_load = haskey(links_load,l) ? links_load[l] : 0
+    links_load[l] = current_load + 1    
+    
+    out_pkt_count = get_state(src).out_pkt + 1
+    set_out_pkt!(src,out_pkt_count)
 end
+
+"""
+    push OF message to from simulated host to dst SimNE
+"""
+function push_msg!(dst::SimNE,msg::OFMessage)
+    put!(dst.queue,msg)
+    in_pkt_count = get_state(dst).in_pkt + 1
+    set_in_pkt!(dst,in_pkt_count)
+end
+
+
 function push_msg!(a::Agent,msg::OFMessage)
     put!(a.state.queue,msg)
 end

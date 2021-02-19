@@ -45,6 +45,14 @@ mutable struct FFAgState <: State
     #ϕ
 end
 
+mutable struct ModelState <: State
+    tick::Int
+    links_load::Dict{Tuple{Int,Int},Int} # key: (src,dst), value: pkts
+end
+
+function ModelState(tick::Int)
+    ModelState(tick,Dict())
+end
 
 
 # function Agent(id,phase)

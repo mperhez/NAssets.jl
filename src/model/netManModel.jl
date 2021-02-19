@@ -22,17 +22,20 @@ function initialize(args,user_props;grid_dims=(3,3),seed=0)
         :ctrl_model => CENTRALISED,
         :pkt_size => 1500,
         :freq => 30, # frequency of monitoring
-        :N=>args[:N]
+        :N=>args[:N],
+        # key(src,dst)=>value(time_left_at_link =>msg)
+        :ntw_links_msgs=>Dict{Tuple{Int,Int},Vector{Vector{OFMessage}}}(),
+        :ntw_links_delays =>Dict{Tuple{Int,Int},Int}(),
+        :state_trj => Vector{ModelState}()
     )
 
     Random.seed!(seed)
     props = merge(default_props,user_props)
-
     #space = GridSpace(grid_dims, moore=true)
     space = GraphSpace(props[:ntw_graph])
     agent_types = Union{SimNE,Agent}
     model = ABM(agent_types, space; scheduler = random_activation, properties = props)
-
+    init_model!(model)
     #create 
     create_agents!(model)
     model
@@ -90,15 +93,21 @@ end
     executed in some agents and then some start with second action.
 """
 function model_step!(model)
-    model.ticks += 1
-    #@show model.ticks
+    init_step_state!(model)
     
     generate_traffic(model)
     #print("Has sent packet to $(sne.id)")
+    for e in edges(model.ntw_graph)
+        ntw_link_step!((e.src,e.dst),model)
+    end
+#    print(last(model.state_trj))
 
    # @show model.ticks
     for a in allagents(model)
         init_state!(a)
+        if a.id == 10 && model.ticks in 80:1:90
+            println("[$(model.ticks)] - $(get_state(a))")
+        end
     #     #pulse(a,model)
         # @match a begin
         #     a::SimNE => 
@@ -110,11 +119,8 @@ function model_step!(model)
         pending_pkt_handler(a,model)
      end
 
-     
+
      soft_drop_node(model)
-    # for a in allagents(model)
-    #     #process_pulses(a,model)
-    # end
 end
 
 """
@@ -268,7 +274,8 @@ function install_flow(in_dpid,in_port_start,path,model)
             r_src = path[1]
             r_dst = path[2]
             
-            fw = Flow(sne.id,MRule(string(in_port),string(r_src),string(r_dst)),[out_port],(ticks,pkt,sne_src,sne_dst)->forward(ticks,pkt,sne_src,sne_dst))
+            fw = Flow(sne.id,MRule(string(in_port),string(r_src),string(r_dst)),[out_port],OFS_Output)
+            #(ticks,pkt,sne_src,sne_dst)->forward(ticks,pkt,sne_src,sne_dst)
             println("[$(model.ticks)] {A} Installing flow: $(p[1]) - $(fw.match_rule)")
             push_flow!(sne,fw)
             prev_sne_id = sne.id
@@ -276,7 +283,8 @@ function install_flow(in_dpid,in_port_start,path,model)
     else
         sne = getindex(model,in_dpid)
         #TODO how to make the rule to be regardless of port in
-        fw =Flow(in_dpid,MRule("*","*",string(in_dpid)),[0],(ticks,pkt,src_sne)->forward(ticks,pkt,src_sne))
+        fw =Flow(in_dpid,MRule("*","*",string(in_dpid)),[0],OFS_Output)
+        #(ticks,pkt,src_sne)->forward(ticks,pkt,src_sne)
         println("[$(model.ticks)]  {B} Installing flow to $(in_dpid): $(fw.match_rule)")
         push_flow!(sne,fw)
     end
@@ -300,4 +308,100 @@ function generate_traffic(model)
     end
 
    # println("[$(model.ticks)] $(q_pkts) pkts generated")
+end
+
+"""
+    Initialise state of model for a given step
+"""
+function init_step_state!(m::ABM)
+    m.ticks += 1
+    new_state = ModelState(m.ticks)#deepcopy(get_state(m))
+    #for e in edges(m.ntw_graph)
+    #    new_state.links_load[(e.src,e.dst)] = 0
+           # read from links according to delay
+   # put msgs in destination nodes for those where delay is over
+
+        #m.ntw_links[k] 
+    #end
+    push!(m.state_trj,new_state)
+end
+
+function get_state(m::ABM)
+    return last(m.state_trj)
+end
+
+
+function init_model!(m::ABM)
+    #all delays equal initially
+    for e in edges(m.ntw_graph)
+        println("[$(m.ticks)] edge: $((e.src,e.dst))")
+        m.ntw_links_delays[(e.src,e.dst)] = 1
+    end
+
+    #init link msgs
+    # for e in edges(m.ntw_graph)
+    #     link_queue = Vector{Vector{OFMessage}}()
+    #     for q=1:m.ntw_links_delays[(e.src,e.dst)]
+    #         push!(link_queue,Vector{OFMessage}())
+    #     end
+    #     m.ntw_links_msgs[(e.src,e.dst)] = link_queue
+    # end
+
+end
+
+function init_link_msg!(l::Tuple{Int,Int},m::ABM)
+    link_queue = Vector{Vector{OFMessage}}()
+    for q=1:m.ntw_links_delays[l]
+        push!(link_queue,Vector{OFMessage}())
+    end
+    m.ntw_links_msgs[l] = link_queue
+end
+
+
+function ntw_link_step!(l::Tuple{Int,Int},model)
+    if haskey(model.ntw_links_msgs,l)
+        msgs = model.ntw_links_msgs[l]
+        if model.ticks in 80:1:90 && l == (2,10)
+            println("[$(model.ticks)] - $(l) -> msgs: $(length(first(msgs)))")
+        end
+        to_deliver = first(msgs)
+        in_pkt_count = 0
+        if !isempty(to_deliver)
+            if length(msgs) > 1
+                msgs = msgs[begin+1:end]
+                push!(msgs,Vector{OFMessage}())
+            else
+                msgs = [ Vector{OFMessage}() ]
+            end
+            
+            model.ntw_links_msgs[l] = msgs
+            if model.ticks in 80:1:90 && l == (2,10)
+                println("[$(model.ticks)] 1-link mid-> $(l) -> $(length(msgs))")
+                println("[$(model.ticks)] 2-link mid-> $(l) -> $(length(first(msgs)))")
+                println("[$(model.ticks)] 3-link mid-> $(l) -> $(length(to_deliver))")
+            end
+
+            for msg in to_deliver
+                #Does it need to check address?, I don't think so
+                dst = getindex(model,l[2])
+                put!(dst.queue,msg)
+                if model.ticks in 80:1:90 && l == (2,10)
+                    println("[$(model.ticks)] 4-link mid $(l) -> BEFORE -> $(get_state(dst).in_pkt)")
+                end
+                in_pkt_count = get_state(dst).in_pkt + 1
+                if model.ticks in 80:1:90 && l == (2,10)
+                    println("[$(model.ticks)] 5-link mid $(l) -> AFTER -> $(get_state(dst).in_pkt)")
+                end
+                set_in_pkt!(dst,in_pkt_count)
+            end
+            #push!(model.state_trj,ModelState(model.ticks))
+        end
+    end
+    if model.ticks in 80:1:90 && l == (2,10)
+        println("[$(model.ticks)] End of link $(l) step-> $(get_state(getindex(model,10)).in_pkt)")
+    end
+end
+    
+function get_state_trj(m::ABM)::Vector{ModelState}
+    return m.state_trj
 end
