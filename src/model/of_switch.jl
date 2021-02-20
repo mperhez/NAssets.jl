@@ -237,7 +237,9 @@ function process_msg(a::SimNE,msg::CTLMessage,model)
 
         if flow[1].params[1][1] != 0
             dst_id = parse(Int64,filter(x->x[1]==flow[1].params[1],get_port_edge_list(a))[1][2][2:end])
-            # println("New destinatio is $(dst_id) ")
+            # if a.id == 10 && model.ticks in 80:1:90 
+            #     println("[$(model.ticks)]($(a.id)) New destinatio is $(dst_id) ")
+            # end
             dst = getindex(model,dst_id)
             #flow[1].action(model.ticks,msg,a,dst)
             forward(msg,a,dst,model)
@@ -248,6 +250,9 @@ function process_msg(a::SimNE,msg::CTLMessage,model)
         # flow[1].action == OFS_Output ? out_pkt_count += 1 : out_pkt_count
         #@show flow
     else
+        # if a.id == 10 && model.ticks in 80:1:90 
+        #     println("[$(model.ticks)]($(a.id)) else New destinatio is $(get_state(a)) ")
+        # end
         reattempt = 5
         similar_requests = filter(r->(r[2],r[3]) == (msg.data.src,msg.data.dst) && (model.ticks - r[1]) < reattempt,a.requested_ctl)
         #println("[$(model.ticks)]($(a.id)) Similar requests $(similar_requests)")
@@ -269,7 +274,8 @@ function pending_pkt_handler(a::AbstractAgent,model)
         a::SimNE, if !isempty(a.pending) end => begin
                         #println("[$(model.ticks)]($(a.id)) BEFORE pending_pkt_handler: $(size(a.state.pending))")
                         for msg in a.pending
-                            push_msg!(a,msg)
+                            #push_msg!(a,msg)
+                            put!(a.queue,msg)
                         end
                         empty_pending!(a)
                         #println("[$(model.ticks)]($(a.id)) AFTER pending_pkt_handler: $(size(a.state.pending))")

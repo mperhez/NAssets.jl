@@ -94,20 +94,23 @@ end
 """
 function model_step!(model)
     init_step_state!(model)
+    for a in allagents(model)
+        init_state!(a)
+    end
     
-    generate_traffic(model)
-    #print("Has sent packet to $(sne.id)")
     for e in edges(model.ntw_graph)
         ntw_link_step!((e.src,e.dst),model)
     end
+    if model.ticks in 80:1:90
+        println("[$(model.ticks)] - AFTER Processing $(get_state(getindex(model,10)))")
+    end    
+    generate_traffic(model)
+    #print("Has sent packet to $(sne.id)")
 #    print(last(model.state_trj))
 
    # @show model.ticks
     for a in allagents(model)
-        init_state!(a)
-        if a.id == 10 && model.ticks in 80:1:90
-            println("[$(model.ticks)] - $(get_state(a))")
-        end
+        #init_state!(a)
     #     #pulse(a,model)
         # @match a begin
         #     a::SimNE => 
@@ -361,7 +364,7 @@ end
 function ntw_link_step!(l::Tuple{Int,Int},model)
     if haskey(model.ntw_links_msgs,l)
         msgs = model.ntw_links_msgs[l]
-        if model.ticks in 80:1:90 && l == (2,10)
+        if model.ticks in 80:1:90 
             println("[$(model.ticks)] - $(l) -> msgs: $(length(first(msgs)))")
         end
         to_deliver = first(msgs)
@@ -375,23 +378,23 @@ function ntw_link_step!(l::Tuple{Int,Int},model)
             end
             
             model.ntw_links_msgs[l] = msgs
-            if model.ticks in 80:1:90 && l == (2,10)
-                println("[$(model.ticks)] 1-link mid-> $(l) -> $(length(msgs))")
-                println("[$(model.ticks)] 2-link mid-> $(l) -> $(length(first(msgs)))")
-                println("[$(model.ticks)] 3-link mid-> $(l) -> $(length(to_deliver))")
-            end
+            # if model.ticks in 80:1:90 && l == (2,10)
+            #     println("[$(model.ticks)] 1-link mid-> $(l) -> $(length(msgs))")
+            #     println("[$(model.ticks)] 2-link mid-> $(l) -> $(length(first(msgs)))")
+            #     println("[$(model.ticks)] 3-link mid-> $(l) -> $(length(to_deliver))")
+            # end
 
             for msg in to_deliver
                 #Does it need to check address?, I don't think so
-                dst = getindex(model,l[2])
+                dst = msg.dpid == l[1] ? getindex(model,l[2]) : getindex(model,l[1])
                 put!(dst.queue,msg)
-                if model.ticks in 80:1:90 && l == (2,10)
-                    println("[$(model.ticks)] 4-link mid $(l) -> BEFORE -> $(get_state(dst).in_pkt)")
-                end
+                if model.ticks in 80:1:90 #&& l == (2,10)
+                     println("[$(model.ticks)] - $(l) -> to deliver $(msg)")
+                 end
                 in_pkt_count = get_state(dst).in_pkt + 1
-                if model.ticks in 80:1:90 && l == (2,10)
-                    println("[$(model.ticks)] 5-link mid $(l) -> AFTER -> $(get_state(dst).in_pkt)")
-                end
+                # if model.ticks in 80:1:90 && l == (2,10)
+                #     println("[$(model.ticks)] 5-link mid $(l) -> AFTER -> $(get_state(dst).in_pkt)")
+                # end
                 set_in_pkt!(dst,in_pkt_count)
             end
             #push!(model.state_trj,ModelState(model.ticks))
