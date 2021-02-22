@@ -228,7 +228,7 @@ function plotabm_networks_mono(
     tpt_p = plot(title="tpt",titlefontcolor=:white,ylims=[0,30])
     for i=1:nv(model.ntw_graph)
         sne = getindex(model,get_sne_id(i,model))
-        tpt_p = plot!([ s.in_pkt for s in sne.state_trj ],xlims=[0,model.N])
+        tpt_p = plot!([ s.in_pkt for s in sne.state_trj ],xlims=[0,model.N], line=:stem, linealpha=0.5)
     end
     
     annotate!((-1,33,Plots.text("Throughput", 11, :black, :center)))

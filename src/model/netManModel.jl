@@ -303,11 +303,14 @@ function generate_traffic(model)
     q_pkts = abs(round(10rand(Normal(1,0.1))))
     #q_pkts = 100
     #src,dst = samplepair(1:nv(model.ntw_graph)) # can be replaced for random pair
-    src,dst = (1,7)
-    for i =1:q_pkts
-        pkt = create_pkt(src,dst,model)
-        sne = getindex(model,src)
-        push_msg!(sne,OFMessage(model.ticks,src,0,pkt)) # always from port 0
+    pairs = [(1,7),(4,1),(9,5)]    
+    for p in pairs
+        src,dst = p
+        for i =1:q_pkts
+            pkt = create_pkt(src,dst,model)
+            sne = getindex(model,src)
+            push_msg!(sne,OFMessage(model.ticks,src,0,pkt)) # always from port 0
+        end
     end
 
    # println("[$(model.ticks)] $(q_pkts) pkts generated")
