@@ -187,12 +187,16 @@ function values_f(ttf,n,Δᵩ,ϵₛ,f,params,tsf,tse_params,f_c)
             push!(vs,nnoised(f(params...,t),ϵₛ))
         end
     end
+    l = length(vs) + 1
+    for i=l:n
+        push!(vs,0.0)
+    end
     return vs
 end
 
 
 """
- It illustrate how to use the other TTE functions
+ It illustrates how to use the other TTE functions
 """
 function generate_ttf_series()
     n=1000
@@ -200,7 +204,7 @@ function generate_ttf_series()
     λ = 1.0 #0.5
     γ = 6.0 #16
     k = 1.0 #0.5
-    p = plot(title="",legend=false)#,xlims=[0,1000])
+    #p = plot(title="",legend=false)#,xlims=[0,1000])
     ϵₛ = 0.05
     a = 1.0
     b = 0.05
@@ -213,16 +217,68 @@ function generate_ttf_series()
             (weibull_f,(λ,k),wb_ts,(γ),wb_c),
             (log_f,(50,0.1),log_ts,(),log_c)
             ]
-
+    
     for fs in funs
         push!(vs,values_f(ttf,n,Δᵩ,ϵₛ,fs...))
     end
 
-    for d=1:length(vs)
-        p = plot!(p, vs[d])
-    end
-    for c=ttf:ttf:n
-        p = plot!(p,[c,c],[0,1.0], c=:red, ls=:dash, w=2)
-    end
-    p
+    # for d=1:length(vs)
+    #     p = plot!(p, vs[d])
+    # end
+    # for c=ttf:ttf:n
+    #     p = plot!(p,[c,c],[0,1.0], c=:red, ls=:dash, w=2)
+    # end
+    # p
 end
+
+"""
+    It adds downtime to a series
+        ot: downtime (time steps)
+
+"""
+
+function add_downtime_to_series(ttf,ot,s_series)
+    phased_s =[
+                s_series[(i+Int64(floor(i/ttf))):min(i + ttf - Int64(ceil(i/ttf)), end)] 
+                for i in 1:ttf:length(s_series)
+            ]
+
+    ph_ot = Vector{Float64}()
+
+    for ph in phased_s
+        push!(ph_ot,vcat(ph,zeros(Float64,ot))...)
+    end
+    
+    return ph_ot
+end
+
+"""
+ It generates the sensor time series for a given asset
+"""
+function generate_sensor_series(ttf,n,Δᵩ,ϵₛ,ot,funs)
+    vs = zeros(Float64,length(funs),n)
+    dim_dtvs = n%ttf > 0 ? n+ot+1 : n+ot
+    dtvs = zeros(Float64,length(funs),dim_dtvs)
+
+    for i=1:length(funs)
+        vs[i,:] = values_f(ttf,n,Δᵩ,ϵₛ,funs[i]...)
+    end
+
+
+    for si=1:length(funs)
+        s = vs[si,:]
+        dtvs[si,:] = add_downtime_to_series(ttf,ot,s)
+    end
+
+    return dtvs
+end
+
+function generate_rul_series(ttf,Δᵩ,n,ot)
+    rul = [  i%xᵩ(ttf,floor((i-1)/ttf),Δᵩ) == 0 ? 0 : round(xᵩ(ttf,floor((i-1)/ttf),Δᵩ) - i%xᵩ(ttf,floor((i-1)/ttf),Δᵩ)) for i=1:n ]
+    #rul = [ xᵩ(ttf,floor(i/ttf),Δᵩ) - i%xᵩ(ttf,floor(i/ttf),Δᵩ) + 1 for i=1:n ]
+    print("PRE RUL: $(size(rul))")
+    rul = add_downtime_to_series(ttf,ot,rul)
+    print("RUL: $(size(rul))")
+    return rul
+end
+

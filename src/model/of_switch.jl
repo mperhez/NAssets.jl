@@ -76,7 +76,6 @@ mutable struct NetworkAssetState <: State
     ne_id::Int64
     up::Bool
     port_edge_list::Vector{Tuple{Int64,String}}
-    condition::Float64
     in_pkt::Int64
     out_pkt::Int64
     flow_table::Vector{Flow}
@@ -85,7 +84,7 @@ mutable struct NetworkAssetState <: State
 end
 
 function NetworkAssetState(ne_id::Int)
-    NetworkAssetState(ne_id,true,Vector{Tuple{Int64,String}}(),0.0,0,0,Vector{Flow}())
+    NetworkAssetState(ne_id,true,Vector{Tuple{Int64,String}}(),0,0,Vector{Flow}())
 end
 
 mutable struct SDNCtlAgState <: State
@@ -135,11 +134,13 @@ mutable struct SimNE <: SimAsset
     pending::Vector{CTLMessage}
     requested_ctl::Vector{Tuple{Int64,Int64,Int64}} # flows requested to controller
     state_trj::Vector{NetworkAssetState}
+    condition_ts::Array{Float64,2} # Pre-calculated time series of the condition of asset
+    rul::Array{Float64,1}
     controller_id::Int64
     params::Dict{Symbol,Any}
 end
 function SimNE(id,nid,params)
-    SimNE(id,nid,0.3,Channel{CTLMessage}(1000),Vector{CTLMessage}(),Vector{Tuple{Int64,Int64,Int64}}(),[NetworkAssetState(id)],-1,params) #initialise SimNE with a placeholder in the controller
+    SimNE(id,nid,0.3,Channel{CTLMessage}(1000),Vector{CTLMessage}(),Vector{Tuple{Int64,Int64,Int64}}(),[NetworkAssetState(id)],zeros(Float64,2,1),[],-1,params) #initialise SimNE with a placeholder in the controller
 end
 
 function ask_controller(sne::SimNE,a::Agent,msg::CTLMessage)
@@ -505,7 +506,6 @@ function to_string(s::NetworkAssetState)
     return  string(s.ne_id) * 
             sep * string(s.up) *
             sep * string(s.port_edge_list) * 
-            sep * string(s.condition) *
             sep * string(s.in_pkt) *
             sep * string(s.out_pkt) *
             sep * string(s.flow_table)
@@ -517,4 +517,19 @@ end
 
 function get_throughput(a::Agent)::Int
     return 0
+end
+
+function get_condition_ts(a::Agent)
+    return zeros(1,1)
+end
+
+function get_condition_ts(sne::SimNE)
+    return sne.condition_ts
+end
+
+function get_rul_ts(a::Agent)
+    return [0]
+end
+function get_rul_ts(sne::SimNE)
+    return sne.rul
 end

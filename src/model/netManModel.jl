@@ -224,6 +224,22 @@ function init_agent!(a::SimNE,model)
         push_ep_entry!(a,(i,"s$(nbs[i])"))
     end
 
+    #initialise condition: we generate entire time series to failure
+    # TODO: Review
+    #simulated sensor functions
+    funs = [
+        (exp_f,(1.0,0.05),exp_ts,(),exp_c), 
+        (weibull_f,(1.0,1.0),wb_ts,(6.0),wb_c),
+        (log_f,(50,0.1),log_ts,(),log_c)
+        ]
+    
+    ttf = 100
+    Δᵩ = 0.05
+    downtime = 2 #time steps
+    a.condition_ts = generate_sensor_series(ttf,model.N,Δᵩ,0.05,downtime,funs)
+    vrul = generate_rul_series(ttf,Δᵩ,model.N,downtime)
+    a.rul = vrul#reshape(vrul,length(vrul),1)
+       
     init_switch(a,model)
 end
 
@@ -381,30 +397,16 @@ function ntw_link_step!(l::Tuple{Int,Int},model)
             end
             
             model.ntw_links_msgs[l] = msgs
-            # if model.ticks in 80:1:90 && l == (2,10)
-            #     println("[$(model.ticks)] 1-link mid-> $(l) -> $(length(msgs))")
-            #     println("[$(model.ticks)] 2-link mid-> $(l) -> $(length(first(msgs)))")
-            #     println("[$(model.ticks)] 3-link mid-> $(l) -> $(length(to_deliver))")
-            # end
 
             for msg in to_deliver
                 #Does it need to check address?, I don't think so
                 dst = msg.dpid == l[1] ? getindex(model,l[2]) : getindex(model,l[1])
                 put!(dst.queue,msg)
-                if model.ticks in 80:1:90 #&& l == (2,10)
-                     println("[$(model.ticks)] - $(l) -> to deliver $(msg)")
-                 end
                 in_pkt_count = get_state(dst).in_pkt + 1
-                # if model.ticks in 80:1:90 && l == (2,10)
-                #     println("[$(model.ticks)] 5-link mid $(l) -> AFTER -> $(get_state(dst).in_pkt)")
-                # end
                 set_in_pkt!(dst,in_pkt_count)
             end
             #push!(model.state_trj,ModelState(model.ticks))
         end
-    end
-    if model.ticks in 80:1:90 && l == (2,10)
-        println("[$(model.ticks)] End of link $(l) step-> $(get_state(getindex(model,10)).in_pkt)")
     end
 end
     

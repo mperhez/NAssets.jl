@@ -33,12 +33,28 @@ args[:ntw_graph]=ntw_graph
 args[:ctl_graph]=ctl_graph
 # params[:graph] = swg               
 #adata = [:phase,:color]
-adata = [get_state_trj]
+adata = [get_state_trj,get_condition_ts, get_rul_ts]
 mdata = [:mapping_ctl_ntw,get_state_trj]
 anim,result_agents,result_model = run_model(n,args,params; agent_data = adata, model_data = mdata)
 
 ags = last(result_agents,q_agents)["get_state_trj"]
 ags_1 = vcat([ [ split(string(j-1)*";"*replace(to_string(ags[i][j]),"NetworkAssetState(" => ""),";") for j=1:length(ags[i])] for i=1:length(ags) ]...)
+
+ags_condition = last(result_agents,q_agents)["get_condition_ts"]
+ags_rul = last(result_agents,q_agents)["get_rul_ts"]
+
+open(data_dir*"exp_raw/"*"condition_agents.csv", "w") do io
+    for i=1:nv(ntw_graph)
+        writedlm(io,hcat([i 1; i 2 ; i 3] , ags_condition[i]),';')
+    end
+end;
+
+
+ open(data_dir*"exp_raw/"*"rul_agents.csv", "w") do io
+#     #for i=1:nv(ntw_graph)
+         writedlm(io,ags_rul[1:10],';')
+#     #end
+ end;
 
 model_data = last(result_model)["get_state_trj"]
 model_data = [ (m.tick,m.links_load) for m in model_data ]
