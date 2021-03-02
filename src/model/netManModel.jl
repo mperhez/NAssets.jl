@@ -59,6 +59,7 @@ function create_agents!(model)
         model.mapping_ntw_sne[i] = i   
     end
 
+    println(" Nodes CTL: $(nv(model.properties[:ctl_graph]))")
     #create control agents 1:1
     for i in 1:nv(model.properties[:ctl_graph])
         #next_fire = rand(0:0.2:model.:Τ)
