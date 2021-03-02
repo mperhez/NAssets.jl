@@ -134,10 +134,11 @@ function plot_ctl_network_multi(
     
     ctl_p = graphplot(
         model.ctl_graph
-        ,names = [ get_control_agent(i,model) for i in 1:nv(model.ctl_graph) ]
+        ,names = [ i for i in 1:nv(model.ctl_graph) ]
+                #[ get_control_agent(i,model) for i in 1:nv(model.ctl_graph) ]
         , method = :circular
         ,size=(300,200)
-        ,node_weights = [ i > 9 ? 1 : 1 for i in 1:nv(model.ctl_graph)]
+        ,node_weights = [ i > 9 ? 1 : 4 for i in 1:nv(model.ctl_graph)]
         ,nodeshape = :circle
         ,nodecolor = [ getindex(model,get_control_agent(i,model)).state.color for i in 1:nv(model.ctl_graph) ]
         ,markerstrokecolor = :dimgray
@@ -148,7 +149,7 @@ function plot_ctl_network_multi(
         ,titlefontcolor=:white
         ,curves = false
     )
-    annotate!((-0.4,0.72,Plots.text("Control Network", 11, :black, :center)))
+    annotate!((-0.7,0.72,Plots.text("Control Network", 11, :black, :center)))
         
     return ctl_p
 

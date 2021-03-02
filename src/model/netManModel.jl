@@ -19,7 +19,7 @@ function initialize(args,user_props;grid_dims=(3,3),seed=0)
         :mapping_ctl_ntw => Dict{Int64,Int64}(), # mapping between (Ctl) Agent and SimNE
         :mapping_ntw_sne => Dict{Int64,Int64}(), #mapping btwn the underlying network and the corresponding simNE agent 
         :pkt_per_tick => 500, # How many packets are processsed per tick
-        :ctrl_model => CENTRALISED,
+        :ctrl_model => DISTRIBUTED, #CENTRALISED,
         :pkt_size => 1500,
         :freq => 30, # frequency of monitoring
         :N=>args[:N],
