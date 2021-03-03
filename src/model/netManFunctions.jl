@@ -107,7 +107,7 @@ end
 function load_network_graph()
     Random.seed!(123)
     #ntw = smallgraph("house")
-    ntw = watts_strogatz(10,4,0.8)
+    ntw = MetaGraph(watts_strogatz(10,4,0.8))
     #gplot(ntw,layout=circular_layout,nodelabel=nodes(ntw))
     return ntw
 end
@@ -119,7 +119,8 @@ end
 
 function load_control_graph()
     Random.seed!(123)
-    ntw = watts_strogatz(10,3,0.8) #watts_strogatz(25,4,0.8) #complete_graph(1)
+    #ntw = MetaGraph(watts_strogatz(10,4,0.8)) #watts_strogatz(25,4,0.8) #complete_graph(1)
+    ntw = MetaGraph( [Int(i) for i in ring_graph(10)])
     #gplot(ntw,layout=circular_layout,nodelabel=nodes(ntw))
     return ntw
 end
@@ -137,8 +138,9 @@ function plot_ctl_network_multi(
         ,names = [ i for i in 1:nv(model.ctl_graph) ]
                 #[ get_control_agent(i,model) for i in 1:nv(model.ctl_graph) ]
         , method = :circular
+        , curvature_scalar = 0.0
         ,size=(300,200)
-        ,node_weights = [ i > 9 ? 1 : 4 for i in 1:nv(model.ctl_graph)]
+        ,node_weights = [ i > 9 ? 1 : 5 for i in 1:nv(model.ctl_graph)]
         ,nodeshape = :circle
         ,nodecolor = [ getindex(model,get_control_agent(i,model)).state.color for i in 1:nv(model.ctl_graph) ]
         ,markerstrokecolor = :dimgray
@@ -291,14 +293,14 @@ function soft_drop_node(model)
     if model.ticks == dpt
 
         for dpn_id in dpn_ids
-            for nb in all_neighbors(model.ntw_graph,get_address(dpn_id,model))
+            for nb in all_neighbors(model.ntw_graph,get_address(dpn_id,model.ntw_graph))
                 link_down!(get_sne_id(nb,model),dpn_id,model)
             end
             #soft remove 
             dpn_ag = getindex(model,dpn_id)
             set_down!(dpn_ag)
             #delete!(model.mapping_ctl_ntw,dpn_id)
-            model.ntw_graph = soft_remove_vertex(model.ntw_graph,get_address(dpn_id,model))
+            model.ntw_graph = soft_remove_vertex(model.ntw_graph,get_address(dpn_id,model.ntw_graph))
             
         end
         
@@ -322,7 +324,7 @@ function hard_drop_node(model)
     if model.ticks == dpt
 
         for dpn_id in dpn_ids
-            for nb in all_neighbors(model.ntw_graph,get_address(dpn_id,model))
+            for nb in all_neighbors(model.ntw_graph,get_address(dpn_id,model.ntw_graph))
                 link_down!(get_sne_id(nb,model),dpn_id,model)
             end
             #remove 
@@ -331,7 +333,7 @@ function hard_drop_node(model)
             set_down!(dpn_ag)
             delete!(model.mapping_ctl_ntw,dpn_id)
             #remove_vertices!(model.ntw_graph,[get_address(i,model) for i in dpn_ids])
-            model.ntw_graph = remove_vertex(model.ntw_graph,get_address(dpn_id,model))
+            model.ntw_graph = remove_vertex(model.ntw_graph,get_address(dpn_id,model.ntw_graph))
             update_addresses_removal!(dpn_id,model)
         end
         
@@ -341,10 +343,28 @@ function hard_drop_node(model)
 end
 
 function soft_remove_vertex(g::AbstractGraph,dpn_id::Int)
-    sm_g = sparse(g)
-    sm_new_g = deepcopy(sm_g)
+    
+    new_g = deepcopy(g)
+    nbs₀ = deepcopy(all_neighbors(new_g,dpn_id))
 
-    [ if i == dpn_id || j == dpn_id ; sm_new_g[i,j] = 0 end for i=1:nv(g), j=1:nv(g)]
+    for nb in nbs₀
+        rem_edge!(new_g,dpn_id,nb)
+        rem_edge!(new_g,nb,dpn_id)
+    end
+
+    println("Links of $dpn_id removed => $(all_neighbors(new_g,dpn_id))")
+
+    [println(" new g: $v => Props: $(get_prop(new_g,v,:sne_id))") for v in vertices(new_g)]
+    # sm_g = sparse(g)
+    # sm_new_g = deepcopy(sm_g)
+
+    # [ if i == dpn_id || j == dpn_id ; sm_new_g[i,j] = 0 end for i=1:nv(g), j=1:nv(g)]
+
+    # new_g = MetaGraph(sm_new_g)
+
+    # for v in vertices(g)
+    #     set_props!(new_g,v,props(g,v))
+    # end
 
     # for i=1:nv(g)
     #     for j=1:nv(g)
@@ -354,7 +374,7 @@ function soft_remove_vertex(g::AbstractGraph,dpn_id::Int)
     #     end
     # end
     #[i >=dpn_id ? labels[i] = i+1 : labels[i] = i  for i in keys(labels)]
-    return SimpleGraph(sm_new_g)
+    return new_g#
 end
 
 function remove_vertex(g::AbstractGraph,dpn_id::Int)
@@ -375,7 +395,7 @@ function remove_vertex(g::AbstractGraph,dpn_id::Int)
         end
     end
     #[i >=dpn_id ? labels[i] = i+1 : labels[i] = i  for i in keys(labels)]
-    return SimpleGraph(sm_new_g)
+    return MetaGraph(sm_new_g)
 end
 
 function remove_vertices(g::AbstractGraph,dpn_ids::Array{Int})
@@ -388,10 +408,10 @@ end
 """
 Given a SimNE id it returns its ntw node address.
 """
-function get_address(sne_id::Int,model)::Int
-    res = filter(p->p[2] == sne_id,pairs(model.mapping_ntw_sne))
-    #println(" Pair? $res")
-    return !isempty(res) ? first(keys(res)) : -1
+function get_address(sne_id::Int,g::AbstractGraph)::Int
+    #res = filter(p->p[2] == sne_id,pairs(model.mapping_ntw_sne))
+    #return !isempty(res) ? first(keys(res)) : -1
+    return g[sne_id,:sne_id]
 end
 
 """
@@ -410,7 +430,7 @@ end
 Update (ntw node) addresses of SimNE agents after removal of a given SimNE
 """
 function update_addresses_removal!(dpn_id::Int,model)
-    available_addr = get_address(dpn_id,model)
+    available_addr = get_address(dpn_id,model.ntw_graph)
     #println("Current length of g: $(nv(model.ntw_graph))")
     for addr::Int=available_addr:nv(model.ntw_graph)
         #println("Address $addr and its type: $(typeof(addr))")

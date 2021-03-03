@@ -55,10 +55,12 @@ function create_agents!(model)
         a = add_agent_pos!(
                 SimNE(id,i,a_params),model
             )
+        
+        set_prop!(model.ntw_graph, id, :sne_id, id )
         # create initial mapping btwn network and SimNE
         model.mapping_ntw_sne[i] = i   
     end
-
+    set_indexing_prop!(model.ntw_graph, :sne_id)
     println(" Nodes CTL: $(nv(model.properties[:ctl_graph]))")
     #create control agents 1:1
     for i in 1:nv(model.properties[:ctl_graph])
@@ -67,16 +69,17 @@ function create_agents!(model)
         a = add_agent_pos!(
                 Agent(id,i,a_params),model
             )
+        set_props!(model.ctl_graph, i, Dict(:sne_id => i, :ag_id => id) )
         ##assign controller to SimNE
         if model.ctrl_model == CENTRALISED
             for j in 1:nv(model.properties[:ntw_graph])
-                set_control_agent!(j,id,model)    
+                set_control_agent!(j,id,model)
             end
         else
             set_control_agent!(i,id,model)
         end
     end
-
+    set_indexing_prop!(model.ctl_graph, :sne_id)
     
 
     init_agents!(model)
@@ -207,17 +210,83 @@ function init_agents!(model)
 end
 
 function init_agent!(a::Agent,model)
-    nes = get_controlled_assets(a.id,model)
-    g = model.ntw_graph
+    nes = collect(get_controlled_assets(a.id,model))
+    nbs = []
+
+    for i=1:length(nes)
+        println("Agent $(a.id) controls node: $(get_address(nes[i],model.ntw_graph))")
+        #subgraph
+        push!(nbs,deepcopy(neighbors(model.ntw_graph,nes[i])))
+        push!(nbs,[nes[i]])
+    end
+
+    nnbs = vcat(nbs...)
+    sub_g = deepcopy(model.ntw_graph)
+    vs = collect(vertices(sub_g))
+    to_del = [v for v ∈ vs if v ∉ nnbs]
     
-    a.state.paths = all_k_shortest_paths(model.ntw_graph)
+#     print("to delete: $(to_del)")
+#     println("Agent $(a.id) : nnbs: $(nnbs)")
+
+
+    # It seems unnecessary as removing vertex remove all edges
+    # for v in collect(vertices(sub_g))
+    #     for d in collect(vertices(sub_g))
+    #         if d in to_del
+    #             rem_edge!(sub_g,d,v)
+    #             rem_edge!(sub_g,v,d)
+    #         end
+    #     end
+    # end
+    for d in to_del
+        for v in collect(vertices(sub_g))
+            if !has_prop(sub_g,v,:sne_id) || get_prop(sub_g,v,:sne_id) == d
+                rem_vertex!(sub_g,v)
+            end
+        end
+    end
+    
+    ctl_sub_g = deepcopy(model.ctl_graph)
+    
+    for v=1:length(nv(ctl_sub_g))
+        #[ println("Agent $(a.id) PRE $v : $s -> $(get_prop(ctl_sub_g,s,:ag_id))") for s in neighbors(sub_g,v)]
+        println("Agent $(a.id) PRE $v -> $(get_prop(ctl_sub_g,v,:ag_id))")
+    end
+
+    ctl_v = first(filter(v->get_prop(ctl_sub_g,v,:ag_id) == a.id,1:nv(ctl_sub_g)))
+    
+    ctl_ns = collect(neighbors(ctl_sub_g,ctl_v))
+    ctl_ns = [ctl_ns...,ctl_v]
+    to_del = [v for v ∈ vs if v ∉ ctl_ns]
+    
+    for d in to_del
+        for v in collect(vertices(ctl_sub_g))
+            if !has_prop(ctl_sub_g,v,:sne_id) || get_prop(ctl_sub_g,v,:sne_id) == d
+                rem_vertex!(ctl_sub_g,v)
+            end
+        end
+    end
+
+
+
+    a.params[:ntw_graph] = sub_g
+    a.params[:ctl_graph] = ctl_sub_g
+    
+    g = model.ntw_graph
+
+    a.state.paths = all_k_shortest_paths(g)
+
+    println(a.params)
 
 end
 
 
+
+
+
 function init_agent!(a::SimNE,model)
     #print("Initialisation of SimNE agent $(a.id)")
-    nbs = all_neighbors(model.ntw_graph,get_address(a.id,model))
+    nbs = all_neighbors(model.ntw_graph,get_address(a.id,model.ntw_graph))
     
     push_ep_entry!(a,(0,"h$(a.id)")) # link to a host of the same id
     

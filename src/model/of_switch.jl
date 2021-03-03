@@ -432,7 +432,7 @@ end
 function push_msg!(src::SimNE,dst::SimNE,msg::OFMessage,model)
     #put!(sne.queue,msg)
     #println("[$(model.ticks)] msgs: $(model.ntw_links_msgs)")
-    l = (get_address(src.id,model),get_address(dst.id,model))
+    l = (get_address(src.id,model.ntw_graph),get_address(dst.id,model.ntw_graph))
     l = l[1] < l[2] ? l : (l[2],l[1])
     if !haskey(model.ntw_links_msgs,l)
         init_link_msg!(l,model)

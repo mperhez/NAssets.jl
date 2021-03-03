@@ -1,4 +1,4 @@
-using Agents, AgentsPlots, Plots, LightGraphs, SimpleWeightedGraphs, GraphPlot, GraphRecipes
+using Agents, AgentsPlots, Plots, LightGraphs, MetaGraphs, SimpleWeightedGraphs, GraphPlot, GraphRecipes
 using CSV
 using DataFrames
 using Random
@@ -9,6 +9,7 @@ using Distributions
 using StatsPlots
 using SparseArrays
 using DelimitedFiles
+using Laplacians
 
 include("netManAbm.jl")
 
