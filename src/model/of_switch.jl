@@ -9,6 +9,9 @@ end
     OFS_Output = 1
 end
 
+@enum Interagent_Protocol begin
+    FIND_PATH = 1
+end
 #@enum Ofp_Config_Flag EventOFPPortStatus=1 
 
 
@@ -39,6 +42,15 @@ mutable struct OFMessage <: CTLMessage
     reason::Ofp_Protocol
     data::Any
 end
+
+mutable struct AGMessage <: CTLMessage
+    ticks::Int
+    sid::Int # sender id
+    rid::Int # receiver id
+    reason::Ag_msg_types # Type of msg as per enum
+    body::Dict{String,Any}
+end
+
 
 function OFMessage(ticks::Int,dpid::Int,reason::Ofp_Protocol)
     return OFMessage(ticks,dpid,-1,reason,nothing)
@@ -113,6 +125,7 @@ mutable struct Agent <: SOAgent
     size::Float16
     state::SDNCtlAgState
     state_trj::Vector{SDNCtlAgState}
+    in_msg_queue::Queue{Vector{AGMessage}}
     params::Dict{Symbol,Any}
 end
 
@@ -197,7 +210,7 @@ function in_packet_processing(a::AbstractAgent,model)
 end
 
 
-function process_msg(a::Agent,msg::CTLMessage,model)
+function process_msg(a::Agent,msg::OFMessage,model)
     println("[$(model.ticks)]($(a.id)) -> processing $(msg.reason)")
     
     @match msg.reason begin
@@ -217,6 +230,73 @@ function process_msg(a::Agent,msg::CTLMessage,model)
             end
     end
 end
+
+function process_msg(a::Agent,msg::AGMessage,model)
+    println("[$(model.ticks)]($(a.id)) -> processing $(msg.reason)")
+    
+    @match msg.reason begin
+        Interagent_Protocol(1) =>  
+                        begin
+                            println("[$(model.ticks)]($(a.id)) -> TODO Local search")
+                            
+                            #target ids
+                            tids = msg.body[:tids]
+
+                            trace = msg.body[:trace]
+                            trace_ntw = msg.body[:trace_ntw]
+                            # visited control ag
+                            push!(trace,a.id)
+                            ntw = neighbors(a.params[:ntw_graph],1)
+                            push!(trace_ntw,ntw)
+
+
+                            found = local_search(a.params[:ntw_graph],tids,model)
+                            #here found[1] is the node in ntw
+                            # I found a match, but do I have the path at network level to that
+                            # node? 
+
+                            # If I don't find anything at ntw level, I have the controllers
+                            # look among the controllers
+                            if first(found) == 0
+                                found = local_search(a.params[:ctl_graph],tids,model)
+                                #here found[1] is the node in ctl
+                                # have found match at controller but not at ntw level
+
+                                #ask controller if they know, how to reach any tids at ntw level?
+                                # Is it useful to known that I can reach the node at controller level??
+                                # do I need to make the query to all controllers anyway?
+
+
+
+                                if first(found) == 0 # forward to neighbor controllers
+                                    cg = a.params[:ctl_graph]
+    
+                                    nbody = Dict(:tids=>tids,:trace=>trace,:trace_ntw=>trace_ntw)
+                                    for v in vertices(cg)
+                                        nid = get_prop(cg,v,:ag_id)
+                                    # I dont have access to node, needs to forward 
+                                    fw_msg = AGMessage(model.ticks,a.id,nid,FIND_PATH,nbody)
+                                    end
+                                else # reply match to sender controller?
+    
+    
+                                end
+                            
+
+                            end
+
+
+
+
+                            
+                                    
+                        end
+        _ => begin
+            println("[$(model.ticks)]($(a.id)) -> match default")
+            end
+    end
+end
+
 
 function process_msg(a::SimNE,msg::CTLMessage,model)
     #print("[$(model.ticks)]($(a.id)) Processing Msg $(msg)")
