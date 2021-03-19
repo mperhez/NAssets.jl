@@ -248,7 +248,6 @@ function add_downtime_to_series(ttf,ot,s_series)
     for ph in phased_s
         push!(ph_ot,vcat(ph,zeros(Float64,ot))...)
     end
-    
     return ph_ot
 end
 
@@ -257,7 +256,7 @@ end
 """
 function generate_sensor_series(ttf,n,Δᵩ,ϵₛ,ot,funs)
     vs = zeros(Float64,length(funs),n)
-    dim_dtvs = n%ttf > 0 ? n+ot+1 : n+ot
+    dim_dtvs = n%ttf > 0 && n >= ttf ? n+ot+1 : n+ot
     dtvs = zeros(Float64,length(funs),dim_dtvs)
 
     for i=1:length(funs)
@@ -276,9 +275,9 @@ end
 function generate_rul_series(ttf,Δᵩ,n,ot)
     rul = [  i%xᵩ(ttf,floor((i-1)/ttf),Δᵩ) == 0 ? 0 : round(xᵩ(ttf,floor((i-1)/ttf),Δᵩ) - i%xᵩ(ttf,floor((i-1)/ttf),Δᵩ)) for i=1:n ]
     #rul = [ xᵩ(ttf,floor(i/ttf),Δᵩ) - i%xᵩ(ttf,floor(i/ttf),Δᵩ) + 1 for i=1:n ]
-    print("PRE RUL: $(size(rul))")
+    # print("PRE RUL: $(size(rul))")
     rul = add_downtime_to_series(ttf,ot,rul)
-    print("RUL: $(size(rul))")
+    # print("RUL: $(size(rul))")
     return rul
 end
 

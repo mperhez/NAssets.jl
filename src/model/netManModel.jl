@@ -11,6 +11,9 @@ function initialize(args,user_props;grid_dims=(3,3),seed=0)
     default_props = Dict(
         :ticks => 0,# # time unit
         :pkt_id => 0,
+        :amsg_id =>0,
+        :ofmsg_id=>0,
+        :ofmsg_reattempt=>4,
         :pulses=>pulses,
         :Τ => args[:Τ], # Max time steps to fire
         :ΔΦ => args[:ΔΦ],
@@ -56,11 +59,11 @@ function create_agents!(model)
                 SimNE(id,i,a_params),model
             )
         
-        set_prop!(model.ntw_graph, id, :sne_id, id )
+        set_prop!(model.ntw_graph, id, :eid, id )
         # create initial mapping btwn network and SimNE
         model.mapping_ntw_sne[i] = i   
     end
-    set_indexing_prop!(model.ntw_graph, :sne_id)
+    set_indexing_prop!(model.ntw_graph, :eid)
     println(" Nodes CTL: $(nv(model.properties[:ctl_graph]))")
     #create control agents 1:1
     for i in 1:nv(model.properties[:ctl_graph])
@@ -69,17 +72,18 @@ function create_agents!(model)
         a = add_agent_pos!(
                 Agent(id,i,a_params),model
             )
-        set_props!(model.ctl_graph, i, Dict(:sne_id => i, :ag_id => id) )
+        set_props!(model.ctl_graph, i, Dict(:eid => i, :aid => id) )
         ##assign controller to SimNE
         if model.ctrl_model == CENTRALISED
             for j in 1:nv(model.properties[:ntw_graph])
                 set_control_agent!(j,id,model)
             end
         else
+            #one-to-one mapping 
             set_control_agent!(i,id,model)
         end
     end
-    set_indexing_prop!(model.ctl_graph, :sne_id)
+    set_indexing_prop!(model.ctl_graph, :aid)
     
 
     init_agents!(model)
@@ -98,6 +102,7 @@ end
 """
 function model_step!(model)
     init_step_state!(model)
+    println("=====Tick $(model.ticks)======")
     for a in allagents(model)
         init_state!(a)
     end
@@ -105,29 +110,25 @@ function model_step!(model)
     for e in edges(model.ntw_graph)
         ntw_link_step!((e.src,e.dst),model)
     end
-    if model.ticks in 80:1:90
-        println("[$(model.ticks)] - AFTER Processing $(get_state(getindex(model,10)))")
-    end    
-    generate_traffic(model)
-    #print("Has sent packet to $(sne.id)")
-#    print(last(model.state_trj))
-
-   # @show model.ticks
+    
+    
+    ctl_links_step!(model)
+    
+    # if model.ticks in 80:1:90
+    #     println("[$(model.ticks)] - AFTER Processing $(get_state(getindex(model,10)))")
+    # end    
+    # if model.ticks == 1 
+        generate_traffic!(model) 
+    # end
     for a in allagents(model)
-        #init_state!(a)
-    #     #pulse(a,model)
-        # @match a begin
-        #     a::SimNE => 
-        is_up(a) && is_ready(a) ? in_packet_processing(a,model) : nothing #println("queue of $(a.id) is empty")
-        #     _ => continue
-        # end
-     end
-     for a in allagents(model)
+        do_agent_step!(a,model)
+    end
+    for a in allagents(model)
         pending_pkt_handler(a,model)
-     end
+    end
 
-
-     soft_drop_node(model)
+    
+    soft_drop_node(model)
 end
 
 """
@@ -210,11 +211,16 @@ function init_agents!(model)
 end
 
 function init_agent!(a::Agent,model)
+
+    println("Starting Agent $(a.id)")
+    
+    # calculate local subgraph for the underlying network
+
     nes = collect(get_controlled_assets(a.id,model))
     nbs = []
 
     for i=1:length(nes)
-        println("Agent $(a.id) controls node: $(get_address(nes[i],model.ntw_graph))")
+        # println("Agent $(a.id) controls node: $(get_address(nes[i],model.ntw_graph))")
         #subgraph
         push!(nbs,deepcopy(neighbors(model.ntw_graph,nes[i])))
         push!(nbs,[nes[i]])
@@ -240,20 +246,17 @@ function init_agent!(a::Agent,model)
     # end
     for d in to_del
         for v in collect(vertices(sub_g))
-            if !has_prop(sub_g,v,:sne_id) || get_prop(sub_g,v,:sne_id) == d
+            if !has_prop(sub_g,v,:eid) || get_prop(sub_g,v,:eid) == d
                 rem_vertex!(sub_g,v)
             end
         end
     end
     
     ctl_sub_g = deepcopy(model.ctl_graph)
-    
-    for v=1:length(nv(ctl_sub_g))
-        #[ println("Agent $(a.id) PRE $v : $s -> $(get_prop(ctl_sub_g,s,:ag_id))") for s in neighbors(sub_g,v)]
-        println("Agent $(a.id) PRE $v -> $(get_prop(ctl_sub_g,v,:ag_id))")
-    end
 
-    ctl_v = first(filter(v->get_prop(ctl_sub_g,v,:ag_id) == a.id,1:nv(ctl_sub_g)))
+    # create local subgraph for the control network
+
+    ctl_v = first(filter(v->get_prop(ctl_sub_g,v,:aid) == a.id,1:nv(ctl_sub_g)))
     
     ctl_ns = collect(neighbors(ctl_sub_g,ctl_v))
     ctl_ns = [ctl_ns...,ctl_v]
@@ -261,25 +264,35 @@ function init_agent!(a::Agent,model)
     
     for d in to_del
         for v in collect(vertices(ctl_sub_g))
-            if !has_prop(ctl_sub_g,v,:sne_id) || get_prop(ctl_sub_g,v,:sne_id) == d
+            if !has_prop(ctl_sub_g,v,:eid) || get_prop(ctl_sub_g,v,:eid) == d
                 rem_vertex!(ctl_sub_g,v)
             end
         end
     end
 
-
-
     a.params[:ntw_graph] = sub_g
     a.params[:ctl_graph] = ctl_sub_g
+    a.params[:delay_ctl_link] = 1 # 1: no delay
+
+    a.state.paths = label_path.(all_k_shortest_paths(sub_g))
+    #a.params[:delay_ctl_link]
     
-    g = model.ntw_graph
 
-    a.state.paths = all_k_shortest_paths(g)
+    #Init vector of msgs
+    #a.msgs_links = Array{Vector{AGMessage}}(undef,a.params[:delay_ctl_link],degree(ctl_sub_g,to_local_vertex(ctl_sub_g,a.id,:aid)))
+    #[ a.msgs_links[i,j] = Vector{AGMessage}() for i=1:size(a.msgs_links,1) for j=1:size(a.msgs_links,2)]
+    a.msgs_links = init_array_vectors(AGMessage,a.params[:delay_ctl_link],degree(ctl_sub_g,to_local_vertex(ctl_sub_g,a.id,:aid)))
 
-    println(a.params)
+    #println(a.msgs_links)
 
 end
 
+
+
+function label_path(state)
+    path = first(state.paths)
+    return (first(path),last(path),path)
+end
 
 
 
@@ -313,16 +326,7 @@ function init_agent!(a::SimNE,model)
     init_switch(a,model)
 end
 
-function all_k_shortest_paths(g::AbstractGraph)
-    return [ !isempty(i.paths) ? (first(i.paths...),last(i.paths...),i.paths...) : (-1,-1,[])
-        for i in 
-            filter( x -> !isnothing(x), 
-                    [ s != d ? 
-                        #returns YenState with distances of each path
-                        yen_k_shortest_paths(g,s,d) : nothing 
-                        for s in vertices(g), d in vertices(g) ]
-                ) ]
-end
+
 
 """
 msg: SimNE.id, in_port, DPacket
@@ -333,13 +337,32 @@ function in_packet_handler(a::Agent,msg::OFMessage,model)
     dst = msg.data.dst
     src = msg.data.src
     path = []
+    found = false
+    
+    
 
     if msg.dpid != dst
         paths = filter(p-> p[1] == src && p[2] == dst ,a.state.paths)
-        path = !isempty(paths) ? paths[1] : []
+        path = !isempty(paths) ? first(paths) : do_query!(a,model,msg.id,(src,dst))
+        found = isempty(path) ? false : true
+    else
+        found = true
+    end
+
+    if found 
+        install_flows!(msg.dpid,msg.in_port,path,model) 
+    else
+        push!(a.pending,msg)
     end
     
-    install_flow(msg.dpid,msg.in_port,path,model)
+
+    push!(a.of_started,(msg.id,model.ticks))
+    # TODO
+    # Need to implement asynchronous msgs
+    # Need to control when msgs come and come because of being pushed to pending
+    # If path is not found, it has to keep track of pending OFMessage if Any
+    # and once any path is received it should install the flows for the path
+    
 end
 
 # function install_flows(a::SimNE,paths,model)
@@ -348,18 +371,71 @@ end
 
 # end
 
-function install_flow(in_dpid,in_port_start,path,model)
+function install_flow!(msg::OFMessage, sne::SimNE,model)
+    #ports = get_port_edge_list(sne,model)
+    println("[$(model.ticks)] Installing flow: $(sne.id) - $(msg.data)")
+    push!(get_state(sne).flow_table,msg.data)
+end
+
+function install_flow!(a::Agent,path,of_mid,model)
+   # find which ones of path I am controlling
+   es = get_controlled_assets(a.id,model)
+   eois = intersect(es,path)
+   
+   for e in eois
+        i = first(indexin(e,path))
+        sne = getindex(model,e)
+        i_prev = i > 1 ? i - 1 : i
+        
+        ports = get_port_edge_list(sne)
+
+        println("[$(model.ticks)]{$(a.id)}($(sne.id)) - ports: $(ports)")
+        r_src = first(path)
+        r_dst = last(path)
+        in_port = 0
+        if i == 1
+            of_msg₀ = first(filter(ofm -> ofm.id == of_mid,a.pending))
+            in_port = of_msg₀.in_port
+            #TODO of_msg remove from pending
+        else
+            in_port = first(filter(p->p[2][2:end] == path[i_prev],ports))
+        end
+        out_port = 0
+        
+        if i < length(path)
+            out_port = first(filter(p->parse(Int,p[2][2:end]) == path[i+1],ports))[1]
+        end
+
+        flow = Flow(  sne.id
+                ,MRule(string(in_port)
+                ,string(r_src)
+                ,string(r_dst))
+                ,[out_port]
+                ,OFS_Output)
+        msg = OFMessage(next_ofmid!(model), model.ticks,e,1,OFPR_ADD_FLOW,flow)
+        send_msg!(e,msg,model)
+        
+   end
+   
+
+
+   # for each one, get proceed as the other algo 
+
+
+end
+
+function install_flows!(in_dpid,in_port_start,path,model)
     println("install flow: $(in_dpid) - $(in_port_start) - $(path)")
     if !isempty(path)
         pairs = diag([j == i + 1 ? (path[3][i],path[3][j]) : nothing for i=1:size(path[3],1)-1, j=2:size(path[3],1)])
         
-        prev_sne_id = path[1]
+        prev_eid = path[1]
         for p in pairs
             sne = getindex(model,p[1])
-            prev_sne = getindex(model,prev_sne_id)
+            prev_sne = getindex(model,prev_eid)
             port_dst = filter(x->x[2]=="s$(p[2])",get_port_edge_list(sne))[1]
             out_port = port_dst[1]
-            in_port = p[1] == path[1] ? in_port_start : filter(x->x[2]=="s$(prev_sne_id)",get_port_edge_list(sne))[1][1]
+            in_port = p[1] == path[1] ? in_port_start : filter(x->x[2]=="s$(prev_eid)",get_port_edge_list(sne))[1][1]
             r_src = path[1]
             r_dst = path[2]
             
@@ -367,7 +443,7 @@ function install_flow(in_dpid,in_port_start,path,model)
             #(ticks,pkt,sne_src,sne_dst)->forward(ticks,pkt,sne_src,sne_dst)
             println("[$(model.ticks)] {A} Installing flow: $(p[1]) - $(fw.match_rule)")
             push_flow!(sne,fw)
-            prev_sne_id = sne.id
+            prev_eid = sne.id
         end
     else
         sne = getindex(model,in_dpid)
@@ -384,18 +460,34 @@ function create_pkt(src::Int64,dst::Int64,model)
     return DPacket(model.pkt_id,src,dst,1500,model.:ticks,100)
 end
 
-function generate_traffic(model)
+"""
+    Next agent message's id
+"""
+function next_amid!(model)
+    model.amsg_id += 1
+    return model.amsg_id
+end
 
+"""
+    Next Open Flow message id
+"""
+function next_ofmid!(model)
+    model.ofmsg_id += 1
+    return model.ofmsg_id
+end
+
+
+function generate_traffic!(model)
     q_pkts = abs(round(10rand(Normal(1,0.1))))
     #q_pkts = 100
     #src,dst = samplepair(1:nv(model.ntw_graph)) # can be replaced for random pair
-    pairs = [(1,7),(4,1),(9,5)]    
+    pairs = [(1,7)]#,(4,1),(9,5)] #[(9,5)]
     for p in pairs
         src,dst = p
         for i =1:q_pkts
             pkt = create_pkt(src,dst,model)
             sne = getindex(model,src)
-            push_msg!(sne,OFMessage(model.ticks,src,0,pkt)) # always from port 0
+            push_msg!(sne,OFMessage(next_ofmid!(model), model.ticks,src,1,pkt)) # always from port 0
         end
     end
 
@@ -426,7 +518,7 @@ end
 function init_model!(m::ABM)
     #all delays equal initially
     for e in edges(m.ntw_graph)
-        println("[$(m.ticks)] edge: $((e.src,e.dst))")
+        #println("[$(m.ticks)] edge: $((e.src,e.dst))")
         m.ntw_links_delays[(e.src,e.dst)] = 1
     end
 
@@ -451,11 +543,13 @@ end
 
 
 function ntw_link_step!(l::Tuple{Int,Int},model)
+    
     if haskey(model.ntw_links_msgs,l)
+        
         msgs = model.ntw_links_msgs[l]
-        if model.ticks in 80:1:90 
-            println("[$(model.ticks)] - $(l) -> msgs: $(length(first(msgs)))")
-        end
+        # if model.ticks in 80:1:90 
+        #     println("[$(model.ticks)] - $(l) -> msgs: $(length(first(msgs)))")
+        # end
         to_deliver = first(msgs)
         in_pkt_count = 0
         if !isempty(to_deliver)
@@ -478,6 +572,37 @@ function ntw_link_step!(l::Tuple{Int,Int},model)
             #push!(model.state_trj,ModelState(model.ticks))
         end
     end
+end
+
+# function init_msgs_link!(msgs::Array{Array{AGMessage,1},1})
+#     [ msgs[i] = Vector{AGMessage}() for i=1:length(a.msgs_links) ]
+#     return msgs
+# end
+
+"""
+    Initialize an array of dimensions d1 x d2 that contains vectors of type T
+"""
+function init_array_vectors(T,d1,d2)
+    arr = d2 > 1 ? Array{Vector{T}}(undef,d1,d2) : Array{Vector{T}}(undef,d1)
+    [ arr[i,j] = Vector{T}() for i=1:size(arr,1) for j=1:size(arr,2)]
+    return arr
+end
+
+function ctl_links_step!(model)
+    
+    ctl_ags = filter(a->typeof(a) == Agent,Set(allagents(model)))
+    #println(ctl_ags)
+    ctl_link_step!.(ctl_ags)
+
+end
+
+function ctl_link_step!(a::Agent)
+    #println("=== START Processing links of Ag: $(a.id) => $(a.msgs_links) -- $(a.msgs_in) ===")
+    #Merge msgs from all senders to be processed
+    a.msgs_in = vcat(a.msgs_links[1,:]...)
+    a.msgs_links[1,:] = init_array_vectors(AGMessage,size(a.msgs_links,2),1)
+    a.msgs_links = circshift(a.msgs_links,1)
+    #println("=== END Processing links of Ag: $(a.id) => $(a.msgs_links) -- $(a.msgs_in) ===")
 end
     
 function get_state_trj(m::ABM)::Vector{ModelState}

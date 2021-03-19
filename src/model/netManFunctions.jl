@@ -108,6 +108,7 @@ function load_network_graph()
     Random.seed!(123)
     #ntw = smallgraph("house")
     ntw = MetaGraph(watts_strogatz(10,4,0.8))
+    set_indexing_prop!(ntw,:eid)
     #gplot(ntw,layout=circular_layout,nodelabel=nodes(ntw))
     return ntw
 end
@@ -121,6 +122,8 @@ function load_control_graph()
     Random.seed!(123)
     #ntw = MetaGraph(watts_strogatz(10,4,0.8)) #watts_strogatz(25,4,0.8) #complete_graph(1)
     ntw = MetaGraph( [Int(i) for i in ring_graph(10)])
+    #indexing can't be done here because aid has not been assigned
+    #set_indexing_prop!(ntw,:aid)
     #gplot(ntw,layout=circular_layout,nodelabel=nodes(ntw))
     return ntw
 end
@@ -220,12 +223,12 @@ function plot_asset_networks(
 
     ntw_p = graphplot(
         model.ntw_graph
-        ,names = [get_sne_id(i,model) for i=1:nv(model.ntw_graph)]
+        ,names = [get_eid(i,model) for i=1:nv(model.ntw_graph)]
         , method = :circular
        # ,size=(300,200)
-        ,node_weights = [ get_sne_id(i,model) > 9 ? 1 : 10 for i in 1:nv(model.ntw_graph)]  #[ i > 9 ? 1 : 10 for i in 1:nv(model.ntw_graph)]
+        ,node_weights = [ get_eid(i,model) > 9 ? 1 : 10 for i in 1:nv(model.ntw_graph)]  #[ i > 9 ? 1 : 10 for i in 1:nv(model.ntw_graph)]
         ,nodeshape = :hexagon
-        ,nodecolor = [ is_up(getindex(model,get_sne_id(i,model))) ? :lightgray : :red for i in 1:nv(model.ntw_graph) ]
+        ,nodecolor = [ is_up(getindex(model,get_eid(i,model))) ? :lightgray : :red for i in 1:nv(model.ntw_graph) ]
         ,markerstrokecolor = :dimgray
         ,edgecolor= model.ticks < 1 ? :red : :dimgray
         ,markerstrokewidth = 1.1
@@ -252,7 +255,7 @@ function plot_throughput(
 
     tpt_p = plot(title="tpt",titlefontcolor=:white,ylims=[0,30])
     for i=1:nv(model.ntw_graph)
-        sne = getindex(model,get_sne_id(i,model))
+        sne = getindex(model,get_eid(i,model))
         tpt_p = plot!([ s.in_pkt for s in sne.state_trj ],xlims=[0,model.N], line=:stem, linealpha=0.5)
     end
 
@@ -294,7 +297,7 @@ function soft_drop_node(model)
 
         for dpn_id in dpn_ids
             for nb in all_neighbors(model.ntw_graph,get_address(dpn_id,model.ntw_graph))
-                link_down!(get_sne_id(nb,model),dpn_id,model)
+                link_down!(get_eid(nb,model),dpn_id,model)
             end
             #soft remove 
             dpn_ag = getindex(model,dpn_id)
@@ -325,7 +328,7 @@ function hard_drop_node(model)
 
         for dpn_id in dpn_ids
             for nb in all_neighbors(model.ntw_graph,get_address(dpn_id,model.ntw_graph))
-                link_down!(get_sne_id(nb,model),dpn_id,model)
+                link_down!(get_eid(nb,model),dpn_id,model)
             end
             #remove 
             dpn_ag = getindex(model,dpn_id)
@@ -354,7 +357,7 @@ function soft_remove_vertex(g::AbstractGraph,dpn_id::Int)
 
     println("Links of $dpn_id removed => $(all_neighbors(new_g,dpn_id))")
 
-    [println(" new g: $v => Props: $(get_prop(new_g,v,:sne_id))") for v in vertices(new_g)]
+    [println(" new g: $v => Props: $(get_prop(new_g,v,:eid))") for v in vertices(new_g)]
     # sm_g = sparse(g)
     # sm_new_g = deepcopy(sm_g)
 
@@ -408,22 +411,22 @@ end
 """
 Given a SimNE id it returns its ntw node address.
 """
-function get_address(sne_id::Int,g::AbstractGraph)::Int
-    #res = filter(p->p[2] == sne_id,pairs(model.mapping_ntw_sne))
+function get_address(eid::Int,g::AbstractGraph)::Int
+    #res = filter(p->p[2] == eid,pairs(model.mapping_ntw_sne))
     #return !isempty(res) ? first(keys(res)) : -1
-    return g[sne_id,:sne_id]
+    return g[eid,:eid]
 end
 
 """
 Given a ntw node address it returns the corresponding SimNE id
 """
-function get_sne_id(address::Int,model)::Int
+function get_eid(address::Int,model)::Int
     return model.mapping_ntw_sne[address]
 end
 
-function update_sne_address!(sne_id::Int,new_address::Int,model)
-    #curr_address = get_address(sne_id,model)
-    model.mapping_ntw_sne[new_address] = sne_id
+function update_sne_address!(eid::Int,new_address::Int,model)
+    #curr_address = get_address(eid,model)
+    model.mapping_ntw_sne[new_address] = eid
 end
 
 """
@@ -435,7 +438,7 @@ function update_addresses_removal!(dpn_id::Int,model)
     for addr::Int=available_addr:nv(model.ntw_graph)
         #println("Address $addr and its type: $(typeof(addr))")
         update_sne_address!(
-            get_sne_id(addr+1,model),
+            get_eid(addr+1,model),
             addr,
             model
             )
@@ -448,3 +451,222 @@ function circle_shape(h,k,r)
     h .+ r*sin.(θ), k .+ r*cos.(θ)
 end
 
+function do_agent_step!(a::SimNE,model)
+    #Process OF messages (packet data traffic)
+    is_up(a) && is_ready(a) ? in_packet_processing(a,model) : nothing #println("queue of $(a.id) is empty")
+end
+
+function do_agent_step!(a::Agent,model)
+
+    # Process asset-agent messages
+    
+    ## Process OF Messages (SimNE to (sdn) control messages)
+    is_up(a) && is_ready(a) ? in_packet_processing(a,model) : nothing #println("queue of $(a.id) is empty")
+
+    # Process inter-agent messages
+
+    do_receive_messages(a,model)
+
+
+    #Find the shortest path
+
+    ctl_g = a.params[:ctl_graph]
+    controlled = get_controlled_assets(a.id,model)
+    my_v = 0
+    for v in vertices(ctl_g)
+        if get_prop(ctl_g,v,:aid) == a.id
+            my_v = v
+        end
+        # println(" Agent $(a.id) => props of node $v are: $(props(ctl_g, v))")
+    end
+    for c in controlled
+        #v = get_prop(ctl_g,c,:eid)
+        # [ println("CTL Ag $(a.id) graph has nodes: $(get_prop(ctl_g,nb,:aid))") for nb in neighbors(ctl_g,my_v)]
+    end
+
+    
+
+end
+
+"""
+    Receives inter-agent messages
+"""
+function do_receive_messages(a::Agent,model)
+    #TODO: check if another periodicity is required, rather than every tick
+    if !isempty(a.msgs_in) println("[$(model.ticks)]($(a.id)) in msgs: $(a.msgs_in)") end
+    for msg in a.msgs_in
+        process_msg!(a,msg,model)
+    end
+end
+
+function do_send_messages(a::Agent,model)
+    g = a.params[:ctl_graph]
+    # In this graph a is always node 1
+    nbs = neighbors(g,1)
+
+    for nb in nbs
+        rid = get_prop(g,nb,:aid)
+        send_msg!(a.id,rid,msg)
+    end
+
+end
+
+# """
+#     Search for a given ntw host using local information available
+# """
+# function local_search(g::MetaGraph,tids::Array{Int},model)
+    
+#     #looking for node 5, i am 1, 
+#     # is in my local graph? what is goodness of each option?
+#     # if is in local graph -> unicast to node
+#     # if not, -> use pheromone to decide where to send msg, if not available then broadcast
+
+
+
+#     #local graph
+#     target = (0,0)
+#     # looks in ntw_graph it knows
+#     for tid in tids
+#         for v in vertices(g)
+#             eid = get_prop(g,v,:eid)
+#             if eid == tid
+#                 target = (v,eid)
+#                 #install rule in sne?
+#                 break
+#             end
+#         end
+#     end
+    
+#     # I found the controller, but that it might not mean they are connected in ntw
+
+#     return target
+    
+# end
+
+
+"""
+Join two subgraphs assuming they are both part of a global graph.
+The id in the global graph is given by property :eid.
+"""
+function join_subgraphs(g1,g2)
+    gt = deepcopy(g1)
+    eqv = []
+    for v in vertices(g2)
+        gv = g2[v,:eid]
+        if to_local_vertex(gt,gv) == 0
+            add_vertex!(gt,:eid,gv)
+            push!(eqv,(v,nv(gt)))
+        else
+            push!(eqv,(v,gv))
+        end
+    end
+
+    for e in edges(g2)
+        add_edge!(gt,
+            first([last(x) for x in eqv if first(x) == src(e) ]),
+            first([last(x) for x in eqv if first(x) == dst(e) ]),
+        )
+    end
+    return gt
+end
+
+"""
+Search for a path between nodes s and d in the local graph lg
+It assumes property :eid of each vertex is global id of vertex
+"""
+
+function query_path(lg,s,d)
+    ls = to_local_vertex(lg,s)
+    ld = to_local_vertex(lg,d)
+    if ls > 0 && ld > 0
+        #slg = SimpleGraph(lg)
+        #return yen_k_shortest_paths(slg,ls,ld, weights(slg),2,Inf)
+        return yen_k_shortest_paths(lg,ls,ld)
+    else
+        return LightGraphs.YenState{Real,Int}([],[])
+    end
+    
+end
+
+"""
+    Local search receiving source and destination in a tuple
+"""
+function query_path(lg,t)
+    query_path(lg,first(t),last(t))
+end
+
+
+"""
+    obtains local id of a vertex given its global id in property :eid
+"""
+function to_local_vertex(lg,gv)
+    lv = [ x for x=1:nv(lg) if lg[x,:eid] == gv]
+    return isempty(lv) ? 0 : first(lv)
+end
+
+"""
+obtains local id of a vertex given its global id in property in gid
+"""
+function to_local_vertex(lg,gv,gid::Symbol)
+    lv = [ x for x=1:nv(lg) if lg[x,gid] == gv]
+    return isempty(lv) ? 0 : first(lv)
+end
+
+"""
+Creates a subgraph (MetaGraph) for the given 
+adjacency matrix (m) and vector of equivalences (eqv).
+In eqv, every pair has the form: (lv,gv) where lv is the
+local vertex id and gv is the global vertex id.
+"""
+function create_subgraph(m,eqv)
+    g = MetaGraph(m)
+    for eq in eqv
+        set_props!(g,first(eq),Dict(:eid=>last(eq)))
+    end
+    set_indexing_prop!(g, :eid)
+    return g
+end
+
+
+"""
+Creates a subgraph (MetaGraph) for the given 
+edge list and vector of equivalences (eqv).
+In eqv, every pair has the form: (lv,gv) where lv is the
+local vertex id and gv is the global vertex id.
+"""
+function create_subgraph(egs,eqv)
+    g = MetaGraph()
+    set_indexing_prop!(g, :eid)
+    for e in egs
+        gs = last(first([ x for x in eqv if first(x) == src(e)]))
+        if !has_vertex(g,src(e))
+            add_vertex!(g,:eid,gs)
+        end
+        gd = last(first([ x for x in eqv if first(x) == dst(e)]))
+        if !has_vertex(g,dst(e))
+            add_vertex!(g,:eid,gd)
+        end
+        ls = to_local_vertex(g,gs)
+        ld = to_local_vertex(g,gd)
+        add_edge!(g,ls,ld)
+    end
+    
+    return g
+end
+
+
+"""
+    Plots a subgraph that is part of a greater one
+    global ids in property :eid.
+"""
+function plot_subg(sg)
+    return graphplot(sg
+                    ,names = [ get_prop(sg,i,:eid) for i=1:nv(sg)]
+          )
+end
+
+
+function all_k_shortest_paths(g::MetaGraph)
+    ps = [ (g[s,:eid],g[d,:eid]) for s in vertices(g), d in vertices(g) if s < d]
+    return query_path.([g], ps)
+end

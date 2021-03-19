@@ -4,13 +4,15 @@ end
 @enum Ofp_Protocol begin
     OFPR_ACTION = 1
     OFPPR_DELETE = 2
+    OFPR_ADD_FLOW = 3
 end
 @enum OFS_Action begin
     OFS_Output = 1
 end
 
-@enum Interagent_Protocol begin
-    FIND_PATH = 1
+@enum AG_Protocol begin
+    QUERY_PATH = 1
+    MATCH_PATH = 2
 end
 #@enum Ofp_Config_Flag EventOFPPortStatus=1 
 
@@ -36,6 +38,7 @@ end
 abstract type CTLMessage end
 
 mutable struct OFMessage <: CTLMessage
+    id::Int64
     ticks::Int
     dpid::Int # sender of msg,  aka SimNE.id aka switch.id
     in_port::Int # (Optional) sender's input port
@@ -44,23 +47,24 @@ mutable struct OFMessage <: CTLMessage
 end
 
 mutable struct AGMessage <: CTLMessage
+    mid::Int
     ticks::Int
     sid::Int # sender id
     rid::Int # receiver id
-    reason::Ag_msg_types # Type of msg as per enum
-    body::Dict{String,Any}
+    reason::AG_Protocol # Type of msg as per enum
+    body::Dict{Symbol,Any}
 end
 
 
-function OFMessage(ticks::Int,dpid::Int,reason::Ofp_Protocol)
-    return OFMessage(ticks,dpid,-1,reason,nothing)
+function OFMessage(id::Int64,ticks::Int,dpid::Int,reason::Ofp_Protocol)
+    return OFMessage(id,ticks,dpid,-1,reason,nothing)
 end
 
 """
     Message with default reason: Forward
 """
-function OFMessage(ticks::Int,dpid::Int,in_port::Int,data::DPacket)
-    return OFMessage(ticks,dpid,in_port,OFPR_ACTION,data)
+function OFMessage(id::Int64,ticks::Int,dpid::Int,in_port::Int,data::DPacket)
+    return OFMessage(id,ticks,dpid,in_port,OFPR_ACTION,data)
 end
 
 mutable struct OFEvent
@@ -107,11 +111,11 @@ mutable struct SDNCtlAgState <: State
     paths::Vector{Tuple{Int64,Int64,Array{Int64}}}
     in_pkt_trj::Vector{Int64}
     out_pkt_trj::Vector{Int64}
-    queue::Channel{CTLMessage}
+    queue::Channel{OFMessage}
 end
 
 function SDNCtlAgState(condition_trj::Array{Float64,2}, health_trj::Vector{Float64})
-    SDNCtlAgState(true,:lightblue,condition_trj,health_trj,Vector{Tuple{Int64,Int64,Array{Int64}}}(),Vector{Int64}(),Vector{Int64}(),Channel{CTLMessage}(500))
+    SDNCtlAgState(true,:lightblue,condition_trj,health_trj,Vector{Tuple{Int64,Int64,Array{Int64}}}(),Vector{Int64}(),Vector{Int64}(),Channel{OFMessage}(500))
 end
 
 
@@ -123,16 +127,19 @@ mutable struct Agent <: SOAgent
     pos::Int64
     color::Symbol
     size::Float16
+    pending::Vector{OFMessage}
+    of_started::Vector{Tuple{Int64,Int64}}
     state::SDNCtlAgState
     state_trj::Vector{SDNCtlAgState}
-    in_msg_queue::Queue{Vector{AGMessage}}
+    msgs_links::Array{Vector{AGMessage},2}
+    msgs_in::Vector{AGMessage}
     params::Dict{Symbol,Any}
 end
 
 
 function Agent(id,nid,params)
     s0 = SDNCtlAgState(zeros((2,2)),Vector{Float64}())
-    Agent(id,nid,:lightblue,0.1,s0,[s0],params)
+    Agent(id,nid,:lightblue,0.1,Vector{OFMessage}(),Vector{Tuple{Int64,Int64}}(),s0,[s0],Array{Vector{AGMessage}}(undef,1,1),[],params)
 end
 
 
@@ -143,8 +150,8 @@ mutable struct SimNE <: SimAsset
     id::Int64
     pos::Int64
     size::Float16
-    queue::Channel{CTLMessage} # 
-    pending::Vector{CTLMessage}
+    queue::Channel{OFMessage} # 
+    pending::Vector{OFMessage}
     requested_ctl::Vector{Tuple{Int64,Int64,Int64}} # flows requested to controller
     state_trj::Vector{NetworkAssetState}
     condition_ts::Array{Float64,2} # Pre-calculated time series of the condition of asset
@@ -153,24 +160,24 @@ mutable struct SimNE <: SimAsset
     params::Dict{Symbol,Any}
 end
 function SimNE(id,nid,params)
-    SimNE(id,nid,0.3,Channel{CTLMessage}(1000),Vector{CTLMessage}(),Vector{Tuple{Int64,Int64,Int64}}(),[NetworkAssetState(id)],zeros(Float64,2,1),[],-1,params) #initialise SimNE with a placeholder in the controller
+    SimNE(id,nid,0.3,Channel{OFMessage}(5000),Vector{OFMessage}(),Vector{Tuple{Int64,Int64,Int64}}(),[NetworkAssetState(id)],zeros(Float64,2,1),[],-1,params) #initialise SimNE with a placeholder in the controller
 end
 
-function ask_controller(sne::SimNE,a::Agent,msg::CTLMessage)
-    put!(a.state.queue,OFMessage(msg.ticks,sne.id,msg.in_port,msg.data))
-    #TODO in_processing msgs of controller to install flow for unknown dst
-end
+# function ask_controller(sne::SimNE,a::Agent,msg::OFMessage)
+#     put!(a.state.queue,OFMessage(next_ofmid!(model),msg.ticks,sne.id,msg.in_port,msg.data))
+#     #TODO in_processing msgs of controller to install flow for unknown dst
+# end
 
-function forward(msg::CTLMessage,src::SimNE,model)
+function forward(msg::OFMessage,src::SimNE,model)
     #println("Packet $(msg[4].id) delivered")
     out_pkt_count = get_state(src).out_pkt + 1
     set_out_pkt!(src,out_pkt_count)
 end
 
-function forward(msg::CTLMessage,src::SimNE,dst::SimNE,model)
+function forward(msg::OFMessage,src::SimNE,dst::SimNE,model)
     in_ports = filter(p->p[2]=="s$(src.id)",get_port_edge_list(dst))
     in_port = in_ports[1][1]
-    push_msg!(src,dst,OFMessage(model.ticks,src.id,in_port,msg.data),model)
+    push_msg!(src,dst,OFMessage(next_ofmid!(model),model.ticks,src.id,in_port,msg.data),model)
     #@show msg out_port
 end
 
@@ -204,20 +211,47 @@ function in_packet_processing(a::AbstractAgent,model)
         # end
         # in_pkt_count += 1
         # out_pkt_count += 
-        process_msg(a,msg,model)
+        process_msg!(a,msg,model)
     end
 
 end
 
+function process_msg!(sne::SimNE,msg::OFMessage,model)
+    #println("[$(model.ticks)]($(sne.id)) -> processing $(msg.reason)")
+    
+    @match msg.reason begin
+        Ofp_Protocol(1) =>  
+                        begin
+                            route_traffic!(sne,msg,model)
+                        end
+        Ofp_Protocol(3) => 
+                        begin
+                            install_flow!(msg,sne,model)       
+                        end
+                            
+        _ => begin
+            println("[$(model.ticks)]($(sne.id)) -> match default")
+            end
+    end
+end
 
-function process_msg(a::Agent,msg::OFMessage,model)
+
+
+function process_msg!(a::Agent,msg::OFMessage,model)
     println("[$(model.ticks)]($(a.id)) -> processing $(msg.reason)")
     
     @match msg.reason begin
         Ofp_Protocol(1) =>  
                         begin
                             #println("[$(model.ticks)]($(a.id)) -> match one")
-                            in_packet_handler(a,msg,model)
+                            previous = filter(x->x[1]==msg.id,a.of_started)
+                            if isempty(previous) || (model.ticks - last(first(previous))) == model.ofmsg_reattempt
+                                in_packet_handler(a,msg,model)
+                            elseif  (model.ticks - last(first(previous))) < model.ofmsg_reattempt
+                                #return package to queue as it does not know what to do with it
+                                push!(a.pending,msg)
+                            end
+                        
                         end
         Ofp_Protocol(2) => 
                             begin
@@ -231,75 +265,159 @@ function process_msg(a::Agent,msg::OFMessage,model)
     end
 end
 
-function process_msg(a::Agent,msg::AGMessage,model)
+function process_msg!(a::Agent,msg::AGMessage,model)
     println("[$(model.ticks)]($(a.id)) -> processing $(msg.reason)")
     
     @match msg.reason begin
-        Interagent_Protocol(1) =>  
-                        begin
-                            println("[$(model.ticks)]($(a.id)) -> TODO Local search")
-                            
-                            #target ids
-                            tids = msg.body[:tids]
-
-                            trace = msg.body[:trace]
-                            trace_ntw = msg.body[:trace_ntw]
-                            # visited control ag
-                            push!(trace,a.id)
-                            ntw = neighbors(a.params[:ntw_graph],1)
-                            push!(trace_ntw,ntw)
-
-
-                            found = local_search(a.params[:ntw_graph],tids,model)
-                            #here found[1] is the node in ntw
-                            # I found a match, but do I have the path at network level to that
-                            # node? 
-
-                            # If I don't find anything at ntw level, I have the controllers
-                            # look among the controllers
-                            if first(found) == 0
-                                found = local_search(a.params[:ctl_graph],tids,model)
-                                #here found[1] is the node in ctl
-                                # have found match at controller but not at ntw level
-
-                                #ask controller if they know, how to reach any tids at ntw level?
-                                # Is it useful to known that I can reach the node at controller level??
-                                # do I need to make the query to all controllers anyway?
-
-
-
-                                if first(found) == 0 # forward to neighbor controllers
-                                    cg = a.params[:ctl_graph]
-    
-                                    nbody = Dict(:tids=>tids,:trace=>trace,:trace_ntw=>trace_ntw)
-                                    for v in vertices(cg)
-                                        nid = get_prop(cg,v,:ag_id)
-                                    # I dont have access to node, needs to forward 
-                                    fw_msg = AGMessage(model.ticks,a.id,nid,FIND_PATH,nbody)
-                                    end
-                                else # reply match to sender controller?
-    
-    
-                                end
-                            
-
-                            end
-
-
-
-
-                            
-                                    
-                        end
+        AG_Protocol(1) =>  
+                        do_query!(msg,a,model)
+        
+        AG_Protocol(2) =>  
+                        do_match!(msg,a,model)                        
         _ => begin
-            println("[$(model.ticks)]($(a.id)) -> match default")
+                println("[$(model.ticks)]($(a.id)) -> match default")
             end
     end
 end
 
+"""
+    Initial query by controller receiving OF message
+"""
 
-function process_msg(a::SimNE,msg::CTLMessage,model)
-    #print("[$(model.ticks)]($(a.id)) Processing Msg $(msg)")
+function do_query!(a::Agent,model,of_mid::Int64,query::Tuple{Int64,Int64})
+    found = query_path(a.params[:ntw_graph],query)
+    
+    previous = filter(x->x[1]==of_mid,a.of_started)
+
+    if isempty(found.paths) &&  isempty(previous)# forward to neighbor controllers
+       nbody = Dict(:query=>query,:trace=>[a.id],:ntw_edgel => [], :ntw_equiv=>[], :of_mid=>of_mid)
+       msg_template = AGMessage(-1,model.ticks,a.id,-1,QUERY_PATH,nbody)
+       send_to_nbs!(msg_template,a,model)
+    end
+    return found.paths
+end
+
+
+"""
+    Query by neighbor control agent after receiving AGMessage
+"""
+
+
+function do_query!(msg::AGMessage,a::Agent,model)
+    println("[$(model.ticks)]($(a.id)) -> TODO Local search")
+    
+    query = msg.body[:query]
+    trace = msg.body[:trace]
+    of_mid = msg.body[:of_mid]
+    # visited control ag
+    push!(trace,a.id)
+    msg_ntw_g = create_subgraph(msg.body[:ntw_edgel],msg.body[:ntw_equiv])
+    a.params[:ntw_graph] = join_subgraphs(a.params[:ntw_graph],msg_ntw_g)
+
+    found = query_path(a.params[:ntw_graph],query)
+
+    if !isempty(found.paths)
+       #TODO consider case where multiple paths are found
+       path = [a.params[:ntw_graph][v,:eid] for v in first(found.paths)]
+       do_match!(path,msg,a,model)
+    else # forward to neighbor controllers
+        nbody = Dict(:query=>query,:trace=>trace,:ntw_edgel => [], :ntw_equiv=>[], :of_mid=>of_mid)
+        msg_template = AGMessage(-1,model.ticks,a.id,-1,QUERY_PATH,nbody)
+        send_to_nbs!(msg_template,a,model)
+    end
+
+end
+
+"""
+    Prepare MATCH reply
+"""
+function do_match!(found_path::Vector{Int64},msg::AGMessage,a::Agent,model)
+    println("[$(model.ticks)]{$(a.id)} =*do_match! -> msg : $(msg) -> found: $(found_path)")
+    query = msg.body[:query]
+    trace = msg.body[:trace]
+    trace_bk = deepcopy(msg.body[:trace])
+    of_mid = msg.body[:of_mid]
+
+    nbody = Dict(:of_mid=>of_mid,:query=>query,:trace=>trace,:trace_bk=>trace_bk[1:end-1],:path=>found_path)
+    println("[$(model.ticks)]{$(a.id)} =-do_match! -> receiver : $(trace_bk)")
+    rpy_msg = AGMessage(next_amid!(model),model.ticks,a.id,trace_bk[end-1],MATCH_PATH,nbody)
+    send_msg!(trace_bk[end-1],rpy_msg,model)
+end
+
+"""
+    Processing for MATCH_PATH msg
+"""
+function do_match!(msg::AGMessage,a::Agent,model)
+    println("[$(model.ticks)]{$(a.id)} =+do_match! -> msg : $(msg)")
+    if msg.rid == a.id
+        #install_flows!(a.id,msg.in_port,path,model) 
+        new_path = msg.body[:path]
+        push!(a.state.paths,(first(new_path),last(new_path),new_path))
+
+        
+        
+
+        #this is working to install
+        #install_flow!(a,msg.body[:path],msg.body[:of_mid],model)
+
+    else
+        trace_bk = msg.body[:trace_bk]
+        msg.body[:trace_bk] = trace_bk[1:end-1]
+        send_msg!(trace_bk[end],msg,model)
+    end
+    
+    
+    
+    
+end
+
+function send_to_nbs!(msg_template::AGMessage,a::Agent,model)
+    cg = a.params[:ctl_graph]
+    nbs = neighbors(cg,to_local_vertex(cg,a.id,:aid))
+    println("[$(model.ticks)]($(a.id)) sending to nbs: $(nbs)")
+    gid_nbs = [cg[v,:aid] for v in nbs]
+    for nb in gid_nbs
+        if ~(nb in msg_template.body[:trace])
+            fw_msg = create_amsg!(a.id,nb,msg_template,model)
+            send_msg!(nb,fw_msg,model)
+        end
+    end
+end
+
+function send_msg!(receiver::Int64,msg::AGMessage,model)
+    rag = getindex(model,receiver)
+    #TODO get delay of link in ticks
+    g = rag.params[:ctl_graph]
+    lv = to_local_vertex(g,msg.sid,:aid)
+    lva = to_local_vertex(g,rag.id,:aid) 
+    #need index of nbs 
+    nbs = neighbors(g,lva)
+    i = first(indexin(lv,nbs))
+    println("[$(model.ticks)] From $(msg.sid) to  $(receiver) ==> $(msg)")
+    push!(rag.msgs_links[size(rag.msgs_links,1),i],msg)
+    
+end    
+
+
+function send_msg!(receiver::Int64,msg::OFMessage,model)
+    ag = getindex(model,receiver)
+    #TODO implement links and get delay of link in ticks
+    queue = typeof(ag) == SimNE ? ag.queue : ag.state.queue
+    put!(queue,msg)
+end 
+
+function create_amsg!(sender,receiver,template,model)
+    mid = next_amid!(model)
+    msg = deepcopy(template)
+    msg.mid =mid
+    msg.sid = sender
+    msg.rid = receiver
+    msg.ticks = model.ticks
+    return msg
+end
+
+function route_traffic!(a::SimNE,msg::OFMessage,model)
+    # println("[$(model.ticks)]($(a.id)) Routing Msg $(msg)")
     out_pkt_count = 0
 
     # if a.id == 1 && model.ticks > 80 && model.ticks < 90
@@ -334,12 +452,13 @@ function process_msg(a::SimNE,msg::CTLMessage,model)
         # if a.id == 10 && model.ticks in 80:1:90 
         #     println("[$(model.ticks)]($(a.id)) else New destinatio is $(get_state(a)) ")
         # end
-        reattempt = 5
-        similar_requests = filter(r->(r[2],r[3]) == (msg.data.src,msg.data.dst) && (model.ticks - r[1]) < reattempt,a.requested_ctl)
+        similar_requests = filter(r->(r[2],r[3]) == (msg.data.src,msg.data.dst) && (model.ticks - r[1]) < model.ofmsg_reattempt,a.requested_ctl)
         #println("[$(model.ticks)]($(a.id)) Similar requests $(similar_requests)")
         if isempty(similar_requests)
             controller = getindex(model,a.controller_id)
-            ask_controller(a,controller,msg)
+            #ask_controller(a,controller,msg)
+            ctl_msg = OFMessage(next_ofmid!(model),model.ticks,a.id,msg.in_port,msg.data)
+            send_msg!(a.controller_id,ctl_msg,model)
             push!(a.requested_ctl,(model.ticks,msg.data.src,msg.data.dst))
         end
         #return package to queue as it does not know what to do with it
@@ -348,23 +467,23 @@ function process_msg(a::SimNE,msg::CTLMessage,model)
 end
 
 function pending_pkt_handler(a::AbstractAgent,model)
-    if model.ticks in 80:1:90 && a.id == 10
-        println("[$(model.ticks)] pending: $(length(a.pending))")
+    # if model.ticks in 80:1:90 && a.id == 10
+    println("[$(model.ticks)]($(a.id)) pending: $(length(a.pending))")
+    # end
+    if !isempty(a.pending)
+        for msg in a.pending
+            if typeof(a) == SimNE 
+               put!(a.queue,msg)
+            else
+                put!(a.state.queue,msg)
+            end
+         end
+       empty_pending!(a)
     end
-    @match a begin
-        a::SimNE, if !isempty(a.pending) end => begin
-                        #println("[$(model.ticks)]($(a.id)) BEFORE pending_pkt_handler: $(size(a.state.pending))")
-                        for msg in a.pending
-                            #push_msg!(a,msg)
-                            put!(a.queue,msg)
-                        end
-                        empty_pending!(a)
-                        #println("[$(model.ticks)]($(a.id)) AFTER pending_pkt_handler: $(size(a.state.pending))")
-                    end
-        _ => nothing
-    end
-    
 end
+
+
+
 
 function throughput(bytes₋₁,bytes₀, τ₋₁,τ₀)
     Δτ = τ₀ - τ₋₁
@@ -373,10 +492,10 @@ function throughput(bytes₋₁,bytes₀, τ₋₁,τ₀)
     return Δτ > 0 && Δbytes >= 0 ? Δbytes / Δτ : 0
 end
 
-function link_down!(sne_id::Int,dpn_id::Int,model)
-    print("[$(model.ticks)]($(sne_id)) link down start")
+function link_down!(eid::Int,dpn_id::Int,model)
+    print("[$(model.ticks)]($(eid)) link down start")
     #remove from list of ports
-    sne = getindex(model,sne_id)
+    sne = getindex(model,eid)
     new_port_edge_list::Vector{Tuple{Int64,String}} = []
     dpn_port = -1
     for p in get_port_edge_list(sne)
@@ -386,7 +505,7 @@ function link_down!(sne_id::Int,dpn_id::Int,model)
             dpn_port = p[1]
         end
     end
-    print("[$(model.ticks)]($(sne_id)) link down mid")
+    print("[$(model.ticks)]($(eid)) link down mid")
     set_port_edge_list!(sne,new_port_edge_list)
     new_flow_table::Vector{Flow} = []
     for f in get_flow_table(sne)
@@ -405,7 +524,7 @@ end
 function trigger_of_event!(ticks::Int,a::Agent,ev_type::Ofp_Event)
     msg = @match ev_type begin
         EventOFPPortStatus =>
-                            OFMessage(ticks,a.id,OFPPR_DELETE)
+                            OFMessage(next_ofmid!(model),ticks,a.id,OFPPR_DELETE)
     end
     push_msg!(a,msg)
 end
@@ -541,16 +660,16 @@ function push_msg!(a::Agent,msg::OFMessage)
     put!(a.state.queue,msg)
 end
 
-function push_pending!(sne::SimNE,msg::OFMessage)
-    push!(sne.pending,msg)
+function push_pending!(a::AbstractAgent,msg::OFMessage)
+    push!(a.pending,msg)
 end
 
-function get_pending(sne::SimNE)
-    return sne.pending
+function get_pending(a::AbstractAgent)
+    return a.pending
 end
 
-function empty_pending!(sne::SimNE)
-    empty!(get_pending(sne))
+function empty_pending!(a::AbstractAgent)
+    empty!(get_pending(a))
 end
 
 function get_port_edge_list(sne::SimNE)

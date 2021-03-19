@@ -10,6 +10,7 @@ using StatsPlots
 using SparseArrays
 using DelimitedFiles
 using Laplacians
+using DataStructures
 
 include("netManAbm.jl")
 
@@ -25,7 +26,7 @@ ntw_graph = load_network_graph()
 ctl_graph = load_control_graph()
 q_agents = nv(ntw_graph)+nv(ctl_graph)
 
-n = 120
+n = 10
 args[:N]=n
 args[:q]=q_agents
 args[:Τ]=10
@@ -37,7 +38,7 @@ args[:ctl_graph]=ctl_graph
 adata = [get_state_trj,get_condition_ts, get_rul_ts]
 mdata = [:mapping_ctl_ntw,get_state_trj]
 anim,result_agents,result_model = run_model(n,args,params; agent_data = adata, model_data = mdata)
-
+println("finished run model...")
 ags = last(result_agents,q_agents)["get_state_trj"]
 ags_1 = vcat([ [ split(string(j-1)*";"*replace(to_string(ags[i][j]),"NetworkAssetState(" => ""),";") for j=1:length(ags[i])] for i=1:length(ags) ]...)
 
