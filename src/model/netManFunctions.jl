@@ -578,14 +578,16 @@ It assumes property :eid of each vertex is global id of vertex
 function query_path(lg,s,d)
     ls = to_local_vertex(lg,s)
     ld = to_local_vertex(lg,d)
+    result =   LightGraphs.YenState{Real,Int}([],[])
     if ls > 0 && ld > 0
         #slg = SimpleGraph(lg)
         #return yen_k_shortest_paths(slg,ls,ld, weights(slg),2,Inf)
-        return yen_k_shortest_paths(lg,ls,ld)
-    else
-        return LightGraphs.YenState{Real,Int}([],[])
+        result = yen_k_shortest_paths(lg,ls,ld)
     end
-    
+    gvs = [ lg[v,:eid] for v in vertices(lg)]
+    println("network contains: gvs: $gvs")
+    println("query_path:  g v: $(vertices(lg)), s: $(s) - ls: $(ls), d: $d - ld $ld result ==> $(result)")
+    return result
 end
 
 """
@@ -634,25 +636,58 @@ edge list and vector of equivalences (eqv).
 In eqv, every pair has the form: (lv,gv) where lv is the
 local vertex id and gv is the global vertex id.
 """
-function create_subgraph(egs,eqv)
+function create_subgraph(egs,eqv,gid_prop)
+    println("Creating subgraph egs: $(egs) and eqv: $eqv")
     g = MetaGraph()
-    set_indexing_prop!(g, :eid)
-    for e in egs
-        gs = last(first([ x for x in eqv if first(x) == src(e)]))
-        if !has_vertex(g,src(e))
-            add_vertex!(g,:eid,gs)
-        end
-        gd = last(first([ x for x in eqv if first(x) == dst(e)]))
-        if !has_vertex(g,dst(e))
-            add_vertex!(g,:eid,gd)
-        end
-        ls = to_local_vertex(g,gs)
-        ld = to_local_vertex(g,gd)
-        add_edge!(g,ls,ld)
+    set_indexing_prop!(g, gid_prop)
+
+    #create vertices
+    n_v = max([ src(e) > dst(e) ? src(e) : dst(e) for e in egs]...)
+
+    for v=1:n_v
+        gid = last(first([ x for x in eqv if first(x) == v]))
+        add_vertex!(g,gid_prop,gid)
     end
-    
+
+    #create edges 
+
+    for e in egs
+        add_edge!(g,src(e),dst(e))
+        add_edge!(g,dst(e),src(e))
+    end
+
     return g
 end
+
+#TODO: delete
+# for e in egs
+
+#     s_gid = last(first([ x for x in eqv if first(x) == src(e)]))
+    
+#     if !has_vertex(g,src(e))
+#         add_vertex!(g,gid_prop,gs)
+#     end
+
+#     d_gid = last(first([ x for x in eqv if first(x) == dst(e)]))
+    
+#     if !has_vertex(g,dst(e))
+#         add_vertex!(g,gid_prop,gd)
+#     end
+#     ls = to_local_vertex(g,gs)
+#     ld = to_local_vertex(g,gd)
+#     add_edge!(g,ls,ld)
+#     add_edge!(g,ld,ls)
+# end
+
+
+
+
+
+
+
+
+
+
 
 
 """
@@ -669,4 +704,9 @@ end
 function all_k_shortest_paths(g::MetaGraph)
     ps = [ (g[s,:eid],g[d,:eid]) for s in vertices(g), d in vertices(g) if s < d]
     return query_path.([g], ps)
+end
+
+function has_prop_vertex(value,g,prop)
+    gvs = [ g[v,prop] for v in vertices(g) ]
+    return value in gvs
 end

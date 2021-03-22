@@ -1,7 +1,8 @@
 #Core structures
 include("model/netManStructs.jl")
 include("model/of_switch.jl")
-include("model/of_controller.jl")
+include("model/of_control.jl")
+include("model/agent_control.jl")
 
 include("model/physical_model.jl")
 

@@ -163,6 +163,25 @@ function SimNE(id,nid,params)
     SimNE(id,nid,0.3,Channel{OFMessage}(5000),Vector{OFMessage}(),Vector{Tuple{Int64,Int64,Int64}}(),[NetworkAssetState(id)],zeros(Float64,2,1),[],-1,params) #initialise SimNE with a placeholder in the controller
 end
 
+function init_switch(a,model)
+    #action to forward via port 1
+    #push!(a.state.flow_table,Flow(1,MRule(0,1,7),(pkt)->forward(pkt,1)))
+    # for port_edge in a.state.port_edge_list
+    #     push!(a.state.flow_table,Flow(a.id,MRule(port_edge[1],"*",),(pkt)->forward(pkt,1)))
+    # end
+end
+
+#in_port, src, dst -> action
+#pkt
+
+# function evaluate(rule::MRule)(pkt::DPacket)
+#     @match pkt begin
+#         ()
+#     end
+# end
+
+
+
 # function ask_controller(sne::SimNE,a::Agent,msg::OFMessage)
 #     put!(a.state.queue,OFMessage(next_ofmid!(model),msg.ticks,sne.id,msg.in_port,msg.data))
 #     #TODO in_processing msgs of controller to install flow for unknown dst
@@ -181,24 +200,94 @@ function forward(msg::OFMessage,src::SimNE,dst::SimNE,model)
     #@show msg out_port
 end
 
+function route_traffic!(a::SimNE,msg::OFMessage,model)
+    # println("[$(model.ticks)]($(a.id)) Routing Msg $(msg)")
+    out_pkt_count = 0
 
-function init_switch(a,model)
-    #action to forward via port 1
-    #push!(a.state.flow_table,Flow(1,MRule(0,1,7),(pkt)->forward(pkt,1)))
-    # for port_edge in a.state.port_edge_list
-    #     push!(a.state.flow_table,Flow(a.id,MRule(port_edge[1],"*",),(pkt)->forward(pkt,1)))
+    # if a.id == 1 && model.ticks > 80 && model.ticks < 90
+    #     println("[$(model.ticks)]($(a.id)) Found this msg $(msg)")
+    #     println("[$(model.ticks)]($(a.id)) Found this ports $(get_state(a).port_edge_list)")
+    #     println("[$(model.ticks)]($(a.id)) Found this table $(get_state(a).flow_table)")
     # end
+
+    flow = filter(fw -> 
+                            ( fw.match_rule.src == string(msg.data.src) || fw.match_rule.src == "*" )
+                            && (fw.match_rule.in_port == string(msg.in_port) || fw.match_rule.in_port == "*" )
+                            && (fw.match_rule.dst == string(msg.data.dst) || fw.match_rule.dst == "*")
+                            , get_flow_table(a))
+    #println("[[$(model.ticks)]($(a.id)) flow==> $(flow)")
+    if !isempty(flow)
+
+        if flow[1].params[1][1] != 0
+            ports = get_port_edge_list(a)
+            dst_id = parse(Int64,filter(x->x[1]==flow[1].params[1],ports)[1][2][2:end])
+            # if a.id == 10 && model.ticks in 80:1:90 
+            #     println("[$(model.ticks)]($(a.id)) New destinatio is $(dst_id) ")
+            # end
+            dst = getindex(model,dst_id)
+            #flow[1].action(model.ticks,msg,a,dst)
+            forward(msg,a,dst,model)
+        else
+           # flow[1].action(model.ticks,msg,a)
+           forward(msg,a,model)
+        end
+        # flow[1].action == OFS_Output ? out_pkt_count += 1 : out_pkt_count
+        #@show flow
+    else
+        # if a.id == 10 && model.ticks in 80:1:90 
+        #     println("[$(model.ticks)]($(a.id)) else New destinatio is $(get_state(a)) ")
+        # end
+        similar_requests = filter(r->(r[2],r[3]) == (msg.data.src,msg.data.dst) && (model.ticks - r[1]) < model.ofmsg_reattempt+1,a.requested_ctl)
+        #println("[$(model.ticks)]($(a.id)) Similar requests $(similar_requests)")
+        if isempty(similar_requests)
+            controller = getindex(model,a.controller_id)
+            #ask_controller(a,controller,msg)
+            ctl_msg = OFMessage(next_ofmid!(model),model.ticks,a.id,msg.in_port,msg.data)
+            send_msg!(a.controller_id,ctl_msg,model)
+            push!(a.requested_ctl,(model.ticks,msg.data.src,msg.data.dst))
+        end
+        #return package to queue as it does not know what to do with it
+        push!(a.pending,msg)
+    end
 end
 
-#in_port, src, dst -> action
-#pkt
 
-# function evaluate(rule::MRule)(pkt::DPacket)
-#     @match pkt begin
-#         ()
-#     end
-# end
 
+"""
+    push OF message to from src SimNE to dst SimNE
+"""
+function push_msg!(src::SimNE,dst::SimNE,msg::OFMessage,model)
+    #put!(sne.queue,msg)
+    #println("[$(model.ticks)] msgs: $(model.ntw_links_msgs)")
+    l = (get_address(src.id,model.ntw_graph),get_address(dst.id,model.ntw_graph))
+    l = l[1] < l[2] ? l : (l[2],l[1])
+    if !haskey(model.ntw_links_msgs,l)
+        init_link_msg!(l,model)
+    end
+    link_queue = last(model.ntw_links_msgs[l])
+    push!(link_queue,msg)
+    links_load = get_state(model).links_load
+    current_load = haskey(links_load,l) ? links_load[l] : 0
+    links_load[l] = current_load + 1    
+    
+    out_pkt_count = get_state(src).out_pkt + 1
+    set_out_pkt!(src,out_pkt_count)
+end
+
+"""
+    push OF message to from simulated host to dst SimNE
+"""
+function push_msg!(dst::SimNE,msg::OFMessage)
+    put!(dst.queue,msg)
+    in_pkt_count = get_state(dst).in_pkt + 1
+    set_in_pkt!(dst,in_pkt_count)
+end
+
+function install_flow!(msg::OFMessage, sne::SimNE,model)
+    #ports = get_port_edge_list(sne,model)
+    println("[$(model.ticks)] Installing flow: $(sne.id) - $(msg.data)")
+    push!(get_state(sne).flow_table,msg.data)
+end
 
 function in_packet_processing(a::AbstractAgent,model)
     in_pkt_count = 0
@@ -235,236 +324,6 @@ function process_msg!(sne::SimNE,msg::OFMessage,model)
     end
 end
 
-
-
-function process_msg!(a::Agent,msg::OFMessage,model)
-    println("[$(model.ticks)]($(a.id)) -> processing $(msg.reason)")
-    
-    @match msg.reason begin
-        Ofp_Protocol(1) =>  
-                        begin
-                            #println("[$(model.ticks)]($(a.id)) -> match one")
-                            previous = filter(x->x[1]==msg.id,a.of_started)
-                            if isempty(previous) || (model.ticks - last(first(previous))) == model.ofmsg_reattempt
-                                in_packet_handler(a,msg,model)
-                            elseif  (model.ticks - last(first(previous))) < model.ofmsg_reattempt
-                                #return package to queue as it does not know what to do with it
-                                push!(a.pending,msg)
-                            end
-                        
-                        end
-        Ofp_Protocol(2) => 
-                            begin
-                                #println("[$(model.ticks)]($(a.id)) -> match two")
-                                port_delete_handler(a,msg,model)
-                            end
-                            
-        _ => begin
-            println("[$(model.ticks)]($(a.id)) -> match default")
-            end
-    end
-end
-
-function process_msg!(a::Agent,msg::AGMessage,model)
-    println("[$(model.ticks)]($(a.id)) -> processing $(msg.reason)")
-    
-    @match msg.reason begin
-        AG_Protocol(1) =>  
-                        do_query!(msg,a,model)
-        
-        AG_Protocol(2) =>  
-                        do_match!(msg,a,model)                        
-        _ => begin
-                println("[$(model.ticks)]($(a.id)) -> match default")
-            end
-    end
-end
-
-"""
-    Initial query by controller receiving OF message
-"""
-
-function do_query!(a::Agent,model,of_mid::Int64,query::Tuple{Int64,Int64})
-    found = query_path(a.params[:ntw_graph],query)
-    
-    previous = filter(x->x[1]==of_mid,a.of_started)
-
-    if isempty(found.paths) &&  isempty(previous)# forward to neighbor controllers
-       nbody = Dict(:query=>query,:trace=>[a.id],:ntw_edgel => [], :ntw_equiv=>[], :of_mid=>of_mid)
-       msg_template = AGMessage(-1,model.ticks,a.id,-1,QUERY_PATH,nbody)
-       send_to_nbs!(msg_template,a,model)
-    end
-    return found.paths
-end
-
-
-"""
-    Query by neighbor control agent after receiving AGMessage
-"""
-
-
-function do_query!(msg::AGMessage,a::Agent,model)
-    println("[$(model.ticks)]($(a.id)) -> TODO Local search")
-    
-    query = msg.body[:query]
-    trace = msg.body[:trace]
-    of_mid = msg.body[:of_mid]
-    # visited control ag
-    push!(trace,a.id)
-    msg_ntw_g = create_subgraph(msg.body[:ntw_edgel],msg.body[:ntw_equiv])
-    a.params[:ntw_graph] = join_subgraphs(a.params[:ntw_graph],msg_ntw_g)
-
-    found = query_path(a.params[:ntw_graph],query)
-
-    if !isempty(found.paths)
-       #TODO consider case where multiple paths are found
-       path = [a.params[:ntw_graph][v,:eid] for v in first(found.paths)]
-       do_match!(path,msg,a,model)
-    else # forward to neighbor controllers
-        nbody = Dict(:query=>query,:trace=>trace,:ntw_edgel => [], :ntw_equiv=>[], :of_mid=>of_mid)
-        msg_template = AGMessage(-1,model.ticks,a.id,-1,QUERY_PATH,nbody)
-        send_to_nbs!(msg_template,a,model)
-    end
-
-end
-
-"""
-    Prepare MATCH reply
-"""
-function do_match!(found_path::Vector{Int64},msg::AGMessage,a::Agent,model)
-    println("[$(model.ticks)]{$(a.id)} =*do_match! -> msg : $(msg) -> found: $(found_path)")
-    query = msg.body[:query]
-    trace = msg.body[:trace]
-    trace_bk = deepcopy(msg.body[:trace])
-    of_mid = msg.body[:of_mid]
-
-    nbody = Dict(:of_mid=>of_mid,:query=>query,:trace=>trace,:trace_bk=>trace_bk[1:end-1],:path=>found_path)
-    println("[$(model.ticks)]{$(a.id)} =-do_match! -> receiver : $(trace_bk)")
-    rpy_msg = AGMessage(next_amid!(model),model.ticks,a.id,trace_bk[end-1],MATCH_PATH,nbody)
-    send_msg!(trace_bk[end-1],rpy_msg,model)
-end
-
-"""
-    Processing for MATCH_PATH msg
-"""
-function do_match!(msg::AGMessage,a::Agent,model)
-    println("[$(model.ticks)]{$(a.id)} =+do_match! -> msg : $(msg)")
-    if msg.rid == a.id
-        #install_flows!(a.id,msg.in_port,path,model) 
-        new_path = msg.body[:path]
-        push!(a.state.paths,(first(new_path),last(new_path),new_path))
-
-        
-        
-
-        #this is working to install
-        #install_flow!(a,msg.body[:path],msg.body[:of_mid],model)
-
-    else
-        trace_bk = msg.body[:trace_bk]
-        msg.body[:trace_bk] = trace_bk[1:end-1]
-        send_msg!(trace_bk[end],msg,model)
-    end
-    
-    
-    
-    
-end
-
-function send_to_nbs!(msg_template::AGMessage,a::Agent,model)
-    cg = a.params[:ctl_graph]
-    nbs = neighbors(cg,to_local_vertex(cg,a.id,:aid))
-    println("[$(model.ticks)]($(a.id)) sending to nbs: $(nbs)")
-    gid_nbs = [cg[v,:aid] for v in nbs]
-    for nb in gid_nbs
-        if ~(nb in msg_template.body[:trace])
-            fw_msg = create_amsg!(a.id,nb,msg_template,model)
-            send_msg!(nb,fw_msg,model)
-        end
-    end
-end
-
-function send_msg!(receiver::Int64,msg::AGMessage,model)
-    rag = getindex(model,receiver)
-    #TODO get delay of link in ticks
-    g = rag.params[:ctl_graph]
-    lv = to_local_vertex(g,msg.sid,:aid)
-    lva = to_local_vertex(g,rag.id,:aid) 
-    #need index of nbs 
-    nbs = neighbors(g,lva)
-    i = first(indexin(lv,nbs))
-    println("[$(model.ticks)] From $(msg.sid) to  $(receiver) ==> $(msg)")
-    push!(rag.msgs_links[size(rag.msgs_links,1),i],msg)
-    
-end    
-
-
-function send_msg!(receiver::Int64,msg::OFMessage,model)
-    ag = getindex(model,receiver)
-    #TODO implement links and get delay of link in ticks
-    queue = typeof(ag) == SimNE ? ag.queue : ag.state.queue
-    put!(queue,msg)
-end 
-
-function create_amsg!(sender,receiver,template,model)
-    mid = next_amid!(model)
-    msg = deepcopy(template)
-    msg.mid =mid
-    msg.sid = sender
-    msg.rid = receiver
-    msg.ticks = model.ticks
-    return msg
-end
-
-function route_traffic!(a::SimNE,msg::OFMessage,model)
-    # println("[$(model.ticks)]($(a.id)) Routing Msg $(msg)")
-    out_pkt_count = 0
-
-    # if a.id == 1 && model.ticks > 80 && model.ticks < 90
-    #     println("[$(model.ticks)]($(a.id)) Found this msg $(msg)")
-    #     println("[$(model.ticks)]($(a.id)) Found this ports $(get_state(a).port_edge_list)")
-    #     println("[$(model.ticks)]($(a.id)) Found this table $(get_state(a).flow_table)")
-    # end
-
-    flow = filter(fw -> 
-                            ( fw.match_rule.src == string(msg.data.src) || fw.match_rule.src == "*" )
-                            && (fw.match_rule.in_port == string(msg.in_port) || fw.match_rule.in_port == "*" )
-                            && (fw.match_rule.dst == string(msg.data.dst) || fw.match_rule.dst == "*")
-                            , get_flow_table(a))
-    #println("[[$(model.ticks)]($(a.id)) flow==> $(flow)")
-    if !isempty(flow)
-
-        if flow[1].params[1][1] != 0
-            dst_id = parse(Int64,filter(x->x[1]==flow[1].params[1],get_port_edge_list(a))[1][2][2:end])
-            # if a.id == 10 && model.ticks in 80:1:90 
-            #     println("[$(model.ticks)]($(a.id)) New destinatio is $(dst_id) ")
-            # end
-            dst = getindex(model,dst_id)
-            #flow[1].action(model.ticks,msg,a,dst)
-            forward(msg,a,dst,model)
-        else
-           # flow[1].action(model.ticks,msg,a)
-           forward(msg,a,model)
-        end
-        # flow[1].action == OFS_Output ? out_pkt_count += 1 : out_pkt_count
-        #@show flow
-    else
-        # if a.id == 10 && model.ticks in 80:1:90 
-        #     println("[$(model.ticks)]($(a.id)) else New destinatio is $(get_state(a)) ")
-        # end
-        similar_requests = filter(r->(r[2],r[3]) == (msg.data.src,msg.data.dst) && (model.ticks - r[1]) < model.ofmsg_reattempt,a.requested_ctl)
-        #println("[$(model.ticks)]($(a.id)) Similar requests $(similar_requests)")
-        if isempty(similar_requests)
-            controller = getindex(model,a.controller_id)
-            #ask_controller(a,controller,msg)
-            ctl_msg = OFMessage(next_ofmid!(model),model.ticks,a.id,msg.in_port,msg.data)
-            send_msg!(a.controller_id,ctl_msg,model)
-            push!(a.requested_ctl,(model.ticks,msg.data.src,msg.data.dst))
-        end
-        #return package to queue as it does not know what to do with it
-        push!(a.pending,msg)
-    end
-end
 
 function pending_pkt_handler(a::AbstractAgent,model)
     # if model.ticks in 80:1:90 && a.id == 10
@@ -622,46 +481,6 @@ function set_in_pkt!(a::Agent,in_pkt::Int)
 end
 function set_out_pkt!(a::Agent,out_pkt::Int)
     push!(a.state.out_pkt_trj,out_pkt)
-end
-
-
-"""
-    push OF message to from src SimNE to dst SimNE
-"""
-function push_msg!(src::SimNE,dst::SimNE,msg::OFMessage,model)
-    #put!(sne.queue,msg)
-    #println("[$(model.ticks)] msgs: $(model.ntw_links_msgs)")
-    l = (get_address(src.id,model.ntw_graph),get_address(dst.id,model.ntw_graph))
-    l = l[1] < l[2] ? l : (l[2],l[1])
-    if !haskey(model.ntw_links_msgs,l)
-        init_link_msg!(l,model)
-    end
-    link_queue = last(model.ntw_links_msgs[l])
-    push!(link_queue,msg)
-    links_load = get_state(model).links_load
-    current_load = haskey(links_load,l) ? links_load[l] : 0
-    links_load[l] = current_load + 1    
-    
-    out_pkt_count = get_state(src).out_pkt + 1
-    set_out_pkt!(src,out_pkt_count)
-end
-
-"""
-    push OF message to from simulated host to dst SimNE
-"""
-function push_msg!(dst::SimNE,msg::OFMessage)
-    put!(dst.queue,msg)
-    in_pkt_count = get_state(dst).in_pkt + 1
-    set_in_pkt!(dst,in_pkt_count)
-end
-
-
-function push_msg!(a::Agent,msg::OFMessage)
-    put!(a.state.queue,msg)
-end
-
-function push_pending!(a::AbstractAgent,msg::OFMessage)
-    push!(a.pending,msg)
 end
 
 function get_pending(a::AbstractAgent)

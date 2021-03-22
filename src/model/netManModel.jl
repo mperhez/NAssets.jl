@@ -328,42 +328,6 @@ end
 
 
 
-"""
-msg: SimNE.id, in_port, DPacket
-"""
-function in_packet_handler(a::Agent,msg::OFMessage,model)
-
-    println("[$(model.ticks)]($(a.id)) msg-> $(msg)")
-    dst = msg.data.dst
-    src = msg.data.src
-    path = []
-    found = false
-    
-    
-
-    if msg.dpid != dst
-        paths = filter(p-> p[1] == src && p[2] == dst ,a.state.paths)
-        path = !isempty(paths) ? first(paths) : do_query!(a,model,msg.id,(src,dst))
-        found = isempty(path) ? false : true
-    else
-        found = true
-    end
-
-    if found 
-        install_flows!(msg.dpid,msg.in_port,path,model) 
-    else
-        push!(a.pending,msg)
-    end
-    
-
-    push!(a.of_started,(msg.id,model.ticks))
-    # TODO
-    # Need to implement asynchronous msgs
-    # Need to control when msgs come and come because of being pushed to pending
-    # If path is not found, it has to keep track of pending OFMessage if Any
-    # and once any path is received it should install the flows for the path
-    
-end
 
 # function install_flows(a::SimNE,paths,model)
 #     (2, 1, [2, 10, 1])
@@ -371,89 +335,14 @@ end
 
 # end
 
-function install_flow!(msg::OFMessage, sne::SimNE,model)
-    #ports = get_port_edge_list(sne,model)
-    println("[$(model.ticks)] Installing flow: $(sne.id) - $(msg.data)")
-    push!(get_state(sne).flow_table,msg.data)
-end
 
-function install_flow!(a::Agent,path,of_mid,model)
-   # find which ones of path I am controlling
-   es = get_controlled_assets(a.id,model)
-   eois = intersect(es,path)
-   
-   for e in eois
-        i = first(indexin(e,path))
-        sne = getindex(model,e)
-        i_prev = i > 1 ? i - 1 : i
-        
-        ports = get_port_edge_list(sne)
 
-        println("[$(model.ticks)]{$(a.id)}($(sne.id)) - ports: $(ports)")
-        r_src = first(path)
-        r_dst = last(path)
-        in_port = 0
-        if i == 1
-            of_msg₀ = first(filter(ofm -> ofm.id == of_mid,a.pending))
-            in_port = of_msg₀.in_port
-            #TODO of_msg remove from pending
-        else
-            in_port = first(filter(p->p[2][2:end] == path[i_prev],ports))
-        end
-        out_port = 0
-        
-        if i < length(path)
-            out_port = first(filter(p->parse(Int,p[2][2:end]) == path[i+1],ports))[1]
-        end
-
-        flow = Flow(  sne.id
-                ,MRule(string(in_port)
-                ,string(r_src)
-                ,string(r_dst))
-                ,[out_port]
-                ,OFS_Output)
-        msg = OFMessage(next_ofmid!(model), model.ticks,e,1,OFPR_ADD_FLOW,flow)
-        send_msg!(e,msg,model)
-        
-   end
    
 
 
    # for each one, get proceed as the other algo 
 
 
-end
-
-function install_flows!(in_dpid,in_port_start,path,model)
-    println("install flow: $(in_dpid) - $(in_port_start) - $(path)")
-    if !isempty(path)
-        pairs = diag([j == i + 1 ? (path[3][i],path[3][j]) : nothing for i=1:size(path[3],1)-1, j=2:size(path[3],1)])
-        
-        prev_eid = path[1]
-        for p in pairs
-            sne = getindex(model,p[1])
-            prev_sne = getindex(model,prev_eid)
-            port_dst = filter(x->x[2]=="s$(p[2])",get_port_edge_list(sne))[1]
-            out_port = port_dst[1]
-            in_port = p[1] == path[1] ? in_port_start : filter(x->x[2]=="s$(prev_eid)",get_port_edge_list(sne))[1][1]
-            r_src = path[1]
-            r_dst = path[2]
-            
-            fw = Flow(sne.id,MRule(string(in_port),string(r_src),string(r_dst)),[out_port],OFS_Output)
-            #(ticks,pkt,sne_src,sne_dst)->forward(ticks,pkt,sne_src,sne_dst)
-            println("[$(model.ticks)] {A} Installing flow: $(p[1]) - $(fw.match_rule)")
-            push_flow!(sne,fw)
-            prev_eid = sne.id
-        end
-    else
-        sne = getindex(model,in_dpid)
-        #TODO how to make the rule to be regardless of port in
-        fw =Flow(in_dpid,MRule("*","*",string(in_dpid)),[0],OFS_Output)
-        #(ticks,pkt,src_sne)->forward(ticks,pkt,src_sne)
-        println("[$(model.ticks)]  {B} Installing flow to $(in_dpid): $(fw.match_rule)")
-        push_flow!(sne,fw)
-    end
-end
 
 function create_pkt(src::Int64,dst::Int64,model)
     model.pkt_id += 1
@@ -481,7 +370,7 @@ function generate_traffic!(model)
     q_pkts = abs(round(10rand(Normal(1,0.1))))
     #q_pkts = 100
     #src,dst = samplepair(1:nv(model.ntw_graph)) # can be replaced for random pair
-    pairs = [(1,7)]#,(4,1),(9,5)] #[(9,5)]
+    pairs = [(4,1)]#[(1,7),(4,1),(9,5)] #[(9,5)] #[(4,5)]#
     for p in pairs
         src,dst = p
         for i =1:q_pkts
