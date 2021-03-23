@@ -127,8 +127,8 @@ mutable struct Agent <: SOAgent
     pos::Int64
     color::Symbol
     size::Float16
-    pending::Vector{OFMessage}
-    of_started::Vector{Tuple{Int64,Int64}}
+    pending::Vector{Tuple{Int64,OFMessage}} # Timeout for this msg to be reprocessed & msg
+    of_started::Vector{Tuple{Int64,Int64}} # msg.id,  Time when msg was started
     state::SDNCtlAgState
     state_trj::Vector{SDNCtlAgState}
     msgs_links::Array{Vector{AGMessage},2}
@@ -188,7 +188,7 @@ end
 # end
 
 function forward(msg::OFMessage,src::SimNE,model)
-    #println("Packet $(msg[4].id) delivered")
+    println("Packet $(msg.id) delivered")
     out_pkt_count = get_state(src).out_pkt + 1
     set_out_pkt!(src,out_pkt_count)
 end
@@ -325,17 +325,13 @@ function process_msg!(sne::SimNE,msg::OFMessage,model)
 end
 
 
-function pending_pkt_handler(a::AbstractAgent,model)
+function pending_pkt_handler(a::SimNE,model)
     # if model.ticks in 80:1:90 && a.id == 10
-    println("[$(model.ticks)]($(a.id)) pending: $(length(a.pending))")
     # end
     if !isempty(a.pending)
+        println("[$(model.ticks)]($(a.id)) pending: $(length(a.pending))")
         for msg in a.pending
-            if typeof(a) == SimNE 
-               put!(a.queue,msg)
-            else
-                put!(a.state.queue,msg)
-            end
+            put!(a.queue,msg)
          end
        empty_pending!(a)
     end

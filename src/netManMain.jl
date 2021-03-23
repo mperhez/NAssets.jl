@@ -26,7 +26,7 @@ ntw_graph = load_network_graph()
 ctl_graph = load_control_graph()
 q_agents = nv(ntw_graph)+nv(ctl_graph)
 
-n = 10
+n = 75
 args[:N]=n
 args[:q]=q_agents
 args[:Τ]=10

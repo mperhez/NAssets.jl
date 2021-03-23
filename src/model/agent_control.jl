@@ -17,7 +17,7 @@ function send_msg!(receiver::Int64,msg::AGMessage,model)
     #need index of nbs 
     nbs = neighbors(g,lva)
     i = first(indexin(lv,nbs))
-    println("[$(model.ticks)] From $(msg.sid) to  $(receiver) ==> $(msg)")
+    println("[$(model.ticks)] From $(msg.sid) to  $(receiver) ==> $(msg.reason) -> $(msg.body[:query])")
     push!(rag.msgs_links[size(rag.msgs_links,1),i],msg)
     
 end    
@@ -54,8 +54,21 @@ function do_match!(msg::AGMessage,a::Agent,model)
         end
     end
 
-    #continue back propagation of msg
-    if first(msg.body[:trace]) != a.id
+    
+    if first(msg.body[:trace]) == a.id
+        #reprocess of msg right after
+        new_pending = []
+        for p in a.pending
+            if last(p).id == msg.body[:of_mid]
+                push!(new_pending,(0,last(p)))
+            else
+                push!(new_pending,p)
+            end
+        end
+        a.pending = new_pending
+        println("[$(model.ticks)]($(a.id)) do_match! -- NEW_PENDING: $(a.pending)")
+    else
+        #continue back propagation of msg
         trace_bk = msg.body[:trace_bk]
         msg.body[:trace_bk] = trace_bk[1:end-1]
         msg.rid = trace_bk[end-1]
@@ -102,26 +115,42 @@ end
 function do_query!(msg::AGMessage,a::Agent,model)
     println("[$(model.ticks)]($(a.id)) -> TODO Local search")
     
-    query = msg.body[:query]
-    trace = msg.body[:trace]
-    of_mid = msg.body[:of_mid]
     # visited control ag
+    trace = msg.body[:trace]
     push!(trace,a.id)
+    
+    # join graph received
     msg_ntw_g = create_subgraph(msg.body[:ntw_edgel],msg.body[:ntw_equiv],:eid)
     a.params[:ntw_graph] = join_subgraphs(a.params[:ntw_graph],msg_ntw_g)
     ntw_edgel = [ e for e in edges(a.params[:ntw_graph]) if src(e) <  dst(e) ]
     ntw_equiv = [(v,a.params[:ntw_graph][v,:eid]) for v in vertices(a.params[:ntw_graph])]
+    
+    #do query
+    query = msg.body[:query]
+    
+    path = do_query(query,a)
 
-    found = query_path(a.params[:ntw_graph],query)
 
-    if !isempty(found.paths)
-       #TODO consider case where multiple paths are found
-       path = [a.params[:ntw_graph][v,:eid] for v in first(found.paths)]
-       do_match!(path,msg,a,model)
-    else # forward to neighbor controllers
+    if isempty(path)
+        lg = a.params[:ntw_graph]
+        of_mid = msg.body[:of_mid]
         nbody = Dict(:query=>query,:trace=>trace,:ntw_edgel => ntw_edgel, :ntw_equiv=>ntw_equiv, :of_mid=>of_mid)
         msg_template = AGMessage(-1,model.ticks,a.id,-1,QUERY_PATH,nbody)
         send_to_nbs!(msg_template,a,model)
+    else
+        do_match!(path,msg,a,model)
     end
+
+    
+
+    # if !isempty(paths)
+    #    #TODO consider case where multiple paths are found
+    #    path = [a.params[:ntw_graph][v,:eid] for v in first(found.paths)]
+    #    do_match!(path,msg,a,model)
+    # else # forward to neighbor controllers
+    #     nbody = Dict(:query=>query,:trace=>trace,:ntw_edgel => ntw_edgel, :ntw_equiv=>ntw_equiv, :of_mid=>of_mid)
+    #     msg_template = AGMessage(-1,model.ticks,a.id,-1,QUERY_PATH,nbody)
+    #     send_to_nbs!(msg_template,a,model)
+    # end
 
 end

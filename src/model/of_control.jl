@@ -105,13 +105,13 @@ function process_msg!(a::Agent,msg::OFMessage,model)
         Ofp_Protocol(1) =>  
                         begin
                             #println("[$(model.ticks)]($(a.id)) -> match one")
-                            previous = filter(x->x[1]==msg.id,a.of_started)
-                            if isempty(previous) || (model.ticks - last(first(previous))) < model.ofmsg_reattempt
-                                in_packet_handler(a,msg,model)
+                            #previous = filter(x->x[1]==msg.id,a.of_started)
+                            #if isempty(previous) || (model.ticks - last(first(previous))) < model.ofmsg_reattempt
+                            in_packet_handler(a,msg,model)
                             #elseif  (model.ticks - last(first(previous))) < model.ofmsg_reattempt
                                 #return package to queue as it does not know what to do with it
                             #    push!(a.pending,msg)
-                            end
+                           # end
                         
                         end
         Ofp_Protocol(2) => 
@@ -132,32 +132,34 @@ msg: SimNE.id, in_port, DPacket
 function in_packet_handler(a::Agent,msg::OFMessage,model)
 
     println("[$(model.ticks)]($(a.id)) Processing msg: $msg")
-    dst = msg.data.dst
-    src = msg.data.src
+    
     path::Array{Int64,1} = []
     found = false
-    
-    
-
+   
     if msg.dpid != dst
-        paths = filter(p-> p[1] == src && p[2] == dst ,a.state.paths)
-        println("[$(model.ticks)]($(a.id)) in_packet_handler -- local paths : $(paths)")
-        path = !isempty(paths) ? last(first(paths)) : do_query!(a,model,msg.id,(src,dst))
+        path = do_query!(msg,a,model)
         found = isempty(path) ? false : true
     else
         found = true
     end
+   
     println("[$(model.ticks)]($(a.id)) msg-> $(msg), path ==> $(path)")
+   
     if found 
         #install_flows!(msg.dpid,msg.in_port,path,model) 
         println("[$(model.ticks)]($(a.id)) in pkt handler: path $path")
         install_flow!(a,path,model,msg)
     else
-        push!(a.pending,msg)
+        #add to pending list only if has not been
+        #started already (no reprocessing)
+        started = filter(m->first(m) == msg.id,a.of_started)
+        if isempty(started)
+            push!(a.pending,(model.ofmsg_reattempt,msg))
+        end
     end
     
-
     push!(a.of_started,(msg.id,model.ticks))
+    
     # TODO
     # Need to implement asynchronous msgs
     # Need to control when msgs come and come because of being pushed to pending
@@ -166,26 +168,84 @@ function in_packet_handler(a::Agent,msg::OFMessage,model)
     
 end
 
+
+# function do_query!(a::Agent,model,of_mid::Int64,query::Tuple{Int64,Int64})
+#     lg = a.params[:ntw_graph]
+#     found = query_path(lg,query)
+#     path = []
+    
+#     previous = filter(x->x[1]==of_mid,a.of_started)
+#     println("[$(model.ticks)]($(a.id)) do_query! => $(found) -- previous $previous")
+#     if isempty(found.paths) &&  isempty(previous)# forward to neighbor controllers
+       
+#        ntw_edgel = [ e for e in edges(lg) if src(e) <  dst(e) ]
+#        ntw_equiv = [(v,lg[v,:eid]) for v in vertices(lg)]
+#        nbody = Dict(:query=>query,:trace=>[a.id],:ntw_edgel => ntw_edgel, :ntw_equiv=>ntw_equiv, :of_mid=>of_mid)
+#        msg_template = AGMessage(-1,model.ticks,a.id,-1,QUERY_PATH,nbody)
+#        send_to_nbs!(msg_template,a,model)
+#     else
+#         path = isempty(found.paths) ? [] : [a.params[:ntw_graph][v,:eid] for v in first(found.paths)]
+#     end
+#     return path#found.paths
+# end
+
 """
     Initial query by controller receiving OF message
 """
-function do_query!(a::Agent,model,of_mid::Int64,query::Tuple{Int64,Int64})
-    lg = a.params[:ntw_graph]
-    found = query_path(lg,query)
-    path = []
-    
-    previous = filter(x->x[1]==of_mid,a.of_started)
-    println("[$(model.ticks)]($(a.id)) do_query! => $(found) -- previous $previous")
-    if isempty(found.paths) &&  isempty(previous)# forward to neighbor controllers
-       
-       ntw_edgel = [ e for e in edges(lg) if src(e) <  dst(e) ]
-       ntw_equiv = [(v,lg[v,:eid]) for v in vertices(lg)]
-       nbody = Dict(:query=>query,:trace=>[a.id],:ntw_edgel => ntw_edgel, :ntw_equiv=>ntw_equiv, :of_mid=>of_mid)
-       msg_template = AGMessage(-1,model.ticks,a.id,-1,QUERY_PATH,nbody)
-       send_to_nbs!(msg_template,a,model)
-    else
-        path = isempty(found.paths) ? [] : [a.params[:ntw_graph][v,:eid] for v in first(found.paths)]
+function do_query!(msg::OFMessage,a::Agent,model)
+   
+    query = (msg.dpid,msg.data.dst)
+
+    path = do_query(query,a)
+
+    if isempty(path)
+        lg = a.params[:ntw_graph]
+        ntw_edgel = [ e for e in edges(lg) if src(e) <  dst(e) ]
+        ntw_equiv = [(v,lg[v,:eid]) for v in vertices(lg)]
+        trace = [a.id]
+        of_mid = msg.id 
+        body = Dict(:query=>query,:trace=>trace,:ntw_edgel => ntw_edgel, :ntw_equiv=>ntw_equiv, :of_mid=>of_mid)
+        msg_template = AGMessage(-1,model.ticks,a.id,-1,QUERY_PATH,body)
+        send_to_nbs!(msg_template,a,model)
     end
-    return path#found.paths
+    
+    return path
 end
 
+"""
+    Query local calculated paths and local graph
+"""
+function do_query(query::Tuple{Int64,Int64},a::Agent)
+    lntw_g = a.params[:ntw_graph]
+    #query pre-calculated paths
+    paths = filter(p-> p[1] == first(query) && p[2] == last(query) ,a.state.paths)    
+    
+    #println("Paths found: $paths")
+
+    path = !isempty(paths) ? last(first(paths)) : query_path(lntw_g,query)
+
+    #println("Path found: $path")
+    
+    
+    return path
+end
+
+function pending_pkt_handler(a::Agent,model)
+    # if model.ticks in 80:1:90 && a.id == 10
+    # end
+    new_pending = []
+    if !isempty(a.pending)
+        println("[$(model.ticks)]($(a.id)) pending: $(length(a.pending))")
+        for msgt in a.pending
+            println("[$(model.ticks)]($(a.id)) pending_msgt: $msgt")
+            remaining = first(msgt) - 1  #msgt[1]: timeout
+            if remaining <= 0 
+                put!(a.state.queue,last(msgt)) #msgt[2]: msg
+            else
+                push!(new_pending,msgt)
+            end
+         end
+         a.pending = new_pending
+         
+    end
+end

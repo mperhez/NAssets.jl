@@ -493,7 +493,7 @@ end
 """
 function do_receive_messages(a::Agent,model)
     #TODO: check if another periodicity is required, rather than every tick
-    if !isempty(a.msgs_in) println("[$(model.ticks)]($(a.id)) in msgs: $(a.msgs_in)") end
+    #if !isempty(a.msgs_in) println("[$(model.ticks)]($(a.id)) in msgs: $(a.msgs_in)") end
     for msg in a.msgs_in
         process_msg!(a,msg,model)
     end
@@ -552,20 +552,32 @@ function join_subgraphs(g1,g2)
     gt = deepcopy(g1)
     eqv = []
     for v in vertices(g2)
+        
         gv = g2[v,:eid]
-        if to_local_vertex(gt,gv) == 0
+        
+        lv = to_local_vertex(gt,gv)
+
+        if lv == 0
             add_vertex!(gt,:eid,gv)
             push!(eqv,(v,nv(gt)))
         else
-            push!(eqv,(v,gv))
+            push!(eqv,(lv,gv))
         end
     end
 
     for e in edges(g2)
-        add_edge!(gt,
-            first([last(x) for x in eqv if first(x) == src(e) ]),
-            first([last(x) for x in eqv if first(x) == dst(e) ]),
-        )
+        
+        
+
+        src_t = to_local_vertex(gt,g2[src(e),:eid])
+        dst_t = to_local_vertex(gt,g2[dst(e),:eid])
+        add_edge!(gt,src_t,dst_t)
+
+        
+        # add_edge!(gt,
+        #     first([last(x) for x in eqv if first(x) == src(e) ]),
+        #     first([last(x) for x in eqv if first(x) == dst(e) ]),
+        # )
     end
     return gt
 end
@@ -579,15 +591,24 @@ function query_path(lg,s,d)
     ls = to_local_vertex(lg,s)
     ld = to_local_vertex(lg,d)
     result =   LightGraphs.YenState{Real,Int}([],[])
+    path = []
+    
     if ls > 0 && ld > 0
         #slg = SimpleGraph(lg)
         #return yen_k_shortest_paths(slg,ls,ld, weights(slg),2,Inf)
         result = yen_k_shortest_paths(lg,ls,ld)
     end
-    gvs = [ lg[v,:eid] for v in vertices(lg)]
-    println("network contains: gvs: $gvs")
-    println("query_path:  g v: $(vertices(lg)), s: $(s) - ls: $(ls), d: $d - ld $ld result ==> $(result)")
-    return result
+    #gvs = [ lg[v,:eid] for v in vertices(lg)]
+    #println("network contains: gvs: $gvs")
+    #println("query_path:  g v: $(vertices(lg)), s: $(s) - ls: $(ls), d: $d - ld $ld result ==> $(result)")
+
+    if !isempty(result.paths)
+        path = result.paths
+        path = !isempty(path) && typeof(path) == Array{Array{Int64,1},1} ? first(path) : path
+        path = [ lg[v,:eid] for v in path]
+    end
+
+    return path#result.paths
 end
 
 """
@@ -637,7 +658,7 @@ In eqv, every pair has the form: (lv,gv) where lv is the
 local vertex id and gv is the global vertex id.
 """
 function create_subgraph(egs,eqv,gid_prop)
-    println("Creating subgraph egs: $(egs) and eqv: $eqv")
+    #println("Creating subgraph egs: $(egs) and eqv: $eqv")
     g = MetaGraph()
     set_indexing_prop!(g, gid_prop)
 
