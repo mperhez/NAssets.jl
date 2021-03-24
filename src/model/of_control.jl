@@ -196,7 +196,7 @@ function do_query!(msg::OFMessage,a::Agent,model)
    
     query = (msg.dpid,msg.data.dst)
 
-    path = do_query(query,a)
+    path = do_query(model.ticks,query,a.params[:ntw_graph],a.state.paths)
 
     if isempty(path)
         lg = a.params[:ntw_graph]
@@ -209,20 +209,39 @@ function do_query!(msg::OFMessage,a::Agent,model)
         send_to_nbs!(msg_template,a,model)
     end
     
-    return path
+    return isempty(path) ? [] : last(path)
 end
 
 """
     Query local calculated paths and local graph
 """
-function do_query(query::Tuple{Int64,Int64},a::Agent)
-    lntw_g = a.params[:ntw_graph]
-    #query pre-calculated paths
-    paths = filter(p-> p[1] == first(query) && p[2] == last(query) ,a.state.paths)    
+function do_query(time::Int64,query::Tuple{Int64,Int64},lg::MetaGraph,paths::Dict{Tuple{Int64,Int64},Array{Tuple{Int64,Float64,Array{Int64}}}})
+    path = []
+    cp_path = []
+    lg_path = []
+    #query pre-calculated (cache) paths
+    query_paths = haskey(paths,query) ? paths[query] : []
     
     #println("Paths found: $paths")
+    
+    if !isempty(query_paths) 
+        #assumes query_paths is sorted by tick,score
+        cp_path = first(query_paths)
+    end
 
-    path = !isempty(paths) ? last(first(paths)) : query_path(lntw_g,query)
+    #query graph path regardless of cache, in case there is another
+    path_state = query_path(lg,query)
+
+    if !isempty(path_state.paths)
+        lg_path = (time,first(path_state.dists),first(path_state.paths))
+    end
+
+    if !isempty(lg_path)
+        path = lg_path
+    elseif !isempty(cp_path)
+        path = cp_path
+    end
+    
 
     #println("Path found: $path")
     
@@ -248,4 +267,58 @@ function pending_pkt_handler(a::Agent,model)
          a.pending = new_pending
          
     end
+end
+
+function do_drop!(msg::OFMessage,a::Agent,model)
+    lg = a.params[:ctl_graph]
+    lv = to_local_vertex(lg,a.id)
+    nbs = [ lg[nb,:aid] for nb in neighbors(lg,lv) ]
+
+    for nb in nbs
+        nbs_nb = setdiff(nbs,[nb])
+        body = Dict(new_nbs=>nbs_nb)
+        nb_msg = AGMessage(next_amid!(model),model.ticks,a.id,nb,NEW_NB,body)
+        send_msg!(nb,nb_msg_model)
+    end
+        
+        #remove edges from "actual" control graph
+    soft_remove_vertex(model.ctl_graph,a.id)
+    set_down!(a) 
+end
+
+function set_down!(a::Agent)
+    a.state.up = false
+end
+
+function port_delete_handler(a::Agent,msg::OFMessage,model)
+    # init_agent!(a,model)
+    new_paths_dict = Dict()
+    dpid = msg.data 
+    ces = get_controlled_assets(a.id,model)
+
+    if dpid in ces
+        do_drop!(msg,a,model)
+    else
+        println("[$(model.ticks)]($(a.id)) Existing paths: $(a.state.paths)")
+        
+        #delete pre-computed paths containing dropping node
+        for path_k in keys(a.state.paths)
+            v_paths = a.state.paths[path_k]
+            new_paths = []
+            for path in v_paths
+                if !(msg.data in last(path))
+                    push!(new_paths,path)
+                end
+            end
+            if !isempty(new_paths)
+                new_paths_dict[path_k] = new_paths 
+            end
+        end
+        a.state.paths = new_paths_dict
+        #delete dropping node from local graph
+        lv = to_local_vertex(a.params[:ntw_graph],msg.data)
+        a.params[:ntw_graph] = soft_remove_vertex(a.params[:ntw_graph],lv)
+        println("[$(model.ticks)]($(a.id)) New paths: $(a.state.paths)")
+    end
+
 end

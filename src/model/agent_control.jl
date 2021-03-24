@@ -43,14 +43,34 @@ function do_match!(msg::AGMessage,a::Agent,model)
     println("[$(model.ticks)]{$(a.id)} =+do_match! -> msg : $(msg), end ag => $(first(msg.body[:trace]))")
     new_path = msg.body[:path]
     ces = get_controlled_assets(a.id,model)
-    ces_in_path  = intersect(ces,new_path)
+    ces_in_path  = intersect(ces,last(new_path))
 
     for ce in ces_in_path
-        spath = new_path[first(indexin(ce,new_path)):end]
+        spath = last(new_path)[first(indexin(ce,last(new_path))):end]
 
         for i=1:length(spath)-1
-            push!(a.state.paths,(spath[i],last(spath),spath[i:end]))
-            println("[$(model.ticks)]($(a.id)) do_match! -- path added: $(spath[i:end])")
+            epaths = []            
+            if haskey(a.state.paths,(spath[i],last(spath)))
+                epaths = a.state.paths[(spath[i],last(spath))]
+  
+                push!(epaths,new_path)
+                
+                #sort by score, reverse = false
+                sort!(epaths,lt=isless_paths)
+
+                if length(epaths) > model.max_cache_paths
+                    pop!(epaths)
+                end
+                
+                #TODO cases of older paths
+            else
+                epaths = [new_path]
+            end
+            a.state.paths[(spath[i],last(spath))] = epaths
+            
+            # push!(a.state.paths,(spath[i],last(spath),spath[i:end]))
+
+            # println("[$(model.ticks)]($(a.id)) do_match! -- path added: $(spath[i:end])")
         end
     end
 
@@ -80,7 +100,7 @@ end
 """
     Prepare MATCH reply
 """
-function do_match!(found_path::Vector{Int64},msg::AGMessage,a::Agent,model)
+function do_match!(found_path::Tuple{Int64,Float64,Array{Int64}},msg::AGMessage,a::Agent,model)
     println("[$(model.ticks)]{$(a.id)} =*do_match! -> msg : $(msg) -> found: $(found_path)")
     query = msg.body[:query]
     trace = msg.body[:trace]
@@ -103,6 +123,9 @@ function process_msg!(a::Agent,msg::AGMessage,model)
         
         AG_Protocol(2) =>  
                         do_match!(msg,a,model)                        
+        
+        AG_Protocol(3) =>  
+                        do_new_nb!(msg,a,model)                        
         _ => begin
                 println("[$(model.ticks)]($(a.id)) -> match default")
             end
@@ -110,7 +133,7 @@ function process_msg!(a::Agent,msg::AGMessage,model)
 end
 
 """
-    Query by neighbor control agent after receiving AGMessage
+    Query by neighbour control agent after receiving AGMessage
 """
 function do_query!(msg::AGMessage,a::Agent,model)
     println("[$(model.ticks)]($(a.id)) -> TODO Local search")
@@ -121,18 +144,18 @@ function do_query!(msg::AGMessage,a::Agent,model)
     
     # join graph received
     msg_ntw_g = create_subgraph(msg.body[:ntw_edgel],msg.body[:ntw_equiv],:eid)
-    a.params[:ntw_graph] = join_subgraphs(a.params[:ntw_graph],msg_ntw_g)
-    ntw_edgel = [ e for e in edges(a.params[:ntw_graph]) if src(e) <  dst(e) ]
-    ntw_equiv = [(v,a.params[:ntw_graph][v,:eid]) for v in vertices(a.params[:ntw_graph])]
+    # do not update local graph to avoid it to grow and in case of volatile topo
+    jg = join_subgraphs(a.params[:ntw_graph],msg_ntw_g)
+    ntw_edgel = [ e for e in edges(jg) if src(e) <  dst(e) ]
+    ntw_equiv = [(v,jg[v,:eid]) for v in vertices(jg)]
     
     #do query
     query = msg.body[:query]
     
-    path = do_query(query,a)
+    path = do_query(model.ticks,query,jg,a.state.paths)
 
 
     if isempty(path)
-        lg = a.params[:ntw_graph]
         of_mid = msg.body[:of_mid]
         nbody = Dict(:query=>query,:trace=>trace,:ntw_edgel => ntw_edgel, :ntw_equiv=>ntw_equiv, :of_mid=>of_mid)
         msg_template = AGMessage(-1,model.ticks,a.id,-1,QUERY_PATH,nbody)
@@ -152,5 +175,22 @@ function do_query!(msg::AGMessage,a::Agent,model)
     #     msg_template = AGMessage(-1,model.ticks,a.id,-1,QUERY_PATH,nbody)
     #     send_to_nbs!(msg_template,a,model)
     # end
+
+end
+
+function do_new_nb!(msg::AGMessage,a::Agent,model)
+    
+    new_nbs = msg.body[:new_nbs]
+    lg = a.params[:ctl_graph]
+    ls = to_local_vertex(lg,a.id)
+    for nb in new_nbs
+        ld = to_local_vertex(lg,nb)
+        if !has_edge(lg,ls,ld)
+            add_edge!(lg,ls,ld)
+        end
+        if !has_edge(lg,a.id,nb)
+            add_edge!(model.ctl_graph,a.id,nb)
+        end
+    end
 
 end

@@ -21,6 +21,7 @@ function initialize(args,user_props;grid_dims=(3,3),seed=0)
         :ctl_graph => args[:ctl_graph],
         :mapping_ctl_ntw => Dict{Int64,Int64}(), # mapping between (Ctl) Agent and SimNE
         :mapping_ntw_sne => Dict{Int64,Int64}(), #mapping btwn the underlying network and the corresponding simNE agent 
+        :max_cache_paths => 2,
         :pkt_per_tick => 500, # How many packets are processsed per tick
         :ctrl_model => DISTRIBUTED, #CENTRALISED,
         :pkt_size => 1500,
@@ -274,7 +275,9 @@ function init_agent!(a::Agent,model)
     a.params[:ctl_graph] = ctl_sub_g
     a.params[:delay_ctl_link] = 1 # 1: no delay
 
-    a.state.paths = label_path.(all_k_shortest_paths(sub_g))
+    all_paths = all_k_shortest_paths(sub_g)
+    
+    a.state.paths = label_paths(model.ticks,all_paths)
     #a.params[:delay_ctl_link]
     
 
@@ -287,6 +290,16 @@ function init_agent!(a::Agent,model)
 
 end
 
+function label_paths(time::Int64,paths::Array{LightGraphs.YenState{Float64,Int64},1})
+    npaths = Dict()
+    for path in paths 
+        if !isempty(path.paths)
+            #obtain only the first path
+            npaths[(first(first(path.paths)),last(first(path.paths)))] = [(time,first(path.dists),first(path.paths))]
+        end
+    end
+    return npaths
+end
 
 
 function label_path(path)

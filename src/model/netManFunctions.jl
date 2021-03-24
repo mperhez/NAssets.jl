@@ -289,21 +289,22 @@ function soft_drop_node(model)
     #1remove from network
     #2in controller: update topology and paths
     #in switch detect path/port not available and ask controller
-
+    g = model.ntw_graph
     dpn_ids = [3] # dropping node id
     dpt = 80 # dropping time
 
     if model.ticks == dpt
 
         for dpn_id in dpn_ids
-            for nb in all_neighbors(model.ntw_graph,get_address(dpn_id,model.ntw_graph))
+            #for nb in all_neighbors(model.ntw_graph,get_address(dpn_id,model.ntw_graph))
+            for nb in all_neighbors(model.ntw_graph,get_address(dpn_id,g))
                 link_down!(get_eid(nb,model),dpn_id,model)
             end
             #soft remove 
             dpn_ag = getindex(model,dpn_id)
             set_down!(dpn_ag)
             #delete!(model.mapping_ctl_ntw,dpn_id)
-            model.ntw_graph = soft_remove_vertex(model.ntw_graph,get_address(dpn_id,model.ntw_graph))
+            model.ntw_graph = soft_remove_vertex(g,get_address(dpn_id,g))
             
         end
         
@@ -582,6 +583,8 @@ function join_subgraphs(g1,g2)
     return gt
 end
 
+
+
 """
 Search for a path between nodes s and d in the local graph lg
 It assumes property :eid of each vertex is global id of vertex
@@ -590,7 +593,7 @@ It assumes property :eid of each vertex is global id of vertex
 function query_path(lg,s,d)
     ls = to_local_vertex(lg,s)
     ld = to_local_vertex(lg,d)
-    result =   LightGraphs.YenState{Real,Int}([],[])
+    result =   LightGraphs.YenState{Float64,Int}([],[])
     path = []
     
     if ls > 0 && ld > 0
@@ -606,10 +609,12 @@ function query_path(lg,s,d)
         path = result.paths
         path = !isempty(path) && typeof(path) == Array{Array{Int64,1},1} ? first(path) : path
         path = [ lg[v,:eid] for v in path]
+        result =   LightGraphs.YenState{Float64,Int}([length(path)],[path])
     end
 
-    return path#result.paths
+    return result
 end
+
 
 """
     Local search receiving source and destination in a tuple
@@ -721,7 +726,9 @@ function plot_subg(sg)
           )
 end
 
-
+"""
+    Return one path for each 
+"""
 function all_k_shortest_paths(g::MetaGraph)
     ps = [ (g[s,:eid],g[d,:eid]) for s in vertices(g), d in vertices(g) if s < d]
     return query_path.([g], ps)
@@ -730,4 +737,22 @@ end
 function has_prop_vertex(value,g,prop)
     gvs = [ g[v,prop] for v in vertices(g) ]
     return value in gvs
+end
+
+
+"""
+    Ordering tuples of paths 
+    1: tick
+    2: score
+"""
+function isless_paths(a,b)
+    # return @match a,b begin
+    #     a[2] < b[2] 
+    # end
+
+    if a[2] == b[2]
+        return a[1] > b[1]
+    else
+        return a[2] < b[2]
+    end
 end

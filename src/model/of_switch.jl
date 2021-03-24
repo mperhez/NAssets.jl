@@ -13,6 +13,7 @@ end
 @enum AG_Protocol begin
     QUERY_PATH = 1
     MATCH_PATH = 2
+    NEW_NB = 3
 end
 #@enum Ofp_Config_Flag EventOFPPortStatus=1 
 
@@ -67,6 +68,13 @@ function OFMessage(id::Int64,ticks::Int,dpid::Int,in_port::Int,data::DPacket)
     return OFMessage(id,ticks,dpid,in_port,OFPR_ACTION,data)
 end
 
+"""
+    Message with no input port
+"""
+function OFMessage(id::Int64,ticks::Int,dpid::Int,ofp::Ofp_Protocol,data::Int)
+    return OFMessage(id,ticks,dpid,-1,ofp,data)
+end
+
 mutable struct OFEvent
     msg::OFMessage    
 end
@@ -108,14 +116,16 @@ mutable struct SDNCtlAgState <: State
     color::Symbol
     condition_trj::Array{Float64,2}
     health_trj::Vector{Float64}
-    paths::Vector{Tuple{Int64,Int64,Array{Int64}}}
+    #paths::Vector{Tuple{Int64,Int64,Array{Array{Int64}}}} # src,dst,path
+    #paths: Dict key: (src,dst) => value: [(tick-updated,score,path)]
+    paths::Dict{Tuple{Int64,Int64},Array{Tuple{Int64,Float64,Array{Int64}}}}
     in_pkt_trj::Vector{Int64}
     out_pkt_trj::Vector{Int64}
     queue::Channel{OFMessage}
 end
 
 function SDNCtlAgState(condition_trj::Array{Float64,2}, health_trj::Vector{Float64})
-    SDNCtlAgState(true,:lightblue,condition_trj,health_trj,Vector{Tuple{Int64,Int64,Array{Int64}}}(),Vector{Int64}(),Vector{Int64}(),Channel{OFMessage}(500))
+    SDNCtlAgState(true,:lightblue,condition_trj,health_trj,Dict{Tuple{Int64,Int64},Array{Tuple{Int64,Float64,Array{Int64}}}}(),Vector{Int64}(),Vector{Int64}(),Channel{OFMessage}(500))
 end
 
 
@@ -188,7 +198,7 @@ end
 # end
 
 function forward(msg::OFMessage,src::SimNE,model)
-    println("Packet $(msg.id) delivered")
+    #println("Packet $(msg.id) delivered")
     out_pkt_count = get_state(src).out_pkt + 1
     set_out_pkt!(src,out_pkt_count)
 end
@@ -372,14 +382,14 @@ function link_down!(eid::Int,dpn_id::Int,model)
     #sne.state.flow_table = sne.state.flow_table - filter(f->dpn_port in f.params,sne.state.flow_table)[1]
 
     controller = getindex(model,sne.controller_id)
-    trigger_of_event!(model.ticks,controller,EventOFPPortStatus)
+    trigger_of_event!(model.ticks,controller,dpn_id,EventOFPPortStatus,model)
     
 end
 
-function trigger_of_event!(ticks::Int,a::Agent,ev_type::Ofp_Event)
+function trigger_of_event!(ticks::Int,a::Agent,eid::Int,ev_type::Ofp_Event,model)
     msg = @match ev_type begin
         EventOFPPortStatus =>
-                            OFMessage(next_ofmid!(model),ticks,a.id,OFPPR_DELETE)
+                            OFMessage(next_ofmid!(model),ticks,a.id,OFPPR_DELETE,eid)
     end
     push_msg!(a,msg)
 end
@@ -388,10 +398,6 @@ end
 # function port_status_handler(a::Agent,event::Ofp_Event)
 
 # end
-
-function port_delete_handler(a::Agent,msg::OFMessage,model)
-    init_agent!(a,model)
-end
 
 
 function get_state(sme::SimNE)
