@@ -233,7 +233,7 @@ function do_query(time::Int64,query::Tuple{Int64,Int64},lg::MetaGraph,paths::Dic
     path_state = query_path(lg,query)
 
     if !isempty(path_state.paths)
-        lg_path = (time,first(path_state.dists),first(path_state.paths))
+        lg_path = (time,last(path_state.dists),last(path_state.paths))
     end
 
     if !isempty(lg_path)
@@ -243,7 +243,7 @@ function do_query(time::Int64,query::Tuple{Int64,Int64},lg::MetaGraph,paths::Dic
     end
     
 
-    #println("Path found: $path")
+    println("Path found: $path")
     
     
     return path
@@ -280,8 +280,9 @@ function do_drop!(msg::OFMessage,a::Agent,model)
         nb_msg = AGMessage(next_amid!(model),model.ticks,a.id,nb,NEW_NB,body)
         send_msg!(nb,nb_msg_model)
     end
-        
-        #remove edges from "actual" control graph
+    
+    
+    #remove edges from "actual" control graph
     soft_remove_vertex(model.ctl_graph,a.id)
     set_down!(a) 
 end

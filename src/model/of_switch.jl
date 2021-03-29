@@ -358,7 +358,7 @@ function throughput(bytes₋₁,bytes₀, τ₋₁,τ₀)
 end
 
 function link_down!(eid::Int,dpn_id::Int,model)
-    print("[$(model.ticks)]($(eid)) link down start")
+    println("[$(model.ticks)]($(eid)) link down start")
     #remove from list of ports
     sne = getindex(model,eid)
     new_port_edge_list::Vector{Tuple{Int64,String}} = []
@@ -370,7 +370,7 @@ function link_down!(eid::Int,dpn_id::Int,model)
             dpn_port = p[1]
         end
     end
-    print("[$(model.ticks)]($(eid)) link down mid")
+    println("[$(model.ticks)]($(eid)) link down mid")
     set_port_edge_list!(sne,new_port_edge_list)
     new_flow_table::Vector{Flow} = []
     for f in get_flow_table(sne)

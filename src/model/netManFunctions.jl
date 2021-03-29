@@ -290,7 +290,7 @@ function soft_drop_node(model)
     #2in controller: update topology and paths
     #in switch detect path/port not available and ask controller
     g = model.ntw_graph
-    dpn_ids = [3] # dropping node id
+    dpn_ids = [9] # dropping node id
     dpt = 80 # dropping time
 
     if model.ticks == dpt
