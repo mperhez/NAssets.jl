@@ -43,39 +43,47 @@ function do_match!(msg::AGMessage,a::Agent,model)
     println("[$(model.ticks)]{$(a.id)} =+do_match! -> msg : $(msg), end ag => $(first(msg.body[:trace]))")
     new_path = msg.body[:path]
     ces = get_controlled_assets(a.id,model)
+
+
+    #elements this agent controls that are in path
     ces_in_path  = intersect(ces,last(new_path))
-
-    for ce in ces_in_path
-        spath = last(new_path)[first(indexin(ce,last(new_path))):end]
-
-        for i=1:length(spath)-1
-            epaths = []            
-            if haskey(a.state.paths,(spath[i],last(spath)))
-                epaths = a.state.paths[(spath[i],last(spath))]
-  
-                push!(epaths,new_path)
-                
-                #sort by score, reverse = false
-                sort!(epaths,lt=isless_paths)
-
-                if length(epaths) > model.max_cache_paths
-                    pop!(epaths)
-                end
-                
-                #TODO cases of older paths
-            else
-                epaths = [new_path]
-            end
-            a.state.paths[(spath[i],last(spath))] = epaths
-            
-            # push!(a.state.paths,(spath[i],last(spath),spath[i:end]))
-
-            # println("[$(model.ticks)]($(a.id)) do_match! -- path added: $(spath[i:end])")
-        end
-    end
-
     
+
+
     if first(msg.body[:trace]) == a.id
+
+        for ce in ces_in_path
+            spath = last(new_path)[first(indexin(ce,last(new_path))):end]
+    
+            for i=1:1#length(spath)-1
+                epaths = []            
+                if haskey(a.state.paths,(spath[i],last(spath)))
+                    epaths = a.state.paths[(spath[i],last(spath))]
+      
+                    push!(epaths,new_path)
+                    
+                    #sort by score, reverse = false
+                    sort!(epaths,lt=isless_paths)
+    
+                    if length(epaths) > model.max_cache_paths
+                        pop!(epaths)
+                    end
+                    
+                    #TODO cases of older paths
+                else
+                    epaths = [new_path]
+                end
+                a.state.paths[(spath[i],last(spath))] = epaths
+                
+                # push!(a.state.paths,(spath[i],last(spath),spath[i:end]))
+    
+                # println("[$(model.ticks)]($(a.id)) do_match! -- path added: $(spath[i:end])")
+            end
+        end
+
+
+
+
         #reprocess of msg right after
         new_pending = []
         for p in a.pending

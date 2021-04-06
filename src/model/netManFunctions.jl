@@ -120,8 +120,8 @@ end
 
 function load_control_graph()
     Random.seed!(123)
-    #ntw = MetaGraph(watts_strogatz(10,4,0.8)) #watts_strogatz(25,4,0.8) #complete_graph(1)
-    ntw = MetaGraph( [Int(i) for i in ring_graph(10)])
+    ntw = MetaGraph(watts_strogatz(10,4,0.8)) #watts_strogatz(25,4,0.8) #complete_graph(1)
+    #ntw = MetaGraph( [Int(i) for i in ring_graph(10)])
     #indexing can't be done here because aid has not been assigned
     #set_indexing_prop!(ntw,:aid)
     #gplot(ntw,layout=circular_layout,nodelabel=nodes(ntw))

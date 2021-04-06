@@ -364,6 +364,7 @@ function link_down!(eid::Int,dpn_id::Int,model)
     new_port_edge_list::Vector{Tuple{Int64,String}} = []
     dpn_port = -1
     for p in get_port_edge_list(sne)
+        println("[$(model.ticks)]($(eid)) port found: $p")
         if p[2]!="s"*string(dpn_id)
             push!(new_port_edge_list,p)
         else
@@ -374,11 +375,13 @@ function link_down!(eid::Int,dpn_id::Int,model)
     set_port_edge_list!(sne,new_port_edge_list)
     new_flow_table::Vector{Flow} = []
     for f in get_flow_table(sne)
+        println("[$(model.ticks)]($(eid)) dpn_port: $dpn_port in $(f.params) - flow found: $(f)")
         if  ~(dpn_port in f.params)
             push!(new_flow_table,f)
         end    
     end
     set_flow_table!(sne,new_flow_table)
+    println("[$(model.ticks)]($(eid)) new flow found: $(get_state(sne).flow_table)")
     #sne.state.flow_table = sne.state.flow_table - filter(f->dpn_port in f.params,sne.state.flow_table)[1]
 
     controller = getindex(model,sne.controller_id)

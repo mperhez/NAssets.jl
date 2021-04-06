@@ -276,7 +276,7 @@ function do_drop!(msg::OFMessage,a::Agent,model)
 
     for nb in nbs
         nbs_nb = setdiff(nbs,[nb])
-        body = Dict(new_nbs=>nbs_nb)
+        body = Dict(new_nbs=>nbs_nb,dpid=>msg.data)
         nb_msg = AGMessage(next_amid!(model),model.ticks,a.id,nb,NEW_NB,body)
         send_msg!(nb,nb_msg_model)
     end
@@ -323,3 +323,5 @@ function port_delete_handler(a::Agent,msg::OFMessage,model)
     end
 
 end
+
+
