@@ -534,8 +534,36 @@ function to_string(s::NetworkAssetState)
             sep * string(s.flow_table)
 end
 
-function get_throughput(sne::SimNE)::Int
-    return get_state(sne).in_pkt
+# function get_throughput(sne::SimNE)::Float64
+#     interval = 5
+#     trj = sne.state_trj[1:end]
+#     tpt = 0.0
+#     if length(trj) > interval
+#         l_in_pkt = last(trj).in_pkt
+#         p_in_pkt = trj[end-interval].in_pkt
+#         tpt  = (l_in_pkt - p_in_pkt) / interval
+#     end
+    
+#     return tpt
+# end
+
+function get_throughput(pkt_trj::Array{Int64,1},interval::Int)
+    # print("received......-> $pkt_trj ")
+    result = []
+
+    a = pkt_trj
+    b_1 = zeros(Int,min(interval,length(pkt_trj)))
+    b_2 = pkt_trj[1:end-interval]
+    b = vcat(b_1,b_2)
+    # println("calculating tpt......-> $(a) -- $(b_1) -- $(b_2) -- $b ")
+    result = get_throughput.(a,b,[interval]) 
+    # println("result of tpt is $result")
+    return result
+
+end
+
+function get_throughput(e_tpt::Int,s_tpt::Int,interval::Int)::Float64
+    return (e_tpt - s_tpt) > 0 && interval > 0 ? (e_tpt - s_tpt) / interval : 0.0
 end
 
 function get_throughput(a::Agent)::Int

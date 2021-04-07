@@ -253,10 +253,19 @@ function plot_throughput(
     kwargs...
 )
 
-    tpt_p = plot(title="tpt",titlefontcolor=:white,ylims=[0,30])
+    tpt_p = plot(title="tpt",titlefontcolor=:white,ylims=[0,2])
     for i=1:nv(model.ntw_graph)
         sne = getindex(model,get_eid(i,model))
-        tpt_p = plot!([ s.in_pkt for s in sne.state_trj ],xlims=[0,model.N], line=:stem, linealpha=0.5)
+        
+        # tpt_p = plot!([ s.in_pkt for s in sne.state_trj ],xlims=[0,model.N], line=:stem, linealpha=0.5)
+        v_pkt_in = [ s.in_pkt for s in sne.state_trj ]
+        # println("[$(model.ticks)]($(sne.id)) plotting... ==> $(v_pkt_in)")
+        tpt_v = isempty(v_pkt_in) ? [0] : get_throughput(v_pkt_in,10)#[ s.in_pkt for s in sne.state_trj ]
+        #tpt_v = [ get_throughput(sne,i) for i in length(sne.state_trj) ]
+        # println("[$(model.ticks)]($(sne.id)) Vector of tpt ===>   size $(length(tpt_v)) ==> $tpt_v")
+        tpt_p = plot!(tpt_v,xlims=[0,model.N], linealpha=0.5
+        # , line=:stem
+        )
     end
 
     annotate!((-1,33,Plots.text("Throughput", 11, :black, :center)))

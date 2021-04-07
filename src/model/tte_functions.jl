@@ -238,25 +238,38 @@ end
 """
 
 function add_downtime_to_series(ttf,ot,s_series)
-    phased_s =[
-                s_series[(i+Int64(floor(i/ttf))):min(i + ttf - Int64(ceil(i/ttf)), end)] 
-                for i in 1:ttf:length(s_series)
-            ]
+
+    println(" RECEIVED adding downtime ==>$(s_series)<==")
+
+    # split s_series in phases/cycles of ttf
+    phased_s = [s_series[i:min(i + ttf - 1, end)] for i in 1:ttf:length(s_series)]
 
     ph_ot = Vector{Float64}()
 
     for ph in phased_s
-        push!(ph_ot,vcat(ph,zeros(Float64,ot))...)
+        if length(ph) < ttf
+            push!(ph_ot,ph...)
+        else
+            push!(ph_ot,vcat(ph,zeros(Float64,ot))...)
+        end
     end
+    
+    println(" adding downtime $(size(ph_ot)) --- $(phased_s)")
     return ph_ot
 end
 
 """
  It generates the sensor time series for a given asset
+    ttf:time-to-failure
+    ot: off-time
 """
 function generate_sensor_series(ttf,n,Δᵩ,ϵₛ,ot,funs)
     vs = zeros(Float64,length(funs),n)
-    dim_dtvs = n%ttf > 0 && n >= ttf ? n+ot+1 : n+ot
+    println("received generate sensor ==> $ot ")
+    dim_dtvs = n + Int64(floor(n/ttf)) * ot  #n%ttf > 0 && n >= ttf ? n+ot+1 : n+ot
+
+
+
     dtvs = zeros(Float64,length(funs),dim_dtvs)
 
     for i=1:length(funs)
