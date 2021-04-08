@@ -387,12 +387,16 @@ function generate_traffic!(model)
     #q_pkts = 100
     #src,dst = samplepair(1:nv(model.ntw_graph)) # can be replaced for random pair
     pairs = [(1,7),(4,1),(9,5)] #[(9,5)] #[(4,5)]#
+
     for p in pairs
         src,dst = p
-        for i =1:q_pkts
-            pkt = create_pkt(src,dst,model)
-            sne = getindex(model,src)
-            push_msg!(sne,OFMessage(next_ofmid!(model), model.ticks,src,1,pkt)) # always from port 0
+        sne_src = getindex(model,src)
+        sne_dst = getindex(model,dst)
+        if is_up(sne_src) && is_up(sne_dst)
+            for i =1:q_pkts
+                pkt = create_pkt(src,dst,model)
+                push_msg!(sne_src,OFMessage(next_ofmid!(model), model.ticks,src,0,pkt)) # always from port 0
+            end
         end
     end
 
