@@ -31,7 +31,8 @@ function initialize(args,user_props;grid_dims=(3,3),seed=0)
         :ntw_links_msgs=>Dict{Tuple{Int,Int},Vector{Vector{OFMessage}}}(),
         :ntw_links_delays =>Dict{Tuple{Int,Int},Int}(),
         :state_trj => Vector{ModelState}(),
-        :interval_tpt => 10
+        :interval_tpt => 10,
+        :max_queue_ne => 400
     )
 
     Random.seed!(seed)
@@ -58,7 +59,7 @@ function create_agents!(model)
         id = nextid(model)
         # @show i
         a = add_agent_pos!(
-                SimNE(id,i,a_params),model
+                SimNE(id,i,a_params,30*model.:max_queue_ne),model
             )
         
         set_prop!(model.ntw_graph, id, :eid, id )
@@ -390,10 +391,10 @@ end
 
 
 function generate_traffic!(model)
-    #q_pkts = abs(round(200rand(Normal(1,0.1))))
-    q_pkts = 300
+    q_pkts = abs(round(model.:max_queue_ne*rand(Normal(1,0.15))))
+    # q_pkts = model.:max_queue_ne
     #src,dst = samplepair(1:nv(model.ntw_graph)) # can be replaced for random pair
-    pairs = [(1,7)]#,(4,1),(9,5)] #[(9,5)] #[(4,5)]#
+    pairs = [(1,7),(4,1),(9,5)] #[(9,5)] #[(4,5)]#
 
     for p in pairs
         src,dst = p

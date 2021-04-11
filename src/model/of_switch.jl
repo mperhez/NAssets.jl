@@ -103,13 +103,14 @@ mutable struct NetworkAssetState <: State
     port_edge_list::Vector{Tuple{Int64,String}}
     in_pkt::Int64
     out_pkt::Int64
+    drop_pkt::Int64
     flow_table::Vector{Flow}
     # throughput_in::Float64
     # throughput_out::Float64
 end
 
 function NetworkAssetState(ne_id::Int)
-    NetworkAssetState(ne_id,true,Vector{Tuple{Int64,String}}(),0,0,Vector{Flow}())
+    NetworkAssetState(ne_id,true,Vector{Tuple{Int64,String}}(),0,0,0,Vector{Flow}())
 end
 
 mutable struct SDNCtlAgState <: State
@@ -170,8 +171,8 @@ mutable struct SimNE <: SimAsset
     controller_id::Int64
     params::Dict{Symbol,Any}
 end
-function SimNE(id,nid,params)
-    SimNE(id,nid,0.3,Channel{OFMessage}(5000),Vector{OFMessage}(),Vector{Tuple{Int64,Int64,Int64}}(),[NetworkAssetState(id)],zeros(Float64,2,1),[],-1,params) #initialise SimNE with a placeholder in the controller
+function SimNE(id,nid,params,max_q)
+    SimNE(id,nid,0.3,Channel{OFMessage}(max_q),Vector{OFMessage}(),Vector{Tuple{Int64,Int64,Int64}}(),[NetworkAssetState(id)],zeros(Float64,2,1),[],-1,params) #initialise SimNE with a placeholder in the controller
 end
 
 function init_switch(a,model)
@@ -303,19 +304,34 @@ end
 function in_packet_processing(a::AbstractAgent,model)
     in_pkt_count = 0
     out_pkt_count = 0
-    for i in 1:a.params[:pkt_per_tick]
-        #println("[$(model.ticks)]($(a.id)) -> processing $i")
-        msg = is_ready(a) ? take_msg!(a) : break
-        # if model.ticks < 3
-        #     println("[$(model.ticks)]($(a.id)) Processing packet $(msg)")
-        # end
-        # in_pkt_count += 1
-        # out_pkt_count += 
-        process_msg!(a,msg,model)
+    processed_tick = 0
+    while is_ready(a)
+        msg = take_msg!(a)
+
+        if processed_tick <= a.params[:pkt_per_tick]
+            process_msg!(a,msg,model)    
+            processed_tick += 1
+        else
+            push_pending!(a,msg)
+        end
     end
+    
+    # for i in 1:a.params[:pkt_per_tick]
+    #     #println("[$(model.ticks)]($(a.id)) -> processing $i")
+    #     msg = is_ready(a) ? take_msg!(a) : break
+    #     # if model.ticks < 3
+    #     #     println("[$(model.ticks)]($(a.id)) Processing packet $(msg)")
+    #     # end
+    #     # in_pkt_count += 1
+    #     # out_pkt_count += 
+    #     process_msg!(a,msg,model)
+    # end
 
 end
 
+"""
+Processes msgs to SimNE
+"""
 function process_msg!(sne::SimNE,msg::OFMessage,model)
     #println("[$(model.ticks)]($(sne.id)) -> processing $(msg.reason)")
     
@@ -339,11 +355,24 @@ end
 function pending_pkt_handler(a::SimNE,model)
     # if model.ticks in 80:1:90 && a.id == 10
     # end
+    q_i = 0
     if !isempty(a.pending)
         println("[$(model.ticks)]($(a.id)) pending: $(length(a.pending))")
-        for msg in a.pending
-            put!(a.queue,msg)
-         end
+
+        for msg in a.pending 
+            if msg.reason == OFPR_ACTION
+                if(q_i <= model.:max_queue_ne)
+                    put!(a.queue,msg)
+                    q_i+= 1
+                else
+                    s = get_state(a)
+                    s.drop_pkt += 1
+                    set_state!(a,s)
+                end
+            else
+                put!(a.queue,msg)
+            end
+        end
        empty_pending!(a)
     end
 end
