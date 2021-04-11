@@ -145,7 +145,7 @@ function plot_ctl_network_multi(
         ,size=(300,200)
         ,node_weights = [ i > 9 ? 1 : 5 for i in 1:nv(model.ctl_graph)]
         ,nodeshape = :circle
-        ,nodecolor = [ getindex(model,get_control_agent(i,model)).state.color for i in 1:nv(model.ctl_graph) ]
+        ,nodecolor = [ getindex(model,get_prop(model.ctl_graph, i, :aid)).state.color for i=1:nv(model.ctl_graph) ]
         ,markerstrokecolor = :dimgray
         ,edgecolor=:dimgray
         ,markerstrokewidth = 1.1
@@ -253,18 +253,14 @@ function plot_throughput(
     kwargs...
 )
 
-    tpt_p = plot(title="tpt",titlefontcolor=:white,ylims=[0,2])
+    tpt_p = plot(title="tpt",titlefontcolor=:white,ylims=[0,60])
     for i=1:nv(model.ntw_graph)
         sne = getindex(model,get_eid(i,model))
-        
-        # tpt_p = plot!([ s.in_pkt for s in sne.state_trj ],xlims=[0,model.N], line=:stem, linealpha=0.5)
-        v_pkt_in = [ s.in_pkt for s in sne.state_trj ]
-        # println("[$(model.ticks)]($(sne.id)) plotting... ==> $(v_pkt_in)")
-        tpt_v = isempty(v_pkt_in) ? [0] : get_throughput(v_pkt_in,10)#[ s.in_pkt for s in sne.state_trj ]
-        #tpt_v = [ get_throughput(sne,i) for i in length(sne.state_trj) ]
-        # println("[$(model.ticks)]($(sne.id)) Vector of tpt ===>   size $(length(tpt_v)) ==> $tpt_v")
+        # v_pkt_in = [ s.in_pkt * model.:pkt_size for s in sne.state_trj ]
+        tpt_v = get_throughput_up(sne,model)#isempty(v_pkt_in) ? [0] : get_throughput(v_pkt_in,10)
         tpt_p = plot!(tpt_v,xlims=[0,model.N], linealpha=0.5
         # , line=:stem
+        ,legend = :outerright
         )
     end
 
@@ -285,6 +281,8 @@ function get_controlled_assets(agent_id::Int,model)
     return assets
 end
 
+
+
 function set_control_agent!(asset_id::Int, agent_id::Int, model)
     getindex(model,asset_id).controller_id = agent_id
     #TODO Consider removing this line below
@@ -299,20 +297,25 @@ function soft_drop_node(model)
     #2in controller: update topology and paths
     #in switch detect path/port not available and ask controller
     g = model.ntw_graph
-    dpn_ids = [9] # dropping node id
+    dpn_ids = [3] # dropping node id
     dpt = 80 # dropping time
 
     if model.ticks == dpt
 
         for dpn_id in dpn_ids
-            #for nb in all_neighbors(model.ntw_graph,get_address(dpn_id,model.ntw_graph))
-            for nb in all_neighbors(model.ntw_graph,get_address(dpn_id,g))
-                link_down!(get_eid(nb,model),dpn_id,model)
-            end
-            #soft remove 
             dpn_ag = getindex(model,dpn_id)
             set_down!(dpn_ag)
-            #delete!(model.mapping_ctl_ntw,dpn_id)
+
+            for nb in all_neighbors(model.ntw_graph,get_address(dpn_id,g))
+                sne = getindex(model,get_eid(nb,model))
+                link_down!(sne,dpn_id,model)
+            end
+            
+            aid = get_control_agent(dpn_id,model)
+            a = getindex(model,aid)
+            link_down!(a,dpn_id,model)
+
+            #soft remove 
             model.ntw_graph = soft_remove_vertex(g,get_address(dpn_id,g))
             
         end
@@ -602,7 +605,7 @@ It assumes property :eid of each vertex is global id of vertex
 function query_path(lg,s,d)
     ls = to_local_vertex(lg,s)
     ld = to_local_vertex(lg,d)
-    result =   LightGraphs.YenState{Float64,Int}([],[])
+    result =   LightGraphs.YenState{Float64,Int64}([],[])
     path = []
     
     if ls > 0 && ld > 0

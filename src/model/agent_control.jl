@@ -134,6 +134,9 @@ function process_msg!(a::Agent,msg::AGMessage,model)
         
         AG_Protocol(3) =>  
                         do_new_nb!(msg,a,model)                        
+        AG_Protocol(4) => 
+                        do_ne_down(a,msg,model)
+                     
         _ => begin
                 println("[$(model.ticks)]($(a.id)) -> match default")
             end
@@ -201,4 +204,30 @@ function do_new_nb!(msg::AGMessage,a::Agent,model)
         end
     end
 
+end
+
+# """
+#     It processes the simulated AG msg sent by itself to 
+#     indicate that one of its controlled NEs is down.
+#     In a real setting this could come from a process where
+#     the NE sends periodic heartbeats and when this is not received
+#     the control agent send itself this msg.
+
+# """
+# function do_ne_down(a::Agent,msg::AGMessage,model)
+    
+# end
+
+"""
+ It simulates a NE-controller link down
+ In reality this is the routine that checks heartbeats 
+ from controlled NEs.
+"""
+
+function link_down!(a::Agent,dpn_id::Int,model)
+    # ld_msg = AGMessage(next_amid!(model),model.ticks,a.id,a.id,NE_DOWN,Dict(:did => dpn_id))
+    # send_msg!(agent.id,ld_msg,model)
+
+    set_control_agent!(dpn_id,0,model)
+    init_agent!(a,model)
 end

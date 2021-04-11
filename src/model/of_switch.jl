@@ -14,6 +14,7 @@ end
     QUERY_PATH = 1
     MATCH_PATH = 2
     NEW_NB = 3
+    NE_DOWN = 4
 end
 #@enum Ofp_Config_Flag EventOFPPortStatus=1 
 
@@ -30,7 +31,7 @@ mutable struct DPacket <: Packet
     id::Int64
     src::Int64
     dst::Int64
-    size::Int64 # in bytes
+    size::Float64 # in bytes
     time_sent::Int64
     hop_limit::Int64
 end
@@ -357,37 +358,38 @@ function throughput(bytes₋₁,bytes₀, τ₋₁,τ₀)
     return Δτ > 0 && Δbytes >= 0 ? Δbytes / Δτ : 0
 end
 
-function link_down!(eid::Int,dpn_id::Int,model)
-    println("[$(model.ticks)]($(eid)) link down start")
+"""
+It simulates operations happening in a network asset
+when the link corresponding to the given dpn_id goes down
+"""
+function link_down!(sne::SimNE,dpn_id::Int,model)
+    println("[$(model.ticks)]($(sne.id)) link down start")
     #remove from list of ports
-    sne = getindex(model,eid)
     new_port_edge_list::Vector{Tuple{Int64,String}} = []
     dpn_port = -1
     for p in get_port_edge_list(sne)
-        println("[$(model.ticks)]($(eid)) port found: $p")
+        println("[$(model.ticks)]($(sne.id)) port found: $p")
         if p[2]!="s"*string(dpn_id)
             push!(new_port_edge_list,p)
         else
             dpn_port = p[1]
         end
     end
-    println("[$(model.ticks)]($(eid)) link down mid")
+    println("[$(model.ticks)]($(sne.id)) link down mid")
     set_port_edge_list!(sne,new_port_edge_list)
     new_flow_table::Vector{Flow} = []
     for f in get_flow_table(sne)
-        println("[$(model.ticks)]($(eid)) dpn_port: $dpn_port in $(f.params) - flow found: $(f)")
+        println("[$(model.ticks)]($(sne.id)) dpn_port: $dpn_port in $(f.params) - flow found: $(f)")
         if  ~(dpn_port in f.params)
             push!(new_flow_table,f)
         end    
     end
     set_flow_table!(sne,new_flow_table)
-    println("[$(model.ticks)]($(eid)) new flow found: $(get_state(sne).flow_table)")
-    #sne.state.flow_table = sne.state.flow_table - filter(f->dpn_port in f.params,sne.state.flow_table)[1]
-
+    println("[$(model.ticks)]($(sne.id)) new flow found: $(get_state(sne).flow_table)")
     controller = getindex(model,sne.controller_id)
     trigger_of_event!(model.ticks,controller,dpn_id,EventOFPPortStatus,model)
-    
 end
+
 
 function trigger_of_event!(ticks::Int,a::Agent,eid::Int,ev_type::Ofp_Event,model)
     msg = @match ev_type begin
@@ -534,41 +536,48 @@ function to_string(s::NetworkAssetState)
             sep * string(s.flow_table)
 end
 
-# function get_throughput(sne::SimNE)::Float64
-#     interval = 5
-#     trj = sne.state_trj[1:end]
-#     tpt = 0.0
-#     if length(trj) > interval
-#         l_in_pkt = last(trj).in_pkt
-#         p_in_pkt = trj[end-interval].in_pkt
-#         tpt  = (l_in_pkt - p_in_pkt) / interval
-#     end
-    
-#     return tpt
+"""
+    Calculates throughput for the given trajectory
+    - packet/bytes trajectory 
+    - interval: time steps
+
+"""
+function get_throughput(pb_trj::Array{Float64,1},interval::Int)
+    # print("received......-> $pkt_trj ")
+    acc_pb = zeros(Float64,min(length(pb_trj),interval))
+
+    if length(pb_trj) >= interval
+         acc_pb = vcat(acc_pb[1:end-1],rolling(mean,pb_trj,interval))
+    end
+
+    # b_1 = zeros(Float64,min(interval,length(pkt_trj)))
+    # b_2 = pkt_trj[1:end-interval]
+    # b = vcat(b_1,b_2)
+    # println("calculating tpt......-> $(a) -- $(b_1) -- $(b_2) -- $b ")
+    # result = get_throughput.(a,b,[interval]) 
+    # println("result of tpt is $result")
+    return acc_pb
+
+end
+
+"""
+It filters throughput only when the given sne is up
+"""
+function get_throughput_up(sne::SimNE,model)
+    v_pkt_in = [ s.in_pkt * model.:pkt_size for s in sne.state_trj ]
+    v_up = [ s.up for s in sne.state_trj ]
+    v_tpt = get_throughput(v_pkt_in,model.:interval_tpt)
+    return [ v_up[i] ? v_tpt[i] : 0.0   for i=1:length(v_tpt)]
+end
+
+
+# function get_throughput(e_tpt::Float64,s_tpt::Float64,interval::Int)::Float64
+#     return (e_tpt - s_tpt) > 0 && interval > 0 ? (e_tpt - s_tpt) / interval : 0.0
 # end
 
-function get_throughput(pkt_trj::Array{Int64,1},interval::Int)
-    # print("received......-> $pkt_trj ")
-    result = []
-
-    a = pkt_trj
-    b_1 = zeros(Int,min(interval,length(pkt_trj)))
-    b_2 = pkt_trj[1:end-interval]
-    b = vcat(b_1,b_2)
-    # println("calculating tpt......-> $(a) -- $(b_1) -- $(b_2) -- $b ")
-    result = get_throughput.(a,b,[interval]) 
-    # println("result of tpt is $result")
-    return result
-
-end
-
-function get_throughput(e_tpt::Int,s_tpt::Int,interval::Int)::Float64
-    return (e_tpt - s_tpt) > 0 && interval > 0 ? (e_tpt - s_tpt) / interval : 0.0
-end
-
-function get_throughput(a::Agent)::Int
-    return 0
-end
+# function get_throughput(a::Agent)::Int
+#     return 0
+# end
 
 function get_condition_ts(a::Agent)
     return zeros(1,1)

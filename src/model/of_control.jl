@@ -119,7 +119,6 @@ function process_msg!(a::Agent,msg::OFMessage,model)
                                 #println("[$(model.ticks)]($(a.id)) -> match two")
                                 port_delete_handler(a,msg,model)
                             end
-                            
         _ => begin
             println("[$(model.ticks)]($(a.id)) -> match default")
             end
@@ -290,7 +289,11 @@ end
 function set_down!(a::Agent)
     a.state.up = false
 end
-
+"""
+    It processes OF msg sent by controlled NE  to
+    remove a given port from its graph
+    
+"""
 function port_delete_handler(a::Agent,msg::OFMessage,model)
     # init_agent!(a,model)
     new_paths_dict = Dict()

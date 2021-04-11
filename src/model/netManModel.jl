@@ -22,15 +22,16 @@ function initialize(args,user_props;grid_dims=(3,3),seed=0)
         :mapping_ctl_ntw => Dict{Int64,Int64}(), # mapping between (Ctl) Agent and SimNE
         :mapping_ntw_sne => Dict{Int64,Int64}(), #mapping btwn the underlying network and the corresponding simNE agent 
         :max_cache_paths => 2,
-        :pkt_per_tick => 500, # How many packets are processsed per tick
+        :pkt_per_tick => 1000, # How many packets are processsed per tick
         :ctrl_model => DISTRIBUTED, #CENTRALISED,
-        :pkt_size => 1500,
+        :pkt_size => 0.065, # (in MB) Max pkt size  IP is 65536 bytes
         :freq => 30, # frequency of monitoring
         :N=>args[:N],
         # key(src,dst)=>value(time_left_at_link =>msg)
         :ntw_links_msgs=>Dict{Tuple{Int,Int},Vector{Vector{OFMessage}}}(),
         :ntw_links_delays =>Dict{Tuple{Int,Int},Int}(),
-        :state_trj => Vector{ModelState}()
+        :state_trj => Vector{ModelState}(),
+        :interval_tpt => 10
     )
 
     Random.seed!(seed)
@@ -278,9 +279,13 @@ function init_agent!(a::Agent,model)
     a.params[:ctl_graph] = ctl_sub_g
     a.params[:delay_ctl_link] = 1 # 1: no delay
 
-    all_paths = all_k_shortest_paths(sub_g)
-    
-    a.state.paths = label_paths(model.ticks,all_paths)
+    if nv(sub_g) > 0
+        all_paths = all_k_shortest_paths(sub_g)   
+        a.state.paths = label_paths(model.ticks,all_paths)
+    else
+        a.state.paths = Dict()
+    end
+
     #a.params[:delay_ctl_link]
     
 
@@ -295,10 +300,12 @@ end
 
 function label_paths(time::Int64,paths::Array{LightGraphs.YenState{Float64,Int64},1})
     npaths = Dict()
-    for path in paths 
-        if !isempty(path.paths)
-            #obtain only the first path
-            npaths[(first(first(path.paths)),last(first(path.paths)))] = [(time,first(path.dists),first(path.paths))]
+    if !isempty(paths)
+        for path in paths 
+            if !isempty(path.paths)
+                #obtain only the first path
+                npaths[(first(first(path.paths)),last(first(path.paths)))] = [(time,first(path.dists),first(path.paths))]
+            end
         end
     end
     return npaths
@@ -362,7 +369,7 @@ end
 
 function create_pkt(src::Int64,dst::Int64,model)
     model.pkt_id += 1
-    return DPacket(model.pkt_id,src,dst,1500,model.:ticks,100)
+    return DPacket(model.pkt_id,src,dst,model.:pkt_size,model.:ticks,100)
 end
 
 """
@@ -383,10 +390,10 @@ end
 
 
 function generate_traffic!(model)
-    q_pkts = abs(round(100rand(Normal(1,0.1))))
-    #q_pkts = 100
+    #q_pkts = abs(round(200rand(Normal(1,0.1))))
+    q_pkts = 300
     #src,dst = samplepair(1:nv(model.ntw_graph)) # can be replaced for random pair
-    pairs = [(1,7),(4,1),(9,5)] #[(9,5)] #[(4,5)]#
+    pairs = [(1,7)]#,(4,1),(9,5)] #[(9,5)] #[(4,5)]#
 
     for p in pairs
         src,dst = p
