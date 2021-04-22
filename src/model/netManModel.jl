@@ -19,10 +19,11 @@ function initialize(args,user_props;grid_dims=(3,3),seed=0)
         :ΔΦ => args[:ΔΦ],
         :ntw_graph => args[:ntw_graph],
         :ctl_graph => args[:ctl_graph],
+        :dropping_nodes=>args[:dropping_nodes],
         :mapping_ctl_ntw => Dict{Int64,Int64}(), # mapping between (Ctl) Agent and SimNE
         :mapping_ntw_sne => Dict{Int64,Int64}(), #mapping btwn the underlying network and the corresponding simNE agent 
         :max_cache_paths => 2,
-        :pkt_per_tick => 1000, # How many packets are processsed per tick
+        :pkt_per_tick => 2000, # How many packets are processsed per tick
         :ctrl_model => DISTRIBUTED, #CENTRALISED,
         :pkt_size => 0.065, # (in MB) Max pkt size  IP is 65536 bytes
         :freq => 30, # frequency of monitoring

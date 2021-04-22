@@ -252,8 +252,8 @@ function plot_throughput(
     model;
     kwargs...
 )
-
-    tpt_p = plot(title="tpt",titlefontcolor=:white,ylims=[0,60])
+    max_y = 100
+    tpt_p = plot(title="tpt",titlefontcolor=:white,ylims=[0,max_y])
     for i=1:nv(model.ntw_graph)
         sne = getindex(model,get_eid(i,model))
         # v_pkt_in = [ s.in_pkt * model.:pkt_size for s in sne.state_trj ]
@@ -264,7 +264,7 @@ function plot_throughput(
         )
     end
 
-    annotate!((-1,33,Plots.text("Throughput", 11, :black, :center)))
+    annotate!((-1,max_y+8,Plots.text("Throughput", 11, :black, :center)))
 
     return tpt_p
 end
@@ -296,13 +296,14 @@ function soft_drop_node(model)
     #1remove from network
     #2in controller: update topology and paths
     #in switch detect path/port not available and ask controller
-    g = model.ntw_graph
-    dpn_ids = [3] # dropping node id
-    dpt = 80 # dropping time
-
-    if model.ticks == dpt
-
+    
+    # dropping node id
+    # dropping time
+    dn = model.dropping_nodes
+    if haskey(dn,model.ticks)
+        dpn_ids = dn[model.ticks]
         for dpn_id in dpn_ids
+            g = model.ntw_graph
             dpn_ag = getindex(model,dpn_id)
             set_down!(dpn_ag)
 

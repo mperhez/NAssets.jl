@@ -34,6 +34,7 @@ args[:Τ]=10
 args[:ΔΦ]=1
 args[:ntw_graph]=ntw_graph
 args[:ctl_graph]=ctl_graph
+args[:dropping_nodes]=Dict(80=>[3],120=>[2]) # drop time => drop node
 # params[:graph] = swg               
 #adata = [:phase,:color]
 adata = [get_state_trj,get_condition_ts, get_rul_ts]

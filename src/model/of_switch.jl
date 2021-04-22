@@ -351,6 +351,10 @@ function process_msg!(sne::SimNE,msg::OFMessage,model)
     end
 end
 
+"""
+    It enqueues packets that were not processed in 
+    previous time steps. It discard packets according to defined size of the queue.
+"""
 
 function pending_pkt_handler(a::SimNE,model)
     # if model.ticks in 80:1:90 && a.id == 10
