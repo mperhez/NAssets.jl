@@ -145,7 +145,9 @@ function plot_ctl_network_multi(
         ,size=(300,200)
         ,node_weights = [ i > 9 ? 1 : 5 for i in 1:nv(model.ctl_graph)]
         ,nodeshape = :circle
-        ,nodecolor = [ getindex(model,get_prop(model.ctl_graph, i, :aid)).state.color for i=1:nv(model.ctl_graph) ]
+        ,nodecolor = [ has_active_controlled_assets(
+                        getindex(model,model.ctl_graph[i,:aid]),model
+                       ) ? :lightblue : :lightgray for i in 1:nv(model.ctl_graph) ]
         ,markerstrokecolor = :dimgray
         ,edgecolor=:dimgray
         ,markerstrokewidth = 1.1
@@ -279,6 +281,13 @@ function get_controlled_assets(agent_id::Int,model)
     assets = filter(k->model.mapping_ctl_ntw[k] == agent_id,keys(model.mapping_ctl_ntw))
     #println("assets controlled by $(agent_id) are: $(length(assets))")
     return assets
+end
+
+function has_active_controlled_assets(agent::Agent,model)
+    assets = get_controlled_assets(agent.id,model)
+
+    sum_up = sum([ is_up(getindex(model,sne)) for sne in assets ])
+    return sum_up > 0 ? true : false
 end
 
 
