@@ -283,9 +283,9 @@ function init_agent!(a::Agent,model)
 
     if nv(sub_g) > 0
         all_paths = all_k_shortest_paths(sub_g)   
-        a.state.paths = label_paths(model.ticks,all_paths)
+        get_state(a).paths = label_paths(model.ticks,all_paths)
     else
-        a.state.paths = Dict()
+        get_state(a).paths = Dict()
     end
 
     #a.params[:delay_ctl_link]

@@ -57,8 +57,8 @@ function do_match!(msg::AGMessage,a::Agent,model)
     
             for i=1:1#length(spath)-1
                 epaths = []            
-                if haskey(a.state.paths,(spath[i],last(spath)))
-                    epaths = a.state.paths[(spath[i],last(spath))]
+                if haskey(get_state(a).paths,(spath[i],last(spath)))
+                    epaths = get_state(a).paths[(spath[i],last(spath))]
       
                     push!(epaths,new_path)
                     
@@ -73,10 +73,8 @@ function do_match!(msg::AGMessage,a::Agent,model)
                 else
                     epaths = [new_path]
                 end
-                a.state.paths[(spath[i],last(spath))] = epaths
-                
-                # push!(a.state.paths,(spath[i],last(spath),spath[i:end]))
-    
+                get_state(a).paths[(spath[i],last(spath))] = epaths
+               
                 # println("[$(model.ticks)]($(a.id)) do_match! -- path added: $(spath[i:end])")
             end
         end
@@ -163,7 +161,7 @@ function do_query!(msg::AGMessage,a::Agent,model)
     #do query
     query = msg.body[:query]
     
-    path = do_query(model.ticks,query,jg,a.state.paths)
+    path = do_query(model.ticks,query,jg,get_state(a).paths)
 
 
     if isempty(path)
@@ -230,4 +228,31 @@ function link_down!(a::Agent,dpn_id::Int,model)
 
     set_control_agent!(dpn_id,0,model)
     init_agent!(a,model)
+end
+
+function get_state(a::Agent)::State
+    return last(a.state_trj)
+end
+function set_state!(a::Agent,new_state::ControlAgentState)
+    pop!(a.state_trj)
+    push!(a.state_trj,new_state)
+end
+
+# function get_throughput(a::Agent,model)
+#     a.msgs_in
+# end
+
+function get_state_trj(a::Agent)::Vector{State}
+    return a.state_trj
+end
+
+function to_string(s::ControlAgentState)
+    sep = "; "
+    return  string(s.a_id) * 
+            sep * string(s.up) *
+            sep * string(s.paths) * 
+            sep * string(s.in_ag_msg) *
+            sep * string(s.out_ag_msg) *
+            sep * string(s.in_of_msg) *
+            sep * string(s.out_of_msg)
 end

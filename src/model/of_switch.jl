@@ -113,6 +113,16 @@ function NetworkAssetState(ne_id::Int)
     NetworkAssetState(ne_id,true,Vector{Tuple{Int64,String}}(),0,0,0,Vector{Flow}())
 end
 
+mutable struct ControlAgentState <: State
+    a_id::Int64
+    up::Bool
+    paths::Dict{Tuple{Int64,Int64},Array{Tuple{Int64,Float64,Array{Int64}}}}
+    in_ag_msg::Int64
+    out_ag_msg::Int64
+    in_of_msg::Int64
+    out_of_msg::Int64
+end
+
 mutable struct SDNCtlAgState <: State
     up::Bool
     color::Symbol
@@ -141,17 +151,19 @@ mutable struct Agent <: SOAgent
     size::Float16
     pending::Vector{Tuple{Int64,OFMessage}} # Timeout for this msg to be reprocessed & msg
     of_started::Vector{Tuple{Int64,Int64}} # msg.id,  Time when msg was started
-    state::SDNCtlAgState
-    state_trj::Vector{SDNCtlAgState}
+    # state::SDNCtlAgState
+    state_trj::Vector{ControlAgentState}
     msgs_links::Array{Vector{AGMessage},2}
     msgs_in::Vector{AGMessage}
+    queue::Channel{OFMessage}
     params::Dict{Symbol,Any}
 end
 
 
 function Agent(id,nid,params)
-    s0 = SDNCtlAgState(zeros((2,2)),Vector{Float64}())
-    Agent(id,nid,:lightblue,0.1,Vector{OFMessage}(),Vector{Tuple{Int64,Int64}}(),s0,[s0],Array{Vector{AGMessage}}(undef,1,1),[],params)
+    # s0 = SDNCtlAgState(zeros((2,2)),Vector{Float64}())
+    s0 = ControlAgentState(id,true,Dict(),0,0,0,0)
+    Agent(id,nid,:lightblue,0.1,Vector{OFMessage}(),Vector{Tuple{Int64,Int64}}(),[s0],Array{Vector{AGMessage}}(undef,1,1),[],Channel{OFMessage}(500),params)
 end
 
 
@@ -176,11 +188,7 @@ function SimNE(id,nid,params,max_q)
 end
 
 function init_switch(a,model)
-    #action to forward via port 1
-    #push!(a.state.flow_table,Flow(1,MRule(0,1,7),(pkt)->forward(pkt,1)))
-    # for port_edge in a.state.port_edge_list
-    #     push!(a.state.flow_table,Flow(a.id,MRule(port_edge[1],"*",),(pkt)->forward(pkt,1)))
-    # end
+    
 end
 
 #in_port, src, dst -> action
@@ -195,7 +203,6 @@ end
 
 
 # function ask_controller(sne::SimNE,a::Agent,msg::OFMessage)
-#     put!(a.state.queue,OFMessage(next_ofmid!(model),msg.ticks,sne.id,msg.in_port,msg.data))
 #     #TODO in_processing msgs of controller to install flow for unknown dst
 # end
 
@@ -438,7 +445,7 @@ end
 # end
 
 
-function get_state(sme::SimNE)
+function get_state(sme::SimNE)::State
     return last(sme.state_trj)
 end
 
@@ -457,7 +464,7 @@ function is_up(sne::SimNE)
 end
 
 function is_up(a::Agent)
-    return a.state.up
+    return get_state(a).up
 end
 
 function set_port_edge_list!(sne::SimNE,port_edge_list::Vector{Tuple{Int64,String}})
@@ -482,7 +489,7 @@ function set_down!(sne::SimNE)
 end
 
 function is_ready(a::Agent)
-    return isready(a.state.queue)
+    return isready(a.queue)
 end
 
 function is_ready(sne::SimNE)
@@ -516,12 +523,6 @@ function set_out_pkt!(sne::SimNE,out_pkt::Int)
     state.out_pkt = out_pkt
     set_state!(sne,state)
 end
-function set_in_pkt!(a::Agent,in_pkt::Int)
-    push!(a.state.in_pkt_trj,in_pkt)
-end
-function set_out_pkt!(a::Agent,out_pkt::Int)
-    push!(a.state.out_pkt_trj,out_pkt)
-end
 
 function get_pending(a::AbstractAgent)
     return a.pending
@@ -549,14 +550,11 @@ function take_msg!(sne::SimNE)
 end
 
 function take_msg!(a::Agent)
-    take!(a.state.queue)
+    take!(a.queue)
 end
 
-function get_state_trj(sne::SimNE)::Vector{NetworkAssetState}
+function get_state_trj(sne::SimNE)::Vector{State}
     return sne.state_trj
-end
-function get_state_trj(a::Agent)::Vector{NetworkAssetState}
-    return []
 end
 
 function to_string(s::NetworkAssetState)
