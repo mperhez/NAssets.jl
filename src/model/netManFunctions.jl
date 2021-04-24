@@ -203,7 +203,7 @@ function plotabm_networks(
             plot_ctl_network_mono(model;kwargs...)
     
 
-    ctl_r = plot_empty()
+    ctl_r = plot_ctl_throughput(model; kwargs)#plot_empty()
 
     ntw_p = plot_asset_networks(model; kwargs)
     
@@ -214,6 +214,26 @@ function plotabm_networks(
     return p
 end
 
+function plot_ctl_throughput(
+    model;
+    kwargs...
+)
+    max_y = 15
+    tpt_p = plot(title="tpt",titlefontcolor=:white,ylims=[0,max_y])
+    for i=1:nv(model.ctl_graph)
+        a = getindex(model,model.ctl_graph[i,:aid])
+        # v_pkt_in = [ s.in_pkt * model.:pkt_size for s in sne.state_trj ]
+        tpt_v = get_throughput_up(a,model)#isempty(v_pkt_in) ? [0] : get_throughput(v_pkt_in,10)
+        tpt_p = plot!(tpt_v,xlims=[0,model.N], linealpha=0.5
+        # , line=:stem
+        ,legend = :outerright
+        )
+    end
+
+    annotate!((model.N,max_y+1,Plots.text("Control Throughput", 11, :black, :center)))
+
+    return tpt_p
+end
 
 function plot_asset_networks(
     model;
@@ -266,10 +286,12 @@ function plot_throughput(
         )
     end
 
-    annotate!((-1,max_y+8,Plots.text("Throughput", 11, :black, :center)))
+    annotate!((model.N,max_y+1,Plots.text("Throughput", 11, :black, :center)))
 
     return tpt_p
 end
+
+
 
 
 

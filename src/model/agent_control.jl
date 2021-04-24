@@ -139,6 +139,10 @@ function process_msg!(a::Agent,msg::AGMessage,model)
                 println("[$(model.ticks)]($(a.id)) -> match default")
             end
     end
+
+    state = get_state(a)
+    state.in_ag_msg+=1.0
+    set_state!(a,state)
 end
 
 """
@@ -255,4 +259,14 @@ function to_string(s::ControlAgentState)
             sep * string(s.out_ag_msg) *
             sep * string(s.in_of_msg) *
             sep * string(s.out_of_msg)
+end
+
+
+function get_throughput_up(a::Agent,model)
+    v_msg_in = [ s.in_ag_msg for s in a.state_trj ]
+
+    # println("[$(model.ticks)] ($(a.id)) msg in  ==> $v_msg_in")
+    v_up = [ s.up for s in a.state_trj ]
+    v_tpt = get_throughput(v_msg_in,model.:interval_tpt)
+    return [ v_up[i] ? v_tpt[i] : 0.0   for i=1:length(v_tpt)]
 end

@@ -2,7 +2,7 @@
 
 
 function push_msg!(a::Agent,msg::OFMessage)
-    put!(a.state.queue,msg)
+    put!(a.queue,msg)
 end
 
 function push_pending!(a::AbstractAgent,msg::OFMessage)
@@ -14,7 +14,7 @@ end
 function send_msg!(receiver::Int64,msg::OFMessage,model)
     ag = getindex(model,receiver)
     #TODO implement links and get delay of link in ticks
-    queue = typeof(ag) == SimNE ? ag.queue : ag.state.queue
+    queue = typeof(ag) == SimNE ? ag.queue : ag.queue
     println("Sent to $receiver msg: $msg")
     put!(queue,msg)
 end 
@@ -123,6 +123,10 @@ function process_msg!(a::Agent,msg::OFMessage,model)
             println("[$(model.ticks)]($(a.id)) -> match default")
             end
     end
+
+    state = get_state(a)
+    state.in_of_msg+=1.0
+    set_state!(a,state)
 end
 
 """
@@ -195,7 +199,7 @@ function do_query!(msg::OFMessage,a::Agent,model)
    
     query = (msg.dpid,msg.data.dst)
 
-    path = do_query(model.ticks,query,a.params[:ntw_graph],a.state.paths)
+    path = do_query(model.ticks,query,a.params[:ntw_graph],get_state(a).paths)
 
     if isempty(path)
         lg = a.params[:ntw_graph]
@@ -258,7 +262,7 @@ function pending_pkt_handler(a::Agent,model)
             println("[$(model.ticks)]($(a.id)) pending_msgt: $msgt")
             remaining = first(msgt) - 1  #msgt[1]: timeout
             if remaining <= 0 
-                put!(a.state.queue,last(msgt)) #msgt[2]: msg
+                put!(a.queue,last(msgt)) #msgt[2]: msg
             else
                 push!(new_pending,msgt)
             end
@@ -287,7 +291,9 @@ function do_drop!(msg::OFMessage,a::Agent,model)
 end
 
 function set_down!(a::Agent)
-    a.state.up = false
+    state = get_state(a)
+    state.up = false
+    set_state!(a,state)
 end
 """
     It processes OF msg sent by controlled NE  to
@@ -303,11 +309,11 @@ function port_delete_handler(a::Agent,msg::OFMessage,model)
     if dpid in ces
         do_drop!(msg,a,model)
     else
-        println("[$(model.ticks)]($(a.id)) Existing paths: $(a.state.paths)")
+        println("[$(model.ticks)]($(a.id)) Existing paths: $(get_state(a).paths)")
         
         #delete pre-computed paths containing dropping node
-        for path_k in keys(a.state.paths)
-            v_paths = a.state.paths[path_k]
+        for path_k in keys(get_state(a).paths)
+            v_paths = get_state(a).paths[path_k]
             new_paths = []
             for path in v_paths
                 if !(msg.data in last(path))
@@ -318,11 +324,13 @@ function port_delete_handler(a::Agent,msg::OFMessage,model)
                 new_paths_dict[path_k] = new_paths 
             end
         end
-        a.state.paths = new_paths_dict
+        state = get_state(a)
+        state.paths = new_paths_dict
+        set_state!(a,state)
         #delete dropping node from local graph
         lv = to_local_vertex(a.params[:ntw_graph],msg.data)
         a.params[:ntw_graph] = soft_remove_vertex(a.params[:ntw_graph],lv)
-        println("[$(model.ticks)]($(a.id)) New paths: $(a.state.paths)")
+        println("[$(model.ticks)]($(a.id)) New paths: $(get_state(a).paths)")
     end
 
 end
