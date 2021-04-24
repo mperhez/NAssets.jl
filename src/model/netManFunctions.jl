@@ -218,6 +218,7 @@ function plot_ctl_throughput(
     model;
     kwargs...
 )
+    get_ag_msg(model)
     max_y = 15
     tpt_p = plot(title="tpt",titlefontcolor=:white,ylims=[0,max_y])
     for i=1:nv(model.ctl_graph)
@@ -539,7 +540,11 @@ end
 function do_receive_messages(a::Agent,model)
     #TODO: check if another periodicity is required, rather than every tick
     #if !isempty(a.msgs_in) println("[$(model.ticks)]($(a.id)) in msgs: $(a.msgs_in)") end
+
+    #senders = [ m.sid for m in a.msgs_in ]
+    #println("[$(model.ticks)]($(a.id)) has $(length(a.msgs_in)) msgs to process from $senders" )
     for msg in a.msgs_in
+        #println(msg)
         process_msg!(a,msg,model)
     end
 end

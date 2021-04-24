@@ -150,44 +150,48 @@ end
 """
 function do_query!(msg::AGMessage,a::Agent,model)
     println("[$(model.ticks)]($(a.id)) -> TODO Local search")
-    
-    # visited control ag
-    trace = msg.body[:trace]
-    push!(trace,a.id)
-    
-    # join graph received
-    msg_ntw_g = create_subgraph(msg.body[:ntw_edgel],msg.body[:ntw_equiv],:eid)
-    # do not update local graph to avoid it to grow and in case of volatile topo
-    jg = join_subgraphs(a.params[:ntw_graph],msg_ntw_g)
-    ntw_edgel = [ e for e in edges(jg) if src(e) <  dst(e) ]
-    ntw_equiv = [(v,jg[v,:eid]) for v in vertices(jg)]
-    
-    #do query
-    query = msg.body[:query]
-    
-    path = do_query(model.ticks,query,jg,get_state(a).paths)
+    query_ignore = 5 #TODO to model
+    ignore = haskey(a.previous_queries,msg.body[:query]) ? model.ticks - a.previous_queries[msg.body[:query]] < query_ignore ? true : false : false
+        
+    if !ignore 
+        # visited control ag
+        trace = msg.body[:trace]
+        push!(trace,a.id)
+        
+        # join graph received
+        msg_ntw_g = create_subgraph(msg.body[:ntw_edgel],msg.body[:ntw_equiv],:eid)
+        # do not update local graph to avoid it to grow and in case of volatile topo
+        jg = join_subgraphs(a.params[:ntw_graph],msg_ntw_g)
+        ntw_edgel = [ e for e in edges(jg) if src(e) <  dst(e) ]
+        ntw_equiv = [(v,jg[v,:eid]) for v in vertices(jg)]
+        
+        #do query
+        query = msg.body[:query]
+        
+        path = do_query(model.ticks,query,jg,get_state(a).paths)
 
 
-    if isempty(path)
-        of_mid = msg.body[:of_mid]
-        nbody = Dict(:query=>query,:trace=>trace,:ntw_edgel => ntw_edgel, :ntw_equiv=>ntw_equiv, :of_mid=>of_mid)
-        msg_template = AGMessage(-1,model.ticks,a.id,-1,QUERY_PATH,nbody)
-        send_to_nbs!(msg_template,a,model)
-    else
-        do_match!(path,msg,a,model)
+        if isempty(path)
+            of_mid = msg.body[:of_mid]
+            nbody = Dict(:query=>query,:trace=>trace,:ntw_edgel => ntw_edgel, :ntw_equiv=>ntw_equiv, :of_mid=>of_mid)
+            msg_template = AGMessage(-1,model.ticks,a.id,-1,QUERY_PATH,nbody)
+            send_to_nbs!(msg_template,a,model)
+        else
+            do_match!(path,msg,a,model)
+        end
+
+        a.previous_queries[msg.body[:query]] = model.ticks
+
+        # if !isempty(paths)
+        #    #TODO consider case where multiple paths are found
+        #    path = [a.params[:ntw_graph][v,:eid] for v in first(found.paths)]
+        #    do_match!(path,msg,a,model)
+        # else # forward to neighbor controllers
+        #     nbody = Dict(:query=>query,:trace=>trace,:ntw_edgel => ntw_edgel, :ntw_equiv=>ntw_equiv, :of_mid=>of_mid)
+        #     msg_template = AGMessage(-1,model.ticks,a.id,-1,QUERY_PATH,nbody)
+        #     send_to_nbs!(msg_template,a,model)
+        # end
     end
-
-    
-
-    # if !isempty(paths)
-    #    #TODO consider case where multiple paths are found
-    #    path = [a.params[:ntw_graph][v,:eid] for v in first(found.paths)]
-    #    do_match!(path,msg,a,model)
-    # else # forward to neighbor controllers
-    #     nbody = Dict(:query=>query,:trace=>trace,:ntw_edgel => ntw_edgel, :ntw_equiv=>ntw_equiv, :of_mid=>of_mid)
-    #     msg_template = AGMessage(-1,model.ticks,a.id,-1,QUERY_PATH,nbody)
-    #     send_to_nbs!(msg_template,a,model)
-    # end
 
 end
 

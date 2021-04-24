@@ -526,3 +526,9 @@ end
 function get_state_trj(m::ABM)::Vector{ModelState}
     return m.state_trj
 end
+
+function get_ag_msg(model)
+    println("===>")
+    #println(sum.(eachcol([ [ s.in_ag_msg for s in a.state_trj ] for a in allagents(model) if typeof(a) == Agent ])))
+    println([ [ s.in_ag_msg for s in a.state_trj ] for a in allagents(model) if typeof(a) == Agent ])
+end
