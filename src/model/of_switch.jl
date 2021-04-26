@@ -117,10 +117,10 @@ mutable struct ControlAgentState <: State
     a_id::Int64
     up::Bool
     paths::Dict{Tuple{Int64,Int64},Array{Tuple{Int64,Float64,Array{Int64}}}}
-    in_ag_msg::Int64
-    out_ag_msg::Int64
-    in_of_msg::Int64
-    out_of_msg::Int64
+    in_ag_msg::Float64
+    out_ag_msg::Float64
+    in_of_msg::Float64
+    out_of_msg::Float64
 end
 
 mutable struct SDNCtlAgState <: State
@@ -156,6 +156,7 @@ mutable struct Agent <: SOAgent
     msgs_links::Array{Vector{AGMessage},2}
     msgs_in::Vector{AGMessage}
     queue::Channel{OFMessage}
+    previous_queries::Dict{Tuple{Int64,Int64},Int64} # (src,dst):tick last queried
     params::Dict{Symbol,Any}
 end
 
@@ -163,7 +164,7 @@ end
 function Agent(id,nid,params)
     # s0 = SDNCtlAgState(zeros((2,2)),Vector{Float64}())
     s0 = ControlAgentState(id,true,Dict(),0,0,0,0)
-    Agent(id,nid,:lightblue,0.1,Vector{OFMessage}(),Vector{Tuple{Int64,Int64}}(),[s0],Array{Vector{AGMessage}}(undef,1,1),[],Channel{OFMessage}(500),params)
+    Agent(id,nid,:lightblue,0.1,Vector{OFMessage}(),Vector{Tuple{Int64,Int64}}(),[s0],Array{Vector{AGMessage}}(undef,1,1),[],Channel{OFMessage}(500),Dict(),params)
 end
 
 
@@ -456,6 +457,10 @@ function init_state!(sme::SimNE)
     push!(sme.state_trj,new_state)
 end
 function init_state!(a::Agent)
+    new_state = deepcopy(get_state(a)) #!isnothing(get_state(sme)) ? deepcopy(get_state(sme)) : NetworkAssetState(sme.id)
+    new_state.in_ag_msg = 0
+    new_state.out_ag_msg = 0
+    push!(a.state_trj,new_state)
 end
 
 

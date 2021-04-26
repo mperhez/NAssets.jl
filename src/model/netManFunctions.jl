@@ -189,49 +189,26 @@ function plot_ctl_network_mono(
 
 end
 
-function plotabm_networks(
-    model;
-    kwargs...
-)
-    
-    l =  @layout([A{0.01h}; [B C ; D E]])  #(2,2) #@layout [a{1w} [grid(1,2) b{0.2h}] ] #@layout [a{1w};(1,2)]
-
-    title = plot(title = "Plot title", grid = false, showaxis = false, ticks=false, bottom_margin = -50Plots.px)
-
-    ctl_p = nv(model.ctl_graph) > 1 ? 
-            plot_ctl_network_multi(model;kwargs...) :
-            plot_ctl_network_mono(model;kwargs...)
-    
-
-    ctl_r = plot_ctl_throughput(model; kwargs)#plot_empty()
-
-    ntw_p = plot_asset_networks(model; kwargs)
-    
-    tpt_p = plot_throughput(model; kwargs)
-
-    p = Plots.plot(title,ctl_p,ctl_r,ntw_p,tpt_p, layout=l, size=(800,600))
-    
-    return p
-end
-
 function plot_ctl_throughput(
     model;
     kwargs...
 )
-    get_ag_msg(model)
-    max_y = 15
+    tpt_v = get_ag_msg(model)
+    max_y = maximum(tpt_v)+5
     tpt_p = plot(title="tpt",titlefontcolor=:white,ylims=[0,max_y])
-    for i=1:nv(model.ctl_graph)
-        a = getindex(model,model.ctl_graph[i,:aid])
-        # v_pkt_in = [ s.in_pkt * model.:pkt_size for s in sne.state_trj ]
-        tpt_v = get_throughput_up(a,model)#isempty(v_pkt_in) ? [0] : get_throughput(v_pkt_in,10)
-        tpt_p = plot!(tpt_v,xlims=[0,model.N], linealpha=0.5
+    # for i=1:nv(model.ctl_graph)
+    #     a = getindex(model,model.ctl_graph[i,:aid])
+        # tpt_v = get_throughput_up(a,model)
+    
+    println("Plotting...")
+    println(tpt_v)
+    tpt_p = plot!(tpt_v,xlims=[0,model.N], linealpha=0.5
         # , line=:stem
-        ,legend = :outerright
-        )
-    end
+                ,legend = :outerright
+                )
+    # end
 
-    annotate!((model.N,max_y+1,Plots.text("Control Throughput", 11, :black, :center)))
+    annotate!((model.N,max_y+1,Plots.text("Control Msgs", 11, :black, :center)))
 
     return tpt_p
 end
@@ -293,7 +270,30 @@ function plot_throughput(
 end
 
 
+function plotabm_networks(
+    model;
+    kwargs...
+)
+    
+    l =  @layout([A{0.01h}; [B C ; D E]])  #(2,2) #@layout [a{1w} [grid(1,2) b{0.2h}] ] #@layout [a{1w};(1,2)]
 
+    title = plot(title = "Plot title", grid = false, showaxis = false, ticks=false, bottom_margin = -50Plots.px)
+
+    ctl_p = nv(model.ctl_graph) > 1 ? 
+            plot_ctl_network_multi(model;kwargs...) :
+            plot_ctl_network_mono(model;kwargs...)
+    
+
+    ctl_r = plot_ctl_throughput(model; kwargs)#plot_empty()
+
+    ntw_p = plot_asset_networks(model; kwargs)
+    
+    tpt_p = plot_throughput(model; kwargs)
+
+    p = Plots.plot(title,ctl_p,ctl_r,ntw_p,tpt_p, layout=l, size=(800,600))
+    
+    return p
+end
 
 
 function get_control_agent(asset_id::Int,model)
