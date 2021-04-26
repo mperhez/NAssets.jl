@@ -616,11 +616,13 @@ end
 # end
 
 function get_condition_ts(a::Agent)
-    return zeros(1,1)
+    #return a.id
+    return ones(1,1)
 end
 
 function get_condition_ts(sne::SimNE)
     return sne.condition_ts
+    #return sne.id
 end
 
 function get_rul_ts(a::Agent)

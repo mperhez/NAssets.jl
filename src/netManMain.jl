@@ -18,25 +18,37 @@ include("netManAbm.jl")
 data_dir = "data/"
 plots_dir = "plots/"
 
+
+ctl_model = ControlModel(4)
 # exps = Dict()
 args = Dict()
 params = Dict()
 
-
-ntw_graph = load_network_graph()
-ctl_graph = load_control_graph()
-q_agents = nv(ntw_graph)+nv(ctl_graph)
-
-n = 20
+n = 200
 args[:N]=n
-args[:q]=q_agents
 args[:Τ]=10
 args[:ΔΦ]=1
+ntw_graph = load_network_graph()
 args[:ntw_graph]=ntw_graph
-args[:ctl_graph]=ctl_graph
 args[:dropping_nodes]=Dict(80=>[3],120=>[2]) # drop time => drop node
 # params[:graph] = swg               
 #adata = [:phase,:color]
+args[:ctrl_model] = ctl_model
+
+q_ctl_agents = 0
+
+if ctl_model == ControlModel(1)
+    args[:ctl_graph] = MetaGraph()
+    q_ctl_agents = 1
+else
+    ctl_graph = load_control_graph(ctl_model,nv(ntw_graph))
+    args[:ctl_graph]=ctl_graph
+    q_ctl_agents = nv(ctl_graph)
+end
+
+q_agents = nv(ntw_graph)+q_ctl_agents
+args[:q]=q_agents
+
 adata = [get_state_trj,get_condition_ts, get_rul_ts]
 mdata = [:mapping_ctl_ntw,get_state_trj]
 anim,result_agents,result_model = run_model(n,args,params; agent_data = adata, model_data = mdata)
@@ -46,6 +58,14 @@ ags_1 = vcat([ [ split(string(j-1)*";"*replace(to_string(ags[i][j]),"NetworkAsse
 
 ags_condition = last(result_agents,q_agents)["get_condition_ts"]
 ags_rul = last(result_agents,q_agents)["get_rul_ts"]
+
+# println(ags_condition)
+
+    # for i=1:size(ags_condition,1)#nv(ntw_graph)
+    #     println("testing $i ...")
+    #     println(ags_condition[i])
+    #     #println(hcat([i 1; i 2 ; i 3] , ags_condition[i]),';')
+    # end
 
 open(data_dir*"exp_raw/"*"condition_agents.csv", "w") do io
     for i=1:nv(ntw_graph)

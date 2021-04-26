@@ -24,7 +24,7 @@ function initialize(args,user_props;grid_dims=(3,3),seed=0)
         :mapping_ntw_sne => Dict{Int64,Int64}(), #mapping btwn the underlying network and the corresponding simNE agent 
         :max_cache_paths => 2,
         :pkt_per_tick => 2000, # How many packets are processsed per tick
-        :ctrl_model => DISTRIBUTED, #CENTRALISED,
+        :ctrl_model => args[:ctrl_model], 
         :pkt_size => 0.065, # (in MB) Max pkt size  IP is 65536 bytes
         :freq => 30, # frequency of monitoring
         :N=>args[:N],
@@ -49,10 +49,9 @@ function initialize(args,user_props;grid_dims=(3,3),seed=0)
 end
 
 """
-Simplest create agents
+    Create simulated asset agents
 """
-
-function create_agents!(model)
+function create_sim_asset_agents!(model)
     a_params = Dict(:pkt_per_tick=>model.pkt_per_tick)    
     # create SimNE
     for i in 1:nv(model.properties[:ntw_graph])
@@ -67,35 +66,64 @@ function create_agents!(model)
         # create initial mapping btwn network and SimNE
         model.mapping_ntw_sne[i] = i   
     end
+
     set_indexing_prop!(model.ntw_graph, :eid)
-    println(" Nodes CTL: $(nv(model.properties[:ctl_graph]))")
-    #create control agents 1:1
-    for i in 1:nv(model.properties[:ctl_graph])
-        #next_fire = rand(0:0.2:model.:Τ)
+end
+
+
+"""
+    Create control agents
+"""
+function create_control_agents!(model)
+    
+    a_params = Dict(:pkt_per_tick=>model.pkt_per_tick)
+    
+    if model.ctrl_model == CENTRALISED
         id = nextid(model)
         a = add_agent_pos!(
-                Agent(id,i,a_params),model
+                Agent(id,1,a_params),model
             )
-        set_props!(model.ctl_graph, i, Dict(:eid => i, :aid => id) )
-        ##assign controller to SimNE
-        if model.ctrl_model == CENTRALISED
-            for j in 1:nv(model.properties[:ntw_graph])
-                set_control_agent!(j,id,model)
-            end
-        else
+        #set_props!(model.ctl_graph, 1, Dict(:eid => 1, :aid => id) )
+         ##assign controller to SimNE
+        for j in 1:nv(model.properties[:ntw_graph])
+            set_control_agent!(j,id,model)
+        end
+    else
+        println(" Nodes CTL: $(nv(model.properties[:ctl_graph]))")
+        for i in 1:nv(model.properties[:ctl_graph])
+            #next_fire = rand(0:0.2:model.:Τ)
+            id = nextid(model)
+            a = add_agent_pos!(
+                    Agent(id,i,a_params),model
+                )
+            set_props!(model.ctl_graph, i, Dict(:eid => i, :aid => id) )
+            ##assign controller to SimNE
             #one-to-one mapping 
             set_control_agent!(i,id,model)
         end
+        set_indexing_prop!(model.ctl_graph, :aid)
     end
-    set_indexing_prop!(model.ctl_graph, :aid)
     
+    
+    
+end
+
+
+
+"""
+Simplest create agents
+"""
+
+function create_agents!(model)
+    create_sim_asset_agents!(model)
+    
+    create_control_agents!(model)
+
+    println("Total agents created: $(length(allagents(model)))")
 
     init_agents!(model)
-    # for i in 1:nv(model.properties[:ntw_graph])
-    #     @show get_node_agents(i, model)
-    # end
-
 end
+
 
 
 
@@ -178,12 +206,18 @@ function run_model(n,args,properties; agent_data, model_data)
     #p = plotabm(model; plotkwargs...)
     df = init_agent_dataframe(model,agent_data)
     df_m = init_model_dataframe(model,model_data)
+
+   
+
+
     anim = @animate for i in 0:n
             p = plotabm_networks(model; plotkwargs...)
             title!(p, "step $(i)",position=(10,1))
             #annotate!((1,1,Plots.text("step $(i)", 11, :black, :center)))
             step!(model, agent_step!,model_step!)
             collect_agent_data!(df, model, agent_data, i)
+            println("Total agents in run: $(length(allagents(model)))")
+            println("data -> $(size(df)) ")
             collect_model_data!(df_m, model, model_data, i)
         end
     println("PRINTING HERE")
@@ -217,87 +251,72 @@ function init_agents!(model)
     end
 end
 
-function init_agent!(a::Agent,model)
+"""
+It generates subgraph for the vector of nodes passed. This is similar to egonet but it keeps custom indexes given in id_prop parameter.
 
-    println("Starting Agent $(a.id)")
-    
+- g: graph
+- It receives vector of controlled assets (nodes)
+- id_prop: :eid (simNE) or :aid (agent)
+"""
+function get_subgraph(g,nodes,id_prop)
     # calculate local subgraph for the underlying network
-
-    nes = collect(get_controlled_assets(a.id,model))
+    
     nbs = []
 
-    for i=1:length(nes)
-        # println("Agent $(a.id) controls node: $(get_address(nes[i],model.ntw_graph))")
+    for i=1:length(nodes)
+        # get vertex for node id (assumes only one)
+        v = first(filter(v->g[v,id_prop] == nodes[i],1:nv(g)))
+        
         #subgraph
-        push!(nbs,deepcopy(neighbors(model.ntw_graph,nes[i])))
-        push!(nbs,[nes[i]])
+        push!(nbs,[ g[j,id_prop] for j in neighbors(g,v)])
+        #push!(nbs,neighbors(g,nodes[i]))
+        push!(nbs,[nodes[i]])
     end
 
     nnbs = vcat(nbs...)
-    sub_g = deepcopy(model.ntw_graph)
-    vs = collect(vertices(sub_g))
+    sub_g = deepcopy(g)
+    vs = [ sub_g[v,id_prop] for v in collect(vertices(sub_g))]
     to_del = [v for v ∈ vs if v ∉ nnbs]
-    
-#     print("to delete: $(to_del)")
-#     println("Agent $(a.id) : nnbs: $(nnbs)")
-
-
-    # It seems unnecessary as removing vertex remove all edges
-    # for v in collect(vertices(sub_g))
-    #     for d in collect(vertices(sub_g))
-    #         if d in to_del
-    #             rem_edge!(sub_g,d,v)
-    #             rem_edge!(sub_g,v,d)
-    #         end
-    #     end
-    # end
+   
     for d in to_del
         for v in collect(vertices(sub_g))
-            if !has_prop(sub_g,v,:eid) || get_prop(sub_g,v,:eid) == d
+            if !has_prop(sub_g,v,id_prop) || get_prop(sub_g,v,id_prop) == d
                 rem_vertex!(sub_g,v)
             end
         end
     end
-    
-    ctl_sub_g = deepcopy(model.ctl_graph)
+    return sub_g
+end
 
-    # create local subgraph for the control network
 
-    ctl_v = first(filter(v->get_prop(ctl_sub_g,v,:aid) == a.id,1:nv(ctl_sub_g)))
+function init_agent!(a::Agent,model)
+
+    println("Starting Agent $(a.id)")
     
-    ctl_ns = collect(neighbors(ctl_sub_g,ctl_v))
-    ctl_ns = [ctl_ns...,ctl_v]
-    to_del = [v for v ∈ vs if v ∉ ctl_ns]
-    
-    for d in to_del
-        for v in collect(vertices(ctl_sub_g))
-            if !has_prop(ctl_sub_g,v,:eid) || get_prop(ctl_sub_g,v,:eid) == d
-                rem_vertex!(ctl_sub_g,v)
-            end
-        end
+    if model.ctrl_model != ControlModel(1)
+        #Calculate sub graphs and init msg channels among agents
+        nodes = [get_controlled_assets(a.id,model)...]
+        sub_g = get_subgraph(model.ntw_graph,nodes,:eid)
+        # println("Asset Network size $(nv(sub_g))")
+        nodes = [a.id]
+        ctl_sub_g = get_subgraph(model.ctl_graph,nodes,:aid)
+        # println("Control Network size $(nv(ctl_sub_g))")
+
+        a.params[:ntw_graph] = sub_g
+        a.params[:ctl_graph] = ctl_sub_g
+        a.params[:delay_ctl_link] = 1 # 1: no delay
+        #Init vector of msgs
+        a.msgs_links = init_array_vectors(AGMessage,a.params[:delay_ctl_link],degree(a.params[:ctl_graph],to_local_vertex(a.params[:ctl_graph],a.id,:aid)))
+    else
+        a.params[:ntw_graph] = model.ntw_graph
     end
-
-    a.params[:ntw_graph] = sub_g
-    a.params[:ctl_graph] = ctl_sub_g
-    a.params[:delay_ctl_link] = 1 # 1: no delay
-
-    if nv(sub_g) > 0
-        all_paths = all_k_shortest_paths(sub_g)   
+    
+    if nv(a.params[:ntw_graph]) > 0
+        all_paths = all_k_shortest_paths(a.params[:ntw_graph])   
         get_state(a).paths = label_paths(model.ticks,all_paths)
     else
         get_state(a).paths = Dict()
     end
-
-    #a.params[:delay_ctl_link]
-    
-
-    #Init vector of msgs
-    #a.msgs_links = Array{Vector{AGMessage}}(undef,a.params[:delay_ctl_link],degree(ctl_sub_g,to_local_vertex(ctl_sub_g,a.id,:aid)))
-    #[ a.msgs_links[i,j] = Vector{AGMessage}() for i=1:size(a.msgs_links,1) for j=1:size(a.msgs_links,2)]
-    a.msgs_links = init_array_vectors(AGMessage,a.params[:delay_ctl_link],degree(ctl_sub_g,to_local_vertex(ctl_sub_g,a.id,:aid)))
-
-    #println(a.msgs_links)
-
 end
 
 function label_paths(time::Int64,paths::Array{LightGraphs.YenState{Float64,Int64},1})
@@ -322,14 +341,14 @@ end
 
 
 
-function init_agent!(a::SimNE,model)
+function init_agent!(sne::SimNE,model)
     #print("Initialisation of SimNE agent $(a.id)")
-    nbs = all_neighbors(model.ntw_graph,get_address(a.id,model.ntw_graph))
+    nbs = all_neighbors(model.ntw_graph,get_address(sne.id,model.ntw_graph))
     
-    push_ep_entry!(a,(0,"h$(a.id)")) # link to a host of the same id
+    push_ep_entry!(sne,(0,"h$(sne.id)")) # link to a host of the same id
     
     for i in 1:size(nbs,1)
-        push_ep_entry!(a,(i,"s$(nbs[i])"))
+        push_ep_entry!(sne,(i,"s$(nbs[i])"))
     end
 
     #initialise condition: we generate entire time series to failure
@@ -344,11 +363,13 @@ function init_agent!(a::SimNE,model)
     ttf = 100
     Δᵩ = 0.05
     downtime = 2 #time steps
-    a.condition_ts = generate_sensor_series(ttf,model.N,Δᵩ,0.05,downtime,funs)
+    sne.condition_ts = generate_sensor_series(ttf,model.N,Δᵩ,0.05,downtime,funs)
     vrul = generate_rul_series(ttf,Δᵩ,model.N,downtime)
-    a.rul = vrul#reshape(vrul,length(vrul),1)
-       
-    init_switch(a,model)
+    sne.rul = vrul#reshape(vrul,length(vrul),1)
+   
+    init_switch(sne,model)
+
+    println("Initialised $(sne.id) => $(size(sne.condition_ts))")
 end
 
 
@@ -507,10 +528,11 @@ function init_array_vectors(T,d1,d2)
 end
 
 function ctl_links_step!(model)
-    
-    ctl_ags = filter(a->typeof(a) == Agent,Set(allagents(model)))
-    #println(ctl_ags)
-    ctl_link_step!.(ctl_ags)
+    if model.ctrl_model != ControlModel(1)
+        ctl_ags = filter(a->typeof(a) == Agent,Set(allagents(model)))
+        #println(ctl_ags)
+        ctl_link_step!.(ctl_ags)
+    end
 
 end
 
@@ -527,6 +549,9 @@ function get_state_trj(m::ABM)::Vector{ModelState}
     return m.state_trj
 end
 
+"""
+Return total of control messages exchanged by agents
+"""
 function get_ag_msg(model)
     #println([ [ s.in_ag_msg for s in a.state_trj ] for a in allagents(model) if typeof(a) == Agent ])
     return cumsum(sum.(eachcol([ [ s.in_ag_msg for s in a.state_trj ] for a in allagents(model) if typeof(a) == Agent ]))...)    

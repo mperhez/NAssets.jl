@@ -1,6 +1,11 @@
 export ϕ
 
-@enum ControlModel CENTRALISED=1 DISTRIBUTED=2
+@enum ControlModel begin
+    CENTRALISED=1 
+    RING=2
+    MIRROR=3
+    COMPLETE=4
+end
 
 function ϕ(t,T,pulse)
     α = 0.5
@@ -118,9 +123,15 @@ end
     load the graph of the control system
 """
 
-function load_control_graph()
+function load_control_graph(ctl_model,size)
+   
     Random.seed!(123)
-    ntw = MetaGraph(watts_strogatz(10,4,0.8)) #watts_strogatz(25,4,0.8) #complete_graph(1)
+    ntw = @match ctl_model begin
+        ControlModel(2) => MetaGraph( [Int(i) for i in ring_graph(size)])
+        ControlModel(3) => MetaGraph(watts_strogatz(size,4,0.8)) 
+        ControlModel(4) => MetaGraph(LightGraphs.complete_graph(size))
+    end
+    #watts_strogatz(25,4,0.8) #complete_graph(1)
     #ntw = MetaGraph( [Int(i) for i in ring_graph(10)])
     #indexing can't be done here because aid has not been assigned
     #set_indexing_prop!(ntw,:aid)
@@ -279,7 +290,7 @@ function plotabm_networks(
 
     title = plot(title = "Plot title", grid = false, showaxis = false, ticks=false, bottom_margin = -50Plots.px)
 
-    ctl_p = nv(model.ctl_graph) > 1 ? 
+    ctl_p = model.ctrl_model != ControlModel(1) ? 
             plot_ctl_network_multi(model;kwargs...) :
             plot_ctl_network_mono(model;kwargs...)
     
@@ -516,19 +527,19 @@ function do_agent_step!(a::Agent,model)
 
     #Find the shortest path
 
-    ctl_g = a.params[:ctl_graph]
-    controlled = get_controlled_assets(a.id,model)
-    my_v = 0
-    for v in vertices(ctl_g)
-        if get_prop(ctl_g,v,:aid) == a.id
-            my_v = v
-        end
-        # println(" Agent $(a.id) => props of node $v are: $(props(ctl_g, v))")
-    end
-    for c in controlled
-        #v = get_prop(ctl_g,c,:eid)
-        # [ println("CTL Ag $(a.id) graph has nodes: $(get_prop(ctl_g,nb,:aid))") for nb in neighbors(ctl_g,my_v)]
-    end
+    # ctl_g = a.params[:ctl_graph]
+    # controlled = get_controlled_assets(a.id,model)
+    # my_v = 0
+    # for v in vertices(ctl_g)
+    #     if get_prop(ctl_g,v,:aid) == a.id
+    #         my_v = v
+    #     end
+    #     # println(" Agent $(a.id) => props of node $v are: $(props(ctl_g, v))")
+    # end
+    # for c in controlled
+    #     #v = get_prop(ctl_g,c,:eid)
+    #     # [ println("CTL Ag $(a.id) graph has nodes: $(get_prop(ctl_g,nb,:aid))") for nb in neighbors(ctl_g,my_v)]
+    # end
 
     
 
@@ -543,9 +554,12 @@ function do_receive_messages(a::Agent,model)
 
     #senders = [ m.sid for m in a.msgs_in ]
     #println("[$(model.ticks)]($(a.id)) has $(length(a.msgs_in)) msgs to process from $senders" )
-    for msg in a.msgs_in
-        #println(msg)
-        process_msg!(a,msg,model)
+
+    if model.ctrl_model != ControlModel(1)
+        for msg in a.msgs_in
+            #println(msg)
+            process_msg!(a,msg,model)
+        end
     end
 end
 
