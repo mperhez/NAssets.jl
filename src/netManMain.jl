@@ -19,12 +19,12 @@ data_dir = "data/"
 plots_dir = "plots/"
 
 
-ctl_model = ControlModel(4)
+ctl_model = ControlModel(2)
 # exps = Dict()
 args = Dict()
 params = Dict()
 
-n = 200
+n = 20
 args[:N]=n
 args[:Τ]=10
 args[:ΔΦ]=1

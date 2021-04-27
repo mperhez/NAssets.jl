@@ -239,7 +239,7 @@ end
 
 function add_downtime_to_series(ttf,ot,s_series)
 
-    println(" RECEIVED adding downtime ==>$(s_series)<==")
+    #println(" RECEIVED adding downtime ==>$(s_series)<==")
 
     # split s_series in phases/cycles of ttf
     phased_s = [s_series[i:min(i + ttf - 1, end)] for i in 1:ttf:length(s_series)]
@@ -265,7 +265,7 @@ end
 """
 function generate_sensor_series(ttf,n,Δᵩ,ϵₛ,ot,funs)
     vs = zeros(Float64,length(funs),n)
-    println("received generate sensor ==> $ot ")
+    #println("received generate sensor ==> $ot ")
     dim_dtvs = n + Int64(floor(n/ttf)) * ot  #n%ttf > 0 && n >= ttf ? n+ot+1 : n+ot
 
 

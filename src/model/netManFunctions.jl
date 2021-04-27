@@ -215,11 +215,11 @@ function plot_ctl_throughput(
     println(tpt_v)
     tpt_p = plot!(tpt_v,xlims=[0,model.N], linealpha=0.5
         # , line=:stem
-                ,legend = :outerright
+                ,legend = false#:outerright
                 )
     # end
 
-    annotate!((model.N,max_y+1,Plots.text("Control Msgs", 11, :black, :center)))
+    annotate!((model.N-5,max_y+1,Plots.text("Control Msgs", 11, :black, :center)))
 
     return tpt_p
 end
@@ -271,6 +271,7 @@ function plot_throughput(
         tpt_v = get_throughput_up(sne,model)#isempty(v_pkt_in) ? [0] : get_throughput(v_pkt_in,10)
         tpt_p = plot!(tpt_v,xlims=[0,model.N], linealpha=0.5
         # , line=:stem
+        ,label = "$i"
         ,legend = :outerright
         )
     end
@@ -295,7 +296,7 @@ function plotabm_networks(
             plot_ctl_network_mono(model;kwargs...)
     
 
-    ctl_r = plot_ctl_throughput(model; kwargs)#plot_empty()
+    ctl_r = model.ctrl_model != ControlModel(1) ? plot_ctl_throughput(model; kwargs) : plot_empty()
 
     ntw_p = plot_asset_networks(model; kwargs)
     
