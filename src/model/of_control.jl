@@ -58,7 +58,7 @@ function install_flow!(a::Agent,path::Array{Int64,1},model::ABM,msg::OFMessage=n
     lpath = isempty(path) ? es : path 
     eois = intersect(es,lpath)
     lpath = [ v for v in lpath]
-    println("($(a.id)) +install_flow! => path: $path -- es: $es -- eois: $eois")
+    println("[$(model.ticks)]($(a.id)) +install_flow! => path: $path -- es: $es -- eois: $eois - msg: -> $msg")
     for e in eois
          i = length(lpath) > 1 ? first(indexin(e,lpath)) : 1
          sne = getindex(model,e)
@@ -73,6 +73,7 @@ function install_flow!(a::Agent,path::Array{Int64,1},model::ABM,msg::OFMessage=n
          in_port = 0
          if i == 1
              #of_msg₀ = first(filter(ofm -> ofm.id == of_mid,a.pending))
+             println("[$(model.ticks)]($(a.id)) Setting first entry port of path $lpath to $(msg)")
              in_port = msg.in_port
              #TODO of_msg remove from pending
          else
@@ -92,8 +93,8 @@ function install_flow!(a::Agent,path::Array{Int64,1},model::ABM,msg::OFMessage=n
                  ,string(r_dst))
                  ,[out_port]
                  ,OFS_Output)
-         msg = OFMessage(next_ofmid!(model), model.ticks,e,1,OFPR_ADD_FLOW,flow)
-         send_msg!(e,msg,model)
+         install_msg = OFMessage(next_ofmid!(model), model.ticks,e,1,OFPR_ADD_FLOW,flow)
+         send_msg!(e,install_msg,model)
          
     end
 end
@@ -107,7 +108,15 @@ function process_msg!(a::Agent,msg::OFMessage,model)
                             #println("[$(model.ticks)]($(a.id)) -> match one")
                             #previous = filter(x->x[1]==msg.id,a.of_started)
                             #if isempty(previous) || (model.ticks - last(first(previous))) < model.ofmsg_reattempt
-                            in_packet_handler(a,msg,model)
+                            
+                            # open(data_dir*"exp_raw/"*"$(model.ticks)-test$(a.id).txt", "w") do io
+                                #     #for i=1:nv(ntw_graph)
+                                # b = @benchmark in_packet_handler($a,$msg,$model)
+                                in_packet_handler(a,msg,model)
+                                # show(io,MIME"text/plain"(),b)
+                                #     #end
+                            # end;
+                            
                             #elseif  (model.ticks - last(first(previous))) < model.ofmsg_reattempt
                                 #return package to queue as it does not know what to do with it
                             #    push!(a.pending,msg)
@@ -196,10 +205,17 @@ end
     Initial query by controller receiving OF message
 """
 function do_query!(msg::OFMessage,a::Agent,model)
-   
+    #do query
     query = (msg.dpid,msg.data.dst)
-
-    path = do_query(model.ticks,query,a.params[:ntw_graph],get_state(a).paths)
+    query_time = model.ticks
+    query_paths = get_state(a).paths
+    query_graph = a.params[:ntw_graph]
+    
+    
+    if model.benchmark record_benchmark!(data_dir * "runs/$(model.ctrl_model)/",model.seed,nv(model.ntw_graph),a.id,query_time,query,query_graph,query_paths) end
+    
+    path = do_query(query_time,query,query_graph,query_paths)
+    
 
     if isempty(path)
         lg = a.params[:ntw_graph]
@@ -212,6 +228,12 @@ function do_query!(msg::OFMessage,a::Agent,model)
         send_to_nbs!(msg_template,a,model)
     end
     
+
+    new_state = get_state(a)
+    new_state.q_queries += 1.0
+    set_state!(a,new_state)
+
+
     return isempty(path) ? [] : last(path)
 end
 

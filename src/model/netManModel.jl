@@ -9,6 +9,8 @@ function initialize(args,user_props;grid_dims=(3,3),seed=0)
 
     # Global model props
     default_props = Dict(
+        :seed=>seed,
+        :benchmark=>args[:benchmark],
         :ticks => 0,# # time unit
         :pkt_id => 0,
         :amsg_id =>0,
@@ -89,7 +91,7 @@ function create_control_agents!(model)
             set_control_agent!(j,id,model)
         end
     else
-        println(" Nodes CTL: $(nv(model.properties[:ctl_graph]))")
+        # println(" Nodes CTL: $(nv(model.properties[:ctl_graph]))")
         for i in 1:nv(model.properties[:ctl_graph])
             #next_fire = rand(0:0.2:model.:Τ)
             id = nextid(model)
@@ -163,7 +165,7 @@ function model_step!(model)
     end
 
     
-    soft_drop_node(model)
+    soft_drop_node!(model)
 end
 
 """
@@ -184,7 +186,8 @@ end
 Simple run model function
 """
 function run_model(n,args,properties; agent_data, model_data)
-    model = initialize(args,properties;seed=123)
+    seed = args[:seed]
+    model = initialize(args,properties;seed)
 
     
     # agent_shape(a::Agent) = :square
@@ -216,13 +219,12 @@ function run_model(n,args,properties; agent_data, model_data)
             #annotate!((1,1,Plots.text("step $(i)", 11, :black, :center)))
             step!(model, agent_step!,model_step!)
             collect_agent_data!(df, model, agent_data, i)
-            println("Total agents in run: $(length(allagents(model)))")
-            println("data -> $(size(df)) ")
             collect_model_data!(df_m, model, model_data, i)
         end
-    println("PRINTING HERE")
-    println("Space: $(model.space)")
-    gif(anim, plots_dir*"animation.gif", fps = 5), df, df_m
+    # println("PRINTING HERE")
+    # println("Space: $(model.space)")
+    plot_label = "$(model.ctrl_model)_$(nv(model.ntw_graph))_animation"
+    gif(anim, plots_dir * plot_label * ".gif", fps = 5), df, df_m
 end
 
 function agent_color(a)
@@ -291,7 +293,7 @@ end
 
 function init_agent!(a::Agent,model)
 
-    println("Starting Agent $(a.id)")
+    # println("Starting Agent $(a.id)")
     
     if model.ctrl_model != ControlModel(1)
         #Calculate sub graphs and init msg channels among agents
@@ -369,7 +371,7 @@ function init_agent!(sne::SimNE,model)
    
     init_switch(sne,model)
 
-    println("Initialised $(sne.id) => $(size(sne.condition_ts))")
+    # println("Initialised $(sne.id) => $(size(sne.condition_ts))")
 end
 
 

@@ -109,10 +109,10 @@ end
     load the graph of the network to control
 """
 
-function load_network_graph()
-    Random.seed!(123)
+function load_network_graph(seed,size)
+    Random.seed!(seed)
     #ntw = smallgraph("house")
-    ntw = MetaGraph(watts_strogatz(10,4,0.8))
+    ntw = MetaGraph(watts_strogatz(size,4,0.8))
     set_indexing_prop!(ntw,:eid)
     #gplot(ntw,layout=circular_layout,nodelabel=nodes(ntw))
     return ntw
@@ -123,9 +123,8 @@ end
     load the graph of the control system
 """
 
-function load_control_graph(ctl_model,size)
-   
-    Random.seed!(123)
+function load_control_graph(ctl_model,size,seed)
+    Random.seed!(seed)
     ntw = @match ctl_model begin
         ControlModel(2) => MetaGraph( [Int(i) for i in ring_graph(size)])
         ControlModel(3) => MetaGraph(watts_strogatz(size,4,0.8)) 
@@ -215,11 +214,12 @@ function plot_ctl_throughput(
     println(tpt_v)
     tpt_p = plot!(tpt_v,xlims=[0,model.N], linealpha=0.5
         # , line=:stem
-                ,legend = false#:outerright
-                )
+        ,ylabel = "Quantity of agent messages"
+        ,legend = false#:outerright
+        )
     # end
 
-    annotate!((model.N-5,max_y+1,Plots.text("Control Msgs", 11, :black, :center)))
+    annotate!((3*(model.N/4),max_y+1,Plots.text("Control Msgs", 11, :black, :center)))
 
     return tpt_p
 end
@@ -272,11 +272,12 @@ function plot_throughput(
         tpt_p = plot!(tpt_v,xlims=[0,model.N], linealpha=0.5
         # , line=:stem
         ,label = "$i"
+        ,ylabel = "MB"
         ,legend = :outerright
         )
     end
-
-    annotate!((model.N,max_y+1,Plots.text("Throughput", 11, :black, :center)))
+    
+    annotate!((3*(model.N/4),max_y+1,Plots.text("Throughput ($(model.interval_tpt) steps)", 11, :black, :center)))
 
     return tpt_p
 end
@@ -334,7 +335,7 @@ function set_control_agent!(asset_id::Int, agent_id::Int, model)
     model.mapping_ctl_ntw[asset_id] = agent_id
 end
 
-function soft_drop_node(model)
+function soft_drop_node!(model)
     #-1 pick node to remove
     #0 on_switch event
     #1remove from network
@@ -661,10 +662,11 @@ function query_path(lg,s,d)
     path = []
     
     if ls > 0 && ld > 0
-        #slg = SimpleGraph(lg)
-        #return yen_k_shortest_paths(slg,ls,ld, weights(slg),2,Inf)
-        result = yen_k_shortest_paths(lg,ls,ld)
+            #slg = SimpleGraph(lg)
+            #return yen_k_shortest_paths(slg,ls,ld, weights(slg),2,Inf)
+            result = yen_k_shortest_paths(lg,ls,ld)
     end
+    
     #gvs = [ lg[v,:eid] for v in vertices(lg)]
     #println("network contains: gvs: $gvs")
     #println("query_path:  g v: $(vertices(lg)), s: $(s) - ls: $(ls), d: $d - ld $ld result ==> $(result)")
@@ -819,4 +821,17 @@ function isless_paths(a,b)
     else
         return a[2] < b[2]
     end
+end
+
+function record_benchmark!(bdir,seed,size,aid,query_time,query,query_graph,query_paths)
+    
+    if !isdir(bdir)
+       mkdir(bdir) 
+    end
+    #benchmark block start
+    b = @benchmark begin 
+        do_query($query_time,$query,$query_graph,$query_paths)
+    end
+    serialize( bdir * "$(size)_$(first(query))_$(last(query))_$(seed)_$(query_time)_$(aid)_benchmark.bin",b)
+    #benchmark block end
 end

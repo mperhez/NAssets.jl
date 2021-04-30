@@ -124,7 +124,8 @@ function process_msg!(a::Agent,msg::AGMessage,model)
     println("[$(model.ticks)]($(a.id)) -> processing $(msg.reason)")
     
     @match msg.reason begin
-        AG_Protocol(1) =>  
+        AG_Protocol(1) => 
+                        #Query coming from other agent
                         do_query!(msg,a,model)
         
         AG_Protocol(2) =>  
@@ -154,6 +155,8 @@ function do_query!(msg::AGMessage,a::Agent,model)
     ignore = haskey(a.previous_queries,msg.body[:query]) ? model.ticks - a.previous_queries[msg.body[:query]] < query_ignore ? true : false : false
         
     if !ignore 
+        
+
         # visited control ag
         trace = msg.body[:trace]
         push!(trace,a.id)
@@ -167,9 +170,14 @@ function do_query!(msg::AGMessage,a::Agent,model)
         
         #do query
         query = msg.body[:query]
-        
-        path = do_query(model.ticks,query,jg,get_state(a).paths)
+        query_time = model.ticks
+        query_paths = get_state(a).paths
+        query_graph = jg
+        path = Dict()
 
+        if model.benchmark record_benchmark!(data_dir * "runs/$(model.ctrl_model)/",model.seed,nv(model.ntw_graph),a.id,query_time,query,query_graph,query_paths) end
+
+        path = do_query(query_time,query,query_graph,query_paths)        
 
         if isempty(path)
             of_mid = msg.body[:of_mid]
@@ -181,7 +189,11 @@ function do_query!(msg::AGMessage,a::Agent,model)
         end
 
         a.previous_queries[msg.body[:query]] = model.ticks
-
+        new_state = get_state(a)
+        new_state.q_queries += 1.0
+        set_state!(a,new_state)
+        # serialize(data_dir * "$(model.ticks)_$(a.id)_$(first(query))_$(last(query))_query_graph.bin",jg)
+        # serialize(data_dir * "$(model.ticks)_$(a.id)_$(first(query))_$(last(query))_query_path.bin",get_state(a).paths)
         # if !isempty(paths)
         #    #TODO consider case where multiple paths are found
         #    path = [a.params[:ntw_graph][v,:eid] for v in first(found.paths)]
@@ -262,7 +274,8 @@ function to_string(s::ControlAgentState)
             sep * string(s.in_ag_msg) *
             sep * string(s.out_ag_msg) *
             sep * string(s.in_of_msg) *
-            sep * string(s.out_of_msg)
+            sep * string(s.out_of_msg) *
+            sep * string(s.q_queries)
 end
 
 

@@ -121,6 +121,7 @@ mutable struct ControlAgentState <: State
     out_ag_msg::Float64
     in_of_msg::Float64
     out_of_msg::Float64
+    q_queries::Float64
 end
 
 mutable struct SDNCtlAgState <: State
@@ -163,7 +164,7 @@ end
 
 function Agent(id,nid,params)
     # s0 = SDNCtlAgState(zeros((2,2)),Vector{Float64}())
-    s0 = ControlAgentState(id,true,Dict(),0,0,0,0)
+    s0 = ControlAgentState(id,true,Dict(),0,0,0,0,0)
     Agent(id,nid,:lightblue,0.1,Vector{OFMessage}(),Vector{Tuple{Int64,Int64}}(),[s0],Array{Vector{AGMessage}}(undef,1,1),[],Channel{OFMessage}(500),Dict(),params)
 end
 
