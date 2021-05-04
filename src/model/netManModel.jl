@@ -11,6 +11,7 @@ function initialize(args,user_props;grid_dims=(3,3),seed=0)
     default_props = Dict(
         :seed=>seed,
         :benchmark=>args[:benchmark],
+        :animation=>args[:animation],
         :ticks => 0,# # time unit
         :pkt_id => 0,
         :amsg_id =>0,
@@ -136,12 +137,12 @@ end
 """
 function model_step!(model)
     init_step_state!(model)
-    println("=====Tick $(model.ticks)======")
+    # println("=====Tick $(model.ticks)======")
     for a in allagents(model)
         init_state!(a)
-        if typeof(a) == SimNE 
-            println("($(a.id)) ==> $(a.queue)")
-        end
+        # if typeof(a) == SimNE 
+        #     println("($(a.id)) ==> $(a.queue)")
+        # end
     end
     
     for e in edges(model.ntw_graph)
@@ -211,20 +212,26 @@ function run_model(n,args,properties; agent_data, model_data)
     df_m = init_model_dataframe(model,model_data)
 
    
+        if model.animation 
 
-
-    anim = @animate for i in 0:n
-            p = plotabm_networks(model; plotkwargs...)
-            title!(p, "step $(i)",position=(10,1))
-            #annotate!((1,1,Plots.text("step $(i)", 11, :black, :center)))
+        anim = @animate for i in 0:n
+                p = plotabm_networks(model; plotkwargs...)
+                title!(p, "step $(i)",position=(10,1))
+                #annotate!((1,1,Plots.text("step $(i)", 11, :black, :center)))
+                step!(model, agent_step!,model_step!)
+                collect_agent_data!(df, model, agent_data, i)
+                collect_model_data!(df_m, model, model_data, i)
+            end
+        plot_label = "$(model.ctrl_model)_$(nv(model.ntw_graph))_animation"
+        gif(anim, plots_dir * plot_label * ".gif", fps = 5)
+    else
+        for i in 0:n
             step!(model, agent_step!,model_step!)
             collect_agent_data!(df, model, agent_data, i)
             collect_model_data!(df_m, model, model_data, i)
         end
-    # println("PRINTING HERE")
-    # println("Space: $(model.space)")
-    plot_label = "$(model.ctrl_model)_$(nv(model.ntw_graph))_animation"
-    gif(anim, plots_dir * plot_label * ".gif", fps = 5), df, df_m
+    end
+    df, df_m 
 end
 
 function agent_color(a)

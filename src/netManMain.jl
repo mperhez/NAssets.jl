@@ -18,13 +18,15 @@ using Statistics
 
 include("netManAbm.jl")
 
-new_config(seed,ctl_model,size,n_steps,drop_proportion,benchmark) =
+new_config(seed,ctl_model,size,n_steps,drop_proportion,benchmark, animation) =
     return ( seed = seed
             ,ctl_model=ctl_model
             ,size=size
             ,n_steps=n_steps
+            ,drop_proportion=drop_proportion
             ,benchmark = benchmark
-            ,drop_proportion=drop_proportion)
+            ,animation = animation
+            )
 
 function get_dropping_nodes(drop_proportion)
     #TODO calcualte according to proportion
@@ -37,7 +39,7 @@ function load_run_configs()
         for size in [10]
             for drop_proportion in [10]
                 for seed in [123]
-                    push!(configs,new_config(seed,ctl_model,size,200,drop_proportion,false))
+                    push!(configs,new_config(seed,ctl_model,size,200,drop_proportion,false,false))
                 end
             end
         end
@@ -58,6 +60,7 @@ function single_run(config)
     args[:ctrl_model] = config.ctl_model
     args[:seed] = config.seed
     args[:benchmark] = config.benchmark
+    args[:animation] = config.animation
 
     q_ctl_agents = 0
 
@@ -75,7 +78,7 @@ function single_run(config)
 
     adata = [get_state_trj,get_condition_ts, get_rul_ts]
     mdata = [:mapping_ctl_ntw,get_state_trj]
-    anim,result_agents,result_model = run_model(config.n_steps,args,params; agent_data = adata, model_data = mdata)
+    result_agents,result_model = run_model(config.n_steps,args,params; agent_data = adata, model_data = mdata)
     println("End running model...")
     ags = last(result_agents,q_agents)["get_state_trj"]
     ags_1 = vcat([ [ split(string(j-1)*";"*replace(to_string(ags[i][j]),"NetworkAssetState(" => ""),";") for j=1:length(ags[i])] for i=1:length(ags) ]...)
@@ -91,14 +94,14 @@ function single_run(config)
         #     #println(hcat([i 1; i 2 ; i 3] , ags_condition[i]),';')
         # end
 
-    open(data_dir*"exp_raw/"*"condition_agents.csv", "w") do io
+    open(data_dir*"runs/$(config.ctl_model)/"*"$(config.size)_$(config.seed)_condition_agents.csv", "w") do io
         for i=1:nv(ntw_graph)
             writedlm(io,hcat([i 1; i 2 ; i 3] , ags_condition[i]),';')
         end
     end;
 
 
-    open(data_dir*"exp_raw/"*"rul_agents.csv", "w") do io
+    open(data_dir*"runs/$(config.ctl_model)/"*"$(config.size)_$(config.seed)_rul_agents.csv", "w") do io
     #     #for i=1:nv(ntw_graph)
             writedlm(io,ags_rul[1:10],';')
     #     #end
@@ -108,19 +111,19 @@ function single_run(config)
     model_data = [ (m.tick,m.links_load) for m in model_data ]
 
     #ags_1 = [ split(string(i-1)*";"*replace(to_string(ags[j][i]),"NetworkAssetState(" => ""),";") for j=1:length(ags)] for i=1:length(ags[j]) ]
-    open(data_dir*"exp_raw/"*"steps_agents.csv", "w") do io
+    open(data_dir*"runs/$(config.ctl_model)/"*"$(config.size)_$(config.seed)_steps_agents.csv", "w") do io
         # writedlm(io, ["tick;id;port-edge;count1;count2;count3;flowtable"], ';')
         writedlm(io,ags_1,';') 
     end;
 
-    open(data_dir*"exp_raw/"*"steps_model.csv", "w") do io
+    open(data_dir*"runs/$(config.ctl_model)/"*"$(config.size)_$(config.seed)_steps_model.csv", "w") do io
         writedlm(io,model_data,';') 
     end;
 
 end
 
 data_dir = "data/"
-plots_dir = "plots/"
+plots_dir = "plots/runs/"
 BenchmarkTools.DEFAULT_PARAMETERS.samples = 100
 
 configs = load_run_configs()

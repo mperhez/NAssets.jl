@@ -15,14 +15,14 @@ function send_msg!(receiver::Int64,msg::OFMessage,model)
     ag = getindex(model,receiver)
     #TODO implement links and get delay of link in ticks
     queue = typeof(ag) == SimNE ? ag.queue : ag.queue
-    println("Sent to $receiver msg: $msg")
+    # println("Sent to $receiver msg: $msg")
     put!(queue,msg)
 end 
 
 
 
 function install_flows!(in_dpid,in_port_start,path,model)
-    println("install flow: $(in_dpid) - $(in_port_start) - $(path)")
+    # println("install flow: $(in_dpid) - $(in_port_start) - $(path)")
     if !isempty(path)
         pairs = diag([j == i + 1 ? (path[3][i],path[3][j]) : nothing for i=1:size(path[3],1)-1, j=2:size(path[3],1)])
         
@@ -38,7 +38,7 @@ function install_flows!(in_dpid,in_port_start,path,model)
             
             fw = Flow(sne.id,MRule(string(in_port),string(r_src),string(r_dst)),[out_port],OFS_Output)
             #(ticks,pkt,sne_src,sne_dst)->forward(ticks,pkt,sne_src,sne_dst)
-            println("[$(model.ticks)] {A} Installing flow: $(p[1]) - $(fw.match_rule)")
+            # println("[$(model.ticks)] {A} Installing flow: $(p[1]) - $(fw.match_rule)")
             push_flow!(sne,fw)
             prev_eid = sne.id
         end
@@ -47,7 +47,7 @@ function install_flows!(in_dpid,in_port_start,path,model)
         #TODO how to make the rule to be regardless of port in
         fw =Flow(in_dpid,MRule("*","*",string(in_dpid)),[0],OFS_Output)
         #(ticks,pkt,src_sne)->forward(ticks,pkt,src_sne)
-        println("[$(model.ticks)]  {B} Installing flow to $(in_dpid): $(fw.match_rule)")
+        # println("[$(model.ticks)]  {B} Installing flow to $(in_dpid): $(fw.match_rule)")
         push_flow!(sne,fw)
     end
 end
@@ -58,7 +58,7 @@ function install_flow!(a::Agent,path::Array{Int64,1},model::ABM,msg::OFMessage=n
     lpath = isempty(path) ? es : path 
     eois = intersect(es,lpath)
     lpath = [ v for v in lpath]
-    println("[$(model.ticks)]($(a.id)) +install_flow! => path: $path -- es: $es -- eois: $eois - msg: -> $msg")
+    # println("[$(model.ticks)]($(a.id)) +install_flow! => path: $path -- es: $es -- eois: $eois - msg: -> $msg")
     for e in eois
          i = length(lpath) > 1 ? first(indexin(e,lpath)) : 1
          sne = getindex(model,e)
@@ -66,20 +66,20 @@ function install_flow!(a::Agent,path::Array{Int64,1},model::ABM,msg::OFMessage=n
          
          ports = get_port_edge_list(sne)
  
-         println("[$(model.ticks)]{$(a.id)}($(sne.id)) - ports: $(ports) - i: $i - i_prev: $i_prev - e: $e -- lpath : $lpath")
+        #  println("[$(model.ticks)]{$(a.id)}($(sne.id)) - ports: $(ports) - i: $i - i_prev: $i_prev - e: $e -- lpath : $lpath")
          #Regardless of where the traffic comes
          r_src = "*" #string("h",first(lpath)) 
          r_dst = last(lpath)
          in_port = 0
          if i == 1
              #of_msg₀ = first(filter(ofm -> ofm.id == of_mid,a.pending))
-             println("[$(model.ticks)]($(a.id)) Setting first entry port of path $lpath to $(msg)")
+            #  println("[$(model.ticks)]($(a.id)) Setting first entry port of path $lpath to $(msg)")
              in_port = msg.in_port
              #TODO of_msg remove from pending
          else
              #in_port = first(filter(p->parse(Int,p[2][2:end]) == lpath[i_prev],ports))
              in_port = first([ first(p) for p in ports if parse(Int,p[2][2:end]) == lpath[i_prev]])
-             println("FIltered equal to: prev: $(lpath[i_prev]) in: $in_port")
+            #  println("FIltered equal to: prev: $(lpath[i_prev]) in: $in_port")
          end
          out_port = 0
          
@@ -100,7 +100,7 @@ function install_flow!(a::Agent,path::Array{Int64,1},model::ABM,msg::OFMessage=n
 end
 
 function process_msg!(a::Agent,msg::OFMessage,model)
-    println("[$(model.ticks)]($(a.id)) -> processing $(msg.reason) ==> $msg")
+    # println("[$(model.ticks)]($(a.id)) -> processing $(msg.reason) ==> $msg")
     
     @match msg.reason begin
         Ofp_Protocol(1) =>  
@@ -143,7 +143,7 @@ msg: SimNE.id, in_port, DPacket
 """
 function in_packet_handler(a::Agent,msg::OFMessage,model)
 
-    println("[$(model.ticks)]($(a.id)) Processing msg: $msg")
+    # println("[$(model.ticks)]($(a.id)) Processing msg: $msg")
     
     path::Array{Int64,1} = []
     found = false
@@ -155,11 +155,11 @@ function in_packet_handler(a::Agent,msg::OFMessage,model)
         found = true
     end
    
-    println("[$(model.ticks)]($(a.id)) msg-> $(msg), path ==> $(path)")
+    # println("[$(model.ticks)]($(a.id)) msg-> $(msg), path ==> $(path)")
    
     if found 
         #install_flows!(msg.dpid,msg.in_port,path,model) 
-        println("[$(model.ticks)]($(a.id)) in pkt handler: path $path")
+        # println("[$(model.ticks)]($(a.id)) in pkt handler: path $path")
         install_flow!(a,path,model,msg)
     else
         #add to pending list only if has not been
@@ -268,7 +268,7 @@ function do_query(time::Int64,query::Tuple{Int64,Int64},lg::MetaGraph,paths::Dic
     end
     
 
-    println("Path found: $path")
+    # println("Path found: $path")
     
     
     return path
@@ -279,9 +279,9 @@ function pending_pkt_handler(a::Agent,model)
     # end
     new_pending = []
     if !isempty(a.pending)
-        println("[$(model.ticks)]($(a.id)) pending: $(length(a.pending))")
+        # println("[$(model.ticks)]($(a.id)) pending: $(length(a.pending))")
         for msgt in a.pending
-            println("[$(model.ticks)]($(a.id)) pending_msgt: $msgt")
+            # println("[$(model.ticks)]($(a.id)) pending_msgt: $msgt")
             remaining = first(msgt) - 1  #msgt[1]: timeout
             if remaining <= 0 
                 put!(a.queue,last(msgt)) #msgt[2]: msg
@@ -331,7 +331,7 @@ function port_delete_handler(a::Agent,msg::OFMessage,model)
     if dpid in ces
         do_drop!(msg,a,model)
     else
-        println("[$(model.ticks)]($(a.id)) Existing paths: $(get_state(a).paths)")
+        # println("[$(model.ticks)]($(a.id)) Existing paths: $(get_state(a).paths)")
         
         #delete pre-computed paths containing dropping node
         for path_k in keys(get_state(a).paths)
@@ -352,7 +352,7 @@ function port_delete_handler(a::Agent,msg::OFMessage,model)
         #delete dropping node from local graph
         lv = to_local_vertex(a.params[:ntw_graph],msg.data)
         a.params[:ntw_graph] = soft_remove_vertex(a.params[:ntw_graph],lv)
-        println("[$(model.ticks)]($(a.id)) New paths: $(get_state(a).paths)")
+        # println("[$(model.ticks)]($(a.id)) New paths: $(get_state(a).paths)")
     end
 
 end

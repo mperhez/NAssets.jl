@@ -306,7 +306,7 @@ end
 
 function install_flow!(msg::OFMessage, sne::SimNE,model)
     #ports = get_port_edge_list(sne,model)
-    println("[$(model.ticks)] Installing flow: $(sne.id) - $(msg.data)")
+    # println("[$(model.ticks)] Installing flow: $(sne.id) - $(msg.data)")
     push!(get_state(sne).flow_table,msg.data)
 end
 
@@ -370,7 +370,7 @@ function pending_pkt_handler(a::SimNE,model)
     # end
     q_i = 0
     if !isempty(a.pending)
-        println("[$(model.ticks)]($(a.id)) pending: $(length(a.pending))")
+        # println("[$(model.ticks)]($(a.id)) pending: $(length(a.pending))")
 
         for msg in a.pending 
             if msg.reason == OFPR_ACTION
@@ -405,29 +405,29 @@ It simulates operations happening in a network asset
 when the link corresponding to the given dpn_id goes down
 """
 function link_down!(sne::SimNE,dpn_id::Int,model)
-    println("[$(model.ticks)]($(sne.id)) link down start")
+    # println("[$(model.ticks)]($(sne.id)) link down start")
     #remove from list of ports
     new_port_edge_list::Vector{Tuple{Int64,String}} = []
     dpn_port = -1
     for p in get_port_edge_list(sne)
-        println("[$(model.ticks)]($(sne.id)) port found: $p")
+        # println("[$(model.ticks)]($(sne.id)) port found: $p")
         if p[2]!="s"*string(dpn_id)
             push!(new_port_edge_list,p)
         else
             dpn_port = p[1]
         end
     end
-    println("[$(model.ticks)]($(sne.id)) link down mid")
+    # println("[$(model.ticks)]($(sne.id)) link down mid")
     set_port_edge_list!(sne,new_port_edge_list)
     new_flow_table::Vector{Flow} = []
     for f in get_flow_table(sne)
-        println("[$(model.ticks)]($(sne.id)) dpn_port: $dpn_port in $(f.params) - flow found: $(f)")
+        # println("[$(model.ticks)]($(sne.id)) dpn_port: $dpn_port in $(f.params) - flow found: $(f)")
         if  ~(dpn_port in f.params)
             push!(new_flow_table,f)
         end    
     end
     set_flow_table!(sne,new_flow_table)
-    println("[$(model.ticks)]($(sne.id)) new flow found: $(get_state(sne).flow_table)")
+    # println("[$(model.ticks)]($(sne.id)) new flow found: $(get_state(sne).flow_table)")
     controller = getindex(model,sne.controller_id)
     trigger_of_event!(model.ticks,controller,dpn_id,EventOFPPortStatus,model)
 end

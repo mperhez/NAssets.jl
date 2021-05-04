@@ -254,7 +254,7 @@ function add_downtime_to_series(ttf,ot,s_series)
         end
     end
     
-    println(" adding downtime $(size(ph_ot)) --- $(phased_s)")
+    # println(" adding downtime $(size(ph_ot)) --- $(phased_s)")
     return ph_ot
 end
 

@@ -210,8 +210,8 @@ function plot_ctl_throughput(
     #     a = getindex(model,model.ctl_graph[i,:aid])
         # tpt_v = get_throughput_up(a,model)
     
-    println("Plotting...")
-    println(tpt_v)
+    # println("Plotting...")
+    # println(tpt_v)
     tpt_p = plot!(tpt_v,xlims=[0,model.N], linealpha=0.5
         # , line=:stem
         ,ylabel = "Quantity of agent messages"
@@ -414,9 +414,9 @@ function soft_remove_vertex(g::AbstractGraph,dpn_id::Int)
         rem_edge!(new_g,nb,dpn_id)
     end
 
-    println("Links of $dpn_id removed => $(all_neighbors(new_g,dpn_id))")
+    # println("Links of $dpn_id removed => $(all_neighbors(new_g,dpn_id))")
 
-    [println(" new g: $v => Props: $(get_prop(new_g,v,:eid))") for v in vertices(new_g)]
+    # [println(" new g: $v => Props: $(get_prop(new_g,v,:eid))") for v in vertices(new_g)]
     # sm_g = sparse(g)
     # sm_new_g = deepcopy(sm_g)
 

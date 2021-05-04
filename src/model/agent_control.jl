@@ -17,7 +17,7 @@ function send_msg!(receiver::Int64,msg::AGMessage,model)
     #need index of nbs 
     nbs = neighbors(g,lva)
     i = first(indexin(lv,nbs))
-    println("[$(model.ticks)] From $(msg.sid) to  $(receiver) ==> $(msg.reason) -> $(msg.body[:query])")
+    # println("[$(model.ticks)] From $(msg.sid) to  $(receiver) ==> $(msg.reason) -> $(msg.body[:query])")
     push!(rag.msgs_links[size(rag.msgs_links,1),i],msg)
     
 end    
@@ -26,7 +26,7 @@ function send_to_nbs!(msg_template::AGMessage,a::Agent,model)
     cg = a.params[:ctl_graph]
     nbs = neighbors(cg,to_local_vertex(cg,a.id,:aid))
     gid_nbs = [cg[v,:aid] for v in nbs]
-    println("[$(model.ticks)]($(a.id)) sending to nbs: $(gid_nbs)")
+    # println("[$(model.ticks)]($(a.id)) sending to nbs: $(gid_nbs)")
     for nb in gid_nbs
         if ~(nb in msg_template.body[:trace])
             body = deepcopy(msg_template.body)
@@ -40,7 +40,7 @@ end
     Processing for MATCH_PATH msg
 """
 function do_match!(msg::AGMessage,a::Agent,model)
-    println("[$(model.ticks)]{$(a.id)} =+do_match! -> msg : $(msg), end ag => $(first(msg.body[:trace]))")
+    # println("[$(model.ticks)]{$(a.id)} =+do_match! -> msg : $(msg), end ag => $(first(msg.body[:trace]))")
     new_path = msg.body[:path]
     ces = get_controlled_assets(a.id,model)
 
@@ -92,7 +92,7 @@ function do_match!(msg::AGMessage,a::Agent,model)
             end
         end
         a.pending = new_pending
-        println("[$(model.ticks)]($(a.id)) do_match! -- NEW_PENDING: $(a.pending)")
+        # println("[$(model.ticks)]($(a.id)) do_match! -- NEW_PENDING: $(a.pending)")
     else
         #continue back propagation of msg
         trace_bk = msg.body[:trace_bk]
@@ -107,21 +107,21 @@ end
     Prepare MATCH reply
 """
 function do_match!(found_path::Tuple{Int64,Float64,Array{Int64}},msg::AGMessage,a::Agent,model)
-    println("[$(model.ticks)]{$(a.id)} =*do_match! -> msg : $(msg) -> found: $(found_path)")
+    # println("[$(model.ticks)]{$(a.id)} =*do_match! -> msg : $(msg) -> found: $(found_path)")
     query = msg.body[:query]
     trace = msg.body[:trace]
     trace_bk = deepcopy(msg.body[:trace])
     of_mid = msg.body[:of_mid]
 
     nbody = Dict(:of_mid=>of_mid,:query=>query,:trace=>trace,:trace_bk=>trace_bk[1:end-1],:path=>found_path)
-    println("[$(model.ticks)]{$(a.id)} =-do_match! -> receiver : $(trace_bk)")
+    # println("[$(model.ticks)]{$(a.id)} =-do_match! -> receiver : $(trace_bk)")
     rpy_msg = AGMessage(next_amid!(model),model.ticks,a.id,trace_bk[end-1],MATCH_PATH,nbody)
     send_msg!(trace_bk[end-1],rpy_msg,model)
 end
 
 
 function process_msg!(a::Agent,msg::AGMessage,model)
-    println("[$(model.ticks)]($(a.id)) -> processing $(msg.reason)")
+    # println("[$(model.ticks)]($(a.id)) -> processing $(msg.reason)")
     
     @match msg.reason begin
         AG_Protocol(1) => 
@@ -150,7 +150,7 @@ end
     Query by neighbour control agent after receiving AGMessage
 """
 function do_query!(msg::AGMessage,a::Agent,model)
-    println("[$(model.ticks)]($(a.id)) -> TODO Local search")
+    # println("[$(model.ticks)]($(a.id)) -> TODO Local search")
     query_ignore = 5 #TODO to model
     ignore = haskey(a.previous_queries,msg.body[:query]) ? model.ticks - a.previous_queries[msg.body[:query]] < query_ignore ? true : false : false
         
