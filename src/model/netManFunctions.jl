@@ -669,7 +669,7 @@ function query_path(lg,s,d)
     
     #gvs = [ lg[v,:eid] for v in vertices(lg)]
     #println("network contains: gvs: $gvs")
-    #println("query_path:  g v: $(vertices(lg)), s: $(s) - ls: $(ls), d: $d - ld $ld result ==> $(result)")
+    # println("query_path:  g v: $(vertices(lg)), s: $(s) - ls: $(ls), d: $d - ld $ld result ==> $(result)")
 
     if !isempty(result.paths)
         path = result.paths
@@ -835,3 +835,161 @@ function record_benchmark!(bdir,seed,size,aid,query_time,query,query_graph,query
     serialize( bdir * "$(size)_$(first(query))_$(last(query))_$(seed)_$(query_time)_$(aid)_benchmark.bin",b)
     #benchmark block end
 end
+
+## main functions
+
+new_config(seed,ctl_model,size,n_steps,drop_proportion,benchmark, animation) =
+    return ( seed = seed
+            ,ctl_model=ctl_model
+            ,size=size
+            ,n_steps=n_steps
+            ,drop_proportion=drop_proportion
+            ,benchmark = benchmark
+            ,animation = animation
+            )
+
+function get_dropping_nodes(drop_proportion)
+    #TODO calcualte according to proportion
+    return Dict(80=>[3],120=>[2]) # drop time => drop node
+end
+
+function load_run_configs() 
+    configs = []
+    for ctl_model in [ControlModel(4)]#,ControlModel(2) ] #instances(ControlModel)
+        for size in [100]#, 50, 100]
+            for drop_proportion in [10]
+                for seed in [123]
+                    push!(configs,new_config(seed,ctl_model,size,20,drop_proportion,false,false))
+                end
+            end
+        end
+    end
+    return configs
+end
+
+function single_run(config)
+    Random.seed!(config.seed)
+    args = Dict()
+    params = Dict()
+    args[:N]=config.n_steps
+    args[:Τ]=config.size
+    args[:ΔΦ]=1
+    ntw_graph = load_network_graph(config.seed,config.size)
+    args[:ntw_graph]=ntw_graph
+    args[:dropping_nodes]= get_dropping_nodes(config.drop_proportion)
+    args[:ctrl_model] = config.ctl_model
+    args[:seed] = config.seed
+    args[:benchmark] = config.benchmark
+    args[:animation] = config.animation
+
+    q_ctl_agents = 0
+
+    if config.ctl_model == ControlModel(1)
+        args[:ctl_graph] = MetaGraph()
+        q_ctl_agents = 1
+    else
+        ctl_graph = load_control_graph(config.ctl_model,nv(ntw_graph),config.seed)
+        args[:ctl_graph]=ctl_graph
+        q_ctl_agents = nv(ctl_graph)
+    end
+
+    q_agents = nv(ntw_graph)+q_ctl_agents
+    args[:q]=q_agents
+
+    adata = [get_state_trj,get_condition_ts, get_rul_ts]
+    mdata = [:mapping_ctl_ntw,get_state_trj]
+    result_agents,result_model = run_model(config.n_steps,args,params; agent_data = adata, model_data = mdata)
+    println("End running model...")
+    
+    ctl_ags = last(result_agents[result_agents[!,:id] .> nv(ntw_graph) ,:],q_ctl_agents)[!,"get_state_trj"]
+    nes = last(result_agents[result_agents[!,:id] .<= nv(ntw_graph) ,:],nv(ntw_graph))[!,"get_state_trj"]
+    
+    nes_1 = vcat([ [ split(string(j-1)*";"*replace(to_string(nes[i][j]),"NetworkAssetState(" => ""),";") for j=1:length(nes[i])] for i=1:length(nes) ]...)
+
+    ctl_ags_1 = vcat([ [ split(string(j-1)*";"*replace(to_string(ctl_ags[i][j]),"ControlAgentState(" => ""),";") for j=1:length(ctl_ags[i])] for i=1:length(ctl_ags) ]...)
+    println(size(ctl_ags))
+    
+    sdir = data_dir*"runs2/$(config.ctl_model)/"
+    if !isdir(sdir)
+        mkdir(sdir) 
+     end
+    serialize( sdir * "$(config.size)_$(config.seed)_steps_ctl_agents.bin",ctl_ags)
+    serialize( sdir * "$(config.size)_$(config.seed)_steps_nelements.bin",nes)
+    # nwords = Dict(1=>"one",2=>"two",3=>"three",4=>"four",5=>"five",6=>"six",7=>"seven",8=>"eight",9=>"nine",0=>"zero", 10=>"ten")
+
+    # for i in 1:length(ctl_ags)
+    #     for j in  1:length(ctl_ags[i])
+    #         #println("$i - $j -> $(ctl_ags[i][j].a_id)")
+    #         ij_paths = ctl_ags[i][j].paths
+            
+    #         # txt = objecttable(ctl_ags[i][j].paths)
+    #         #::Dict{Symbol,Array{Tuple{Int64,Float64,Array{Int64}}}}
+    #         ij_d::Dict{Symbol,Array{Int64}} = Dict()
+    #         for k in keys(ij_paths)
+    #             # ij_d[ Symbol("$(k[1])_$(k[2])") ] = [1]
+                
+    #             ij_d[ Symbol("$(nwords[k[1]])_$(nwords[k[2]])") ] = [1]
+    #         end
+    #         println("$i - $j -> $(keys(ij_d))")
+    #         txt = objecttable(ij_d)
+    #         println("$i - $j -> $txt")
+    #     end
+    # end
+    
+    # js_ctl_agents = objecttable(ctl_ags)
+
+    ctl_ags_1 = [ replace.(ctl_ags_1[i]," Dict{Tuple{Int64,Int64},Array{Tuple{Int64,Float64,Array{Int64,N} where N},N} where N}" => "") for i=1:1]#length(ctl_ags_1) ]
+
+    # ctl_ags_1 = [filter(x -> x .!= " ", ctl_ags_1[i]) for i=1:length(ctl_ags_1) ]
+
+    
+    nes_condition = last(result_agents,q_agents)[!,"get_condition_ts"]
+    nes_rul = last(result_agents,q_agents)[!,"get_rul_ts"]
+
+    # println(ags_condition)
+
+        # for i=1:size(ags_condition,1)#nv(ntw_graph)
+        #     println("testing $i ...")
+        #     println(ags_condition[i])
+        #     #println(hcat([i 1; i 2 ; i 3] , ags_condition[i]),';')
+        # end
+
+    open(sdir*"$(config.size)_$(config.seed)_condition_nelements.csv", "w") do io
+        for i=1:nv(ntw_graph)
+            writedlm(io,hcat([i 1; i 2 ; i 3] , nes_condition[i]),';')
+        end
+    end;
+
+
+    open(sdir*"$(config.size)_$(config.seed)_rul_neselements.csv", "w") do io
+    #     #for i=1:nv(ntw_graph)
+            writedlm(io,nes_rul[1:10],';')
+    #     #end
+    end;
+
+    model_data = last(result_model)["get_state_trj"]
+    model_data = [ (m.tick,m.links_load) for m in model_data ]
+
+    #ags_1 = [ split(string(i-1)*";"*replace(to_string(ags[j][i]),"NetworkAssetState(" => ""),";") for j=1:length(ags)] for i=1:length(ags[j]) ]
+    open(sdir*"$(config.size)_$(config.seed)_steps_nelements.csv", "w") do io
+        writedlm(io, ["tick" "id" "up" "ports_edges" "pkt_in" "pkt_out" "flows"], ';')
+        writedlm(io,nes_1,';') 
+    end;
+    
+
+    # open(data_dir*"runs/$(config.ctl_model)/"*"$(config.size)_$(config.seed)_steps_ctl_agents.json", "w") do io
+    #     write(io, js_ctl_agents)
+    #  end
+
+    open(sdir*"$(config.size)_$(config.seed)_steps_ctl_agents.csv", "w") do io
+        writedlm(io, ["tick" "id" "up" "paths" "in_ag_msg" "out_ag_msg" "in_of_msg" "out_of_msg" "q_queries" ], ';')
+        writedlm(io,ctl_ags_1,';') 
+    end;
+
+
+    open(sdir*"$(config.size)_$(config.seed)_steps_model.csv", "w") do io
+        writedlm(io,model_data,';') 
+    end;
+
+end
+

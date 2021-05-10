@@ -107,10 +107,11 @@ mutable struct NetworkAssetState <: State
     flow_table::Vector{Flow}
     # throughput_in::Float64
     # throughput_out::Float64
+    pending_queries::Vector{Int64}
 end
 
 function NetworkAssetState(ne_id::Int)
-    NetworkAssetState(ne_id,true,Vector{Tuple{Int64,String}}(),0,0,0,Vector{Flow}())
+    NetworkAssetState(ne_id,true,Vector{Tuple{Int64,String}}(),0,0,0,Vector{Flow}(),[])
 end
 
 mutable struct ControlAgentState <: State
@@ -122,6 +123,7 @@ mutable struct ControlAgentState <: State
     in_of_msg::Float64
     out_of_msg::Float64
     q_queries::Float64
+    path_scores::Array{Tuple{Int64,Int64,Float64}}
 end
 
 mutable struct SDNCtlAgState <: State
@@ -164,7 +166,7 @@ end
 
 function Agent(id,nid,params)
     # s0 = SDNCtlAgState(zeros((2,2)),Vector{Float64}())
-    s0 = ControlAgentState(id,true,Dict(),0,0,0,0,0)
+    s0 = ControlAgentState(id,true,Dict(),0,0,0,0,0,[])
     Agent(id,nid,:lightblue,0.1,Vector{OFMessage}(),Vector{Tuple{Int64,Int64}}(),[s0],Array{Vector{AGMessage}}(undef,1,1),[],Channel{OFMessage}(500),Dict(),params)
 end
 
@@ -263,9 +265,12 @@ function route_traffic!(a::SimNE,msg::OFMessage,model)
         if isempty(similar_requests)
             controller = getindex(model,a.controller_id)
             #ask_controller(a,controller,msg)
-            ctl_msg = OFMessage(next_ofmid!(model),model.ticks,a.id,msg.in_port,msg.data)
+            of_qid = next_ofmid!(model)
+            ctl_msg = OFMessage(of_qid,model.ticks,a.id,msg.in_port,msg.data)
             send_msg!(a.controller_id,ctl_msg,model)
             push!(a.requested_ctl,(model.ticks,msg.data.src,msg.data.dst))
+            println("pending query: $of_qid -> $(msg.data.src) - $(msg.data.dst)")
+            push_pending_query!(a,of_qid)
         end
         #return package to queue as it does not know what to do with it
         push!(a.pending,msg)
@@ -306,8 +311,10 @@ end
 
 function install_flow!(msg::OFMessage, sne::SimNE,model)
     #ports = get_port_edge_list(sne,model)
-    # println("[$(model.ticks)] Installing flow: $(sne.id) - $(msg.data)")
-    push!(get_state(sne).flow_table,msg.data)
+    # println("[$(model.ticks)] Installing flow: $(sne.id) - $(msg)")
+    push!(get_state(sne).flow_table,first(msg.data)) #msg.data[1] = flow, msg.data[2] = query_id:qid
+    
+    pop_pending_query!(sne,last(msg.data))
 end
 
 function in_packet_processing(a::AbstractAgent,model)
@@ -461,6 +468,7 @@ function init_state!(a::Agent)
     new_state = deepcopy(get_state(a)) #!isnothing(get_state(sme)) ? deepcopy(get_state(sme)) : NetworkAssetState(sme.id)
     new_state.in_ag_msg = 0
     new_state.out_ag_msg = 0
+    new_state.path_scores =  []
     push!(a.state_trj,new_state)
 end
 
@@ -551,6 +559,29 @@ function get_flow_table(sne::SimNE)
     return get_state(sne).flow_table
 end
 
+function push_pending_query!(sne::SimNE,new_pending_query::Int64)
+    state = get_state(sne)
+    push!(state.pending_queries,new_pending_query)
+    println("sending query $new_pending_query")
+    set_state!(sne,state)
+end
+
+function pop_pending_query!(sne::SimNE,pending_query::Int64)
+    state = get_state(sne)
+    new_pq = []
+    for pq in state.pending_queries
+        if pq != pending_query
+            push!(new_pq,pq)
+        end
+    end
+    state.pending_queries = new_pq
+    set_state!(sne,state)
+end
+
+function get_pending_queries(sne::SimNE)
+    return get_state(sne).pending_queries
+end
+
 function take_msg!(sne::SimNE)
     return take!(sne.queue)
 end
@@ -570,7 +601,8 @@ function to_string(s::NetworkAssetState)
             sep * string(s.port_edge_list) * 
             sep * string(s.in_pkt) *
             sep * string(s.out_pkt) *
-            sep * string(s.flow_table)
+            sep * string(s.flow_table) *
+            sep * string(s.pending_queries)
 end
 
 """

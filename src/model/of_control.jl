@@ -93,7 +93,8 @@ function install_flow!(a::Agent,path::Array{Int64,1},model::ABM,msg::OFMessage=n
                  ,string(r_dst))
                  ,[out_port]
                  ,OFS_Output)
-         install_msg = OFMessage(next_ofmid!(model), model.ticks,e,1,OFPR_ADD_FLOW,flow)
+         qid = msg.id
+         install_msg = OFMessage(next_ofmid!(model), model.ticks,e,1,OFPR_ADD_FLOW,(flow=flow,qid=qid))
          send_msg!(e,install_msg,model)
          
     end
@@ -155,10 +156,11 @@ function in_packet_handler(a::Agent,msg::OFMessage,model)
         found = true
     end
    
-    # println("[$(model.ticks)]($(a.id)) msg-> $(msg), path ==> $(path)")
+    
    
     if found 
         #install_flows!(msg.dpid,msg.in_port,path,model) 
+        #println("[$(model.ticks)]($(a.id)) msg-> $(msg), path ==> $(path)")
         # println("[$(model.ticks)]($(a.id)) in pkt handler: path $path")
         install_flow!(a,path,model,msg)
     else
@@ -211,8 +213,9 @@ function do_query!(msg::OFMessage,a::Agent,model)
     query_paths = get_state(a).paths
     query_graph = a.params[:ntw_graph]
     
+    sdir = data_dir * "runs2/$(model.ctrl_model)/"
     
-    if model.benchmark record_benchmark!(data_dir * "runs/$(model.ctrl_model)/",model.seed,nv(model.ntw_graph),a.id,query_time,query,query_graph,query_paths) end
+    if model.benchmark record_benchmark!(sdir,model.seed,nv(model.ntw_graph),a.id,query_time,query,query_graph,query_paths) end
     
     path = do_query(query_time,query,query_graph,query_paths)
     
@@ -228,9 +231,13 @@ function do_query!(msg::OFMessage,a::Agent,model)
         send_to_nbs!(msg_template,a,model)
     end
     
-
     new_state = get_state(a)
     new_state.q_queries += 1.0
+    if !isempty(path) && msg.dpid != msg.data.dst #&&  msg.data.src in first(get_controlled_assets(a.id,model))
+        #body: $(msg.body[:query])
+        #println("[$(model.ticks)]($(a.id))   in:  $(msg.data.src in first(get_controlled_assets(a.id,model))) -- ca: $(first(get_controlled_assets(a.id,model))) -- query: $(msg.dpid) - $(msg.data.dst)  -> score: $(path)") 
+        push!(new_state.path_scores,(msg.dpid,msg.data.dst,path[2]))
+    end
     set_state!(a,new_state)
 
 

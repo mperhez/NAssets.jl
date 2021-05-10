@@ -153,7 +153,7 @@ function model_step!(model)
     ctl_links_step!(model)
     
     # if model.ticks in 80:1:90
-    #     println("[$(model.ticks)] - AFTER Processing $(get_state(getindex(model,10)))")
+    println("[$(model.ticks)] - AFTER Processing $(get_state(getindex(model,1)))")
     # end    
     # if model.ticks == 1 
         generate_traffic!(model) 
@@ -425,7 +425,7 @@ function generate_traffic!(model)
     q_pkts = abs(round(model.:max_queue_ne*rand(Normal(1,0.15))))
     # q_pkts = model.:max_queue_ne
     #src,dst = samplepair(1:nv(model.ntw_graph)) # can be replaced for random pair
-    pairs = [(1,7),(4,1),(9,5)] #[(9,5)] #[(4,5)]#
+    pairs = [(1,7)]#,(4,1),(9,5)] #[(9,5)] #[(4,5)]#
 
     for p in pairs
         src,dst = p

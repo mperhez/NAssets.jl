@@ -150,10 +150,9 @@ end
     Query by neighbour control agent after receiving AGMessage
 """
 function do_query!(msg::AGMessage,a::Agent,model)
-    # println("[$(model.ticks)]($(a.id)) -> TODO Local search")
-    query_ignore = 5 #TODO to model
+    query_ignore = 30 #TODO to model
     ignore = haskey(a.previous_queries,msg.body[:query]) ? model.ticks - a.previous_queries[msg.body[:query]] < query_ignore ? true : false : false
-        
+    sdir = data_dir * "runs2/$(model.ctrl_model)/"
     if !ignore 
         
 
@@ -167,7 +166,7 @@ function do_query!(msg::AGMessage,a::Agent,model)
         jg = join_subgraphs(a.params[:ntw_graph],msg_ntw_g)
         ntw_edgel = [ e for e in edges(jg) if src(e) <  dst(e) ]
         ntw_equiv = [(v,jg[v,:eid]) for v in vertices(jg)]
-        
+        println("[$(model.ticks)]($(a.id)) ==> joint: $(nv(jg))")
         #do query
         query = msg.body[:query]
         query_time = model.ticks
@@ -175,7 +174,7 @@ function do_query!(msg::AGMessage,a::Agent,model)
         query_graph = jg
         path = Dict()
 
-        if model.benchmark record_benchmark!(data_dir * "runs/$(model.ctrl_model)/",model.seed,nv(model.ntw_graph),a.id,query_time,query,query_graph,query_paths) end
+        if model.benchmark record_benchmark!(sdir,model.seed,nv(model.ntw_graph),a.id,query_time,query,query_graph,query_paths) end
 
         path = do_query(query_time,query,query_graph,query_paths)        
 
