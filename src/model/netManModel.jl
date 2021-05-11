@@ -26,6 +26,7 @@ function initialize(args,user_props;grid_dims=(3,3),seed=0)
         :mapping_ctl_ntw => Dict{Int64,Int64}(), # mapping between (Ctl) Agent and SimNE
         :mapping_ntw_sne => Dict{Int64,Int64}(), #mapping btwn the underlying network and the corresponding simNE agent 
         :max_cache_paths => 2,
+        :clear_cache_graph_freq => 10, # How often the ntw graph is cleared to initial state
         :pkt_per_tick => 2000, # How many packets are processsed per tick
         :ctrl_model => args[:ctrl_model], 
         :pkt_size => 0.065, # (in MB) Max pkt size  IP is 65536 bytes
@@ -36,7 +37,10 @@ function initialize(args,user_props;grid_dims=(3,3),seed=0)
         :ntw_links_delays =>Dict{Tuple{Int,Int},Int}(),
         :state_trj => Vector{ModelState}(),
         :interval_tpt => 10,
-        :max_queue_ne => 400
+        :max_queue_ne => 100,
+        :query_cycle => 30, # how long the max_eq_queries_cycle applies for
+        :prob_eq_queries_cycle => 1, #base probability of processing equal queries
+        :prob_random_walks => 1 # prob. of neighbour nodes to propagate query msgs.
     )
 
     Random.seed!(seed)
@@ -144,7 +148,7 @@ function model_step!(model)
         #     println("($(a.id)) ==> $(a.queue)")
         # end
     end
-    
+    generate_traffic!(model) 
     for e in edges(model.ntw_graph)
         ntw_link_step!((e.src,e.dst),model)
     end
@@ -153,16 +157,15 @@ function model_step!(model)
     ctl_links_step!(model)
     
     # if model.ticks in 80:1:90
-    println("[$(model.ticks)] - AFTER Processing $(get_state(getindex(model,1)))")
+    # println("[$(model.ticks)] - AFTER Processing $(get_state(getindex(model,1)))")
     # end    
-    # if model.ticks == 1 
-        generate_traffic!(model) 
-    # end
+ 
     for a in allagents(model)
         do_agent_step!(a,model)
     end
     for a in allagents(model)
         pending_pkt_handler(a,model)
+        clear_cache!(a,model)
     end
 
     
@@ -310,8 +313,9 @@ function init_agent!(a::Agent,model)
         nodes = [a.id]
         ctl_sub_g = get_subgraph(model.ctl_graph,nodes,:aid)
         # println("Control Network size $(nv(ctl_sub_g))")
-
         a.params[:ntw_graph] = sub_g
+        a.params[:base_ntw_graph] = sub_g
+        a.params[:last_cache_graph] = 0 #Last time cache was cleared
         a.params[:ctl_graph] = ctl_sub_g
         a.params[:delay_ctl_link] = 1 # 1: no delay
         #Init vector of msgs
@@ -422,7 +426,9 @@ end
 
 
 function generate_traffic!(model)
-    q_pkts = abs(round(model.:max_queue_ne*rand(Normal(1,0.15))))
+    # println("[$(model.ticks)] - generating traffic")
+    # q_pkts = abs(round(model.:max_queue_ne*rand(Normal(1,0.15))))
+    q_pkts = abs(round(model.:max_queue_ne*rand(Normal(1,0))))
     # q_pkts = model.:max_queue_ne
     #src,dst = samplepair(1:nv(model.ntw_graph)) # can be replaced for random pair
     pairs = [(1,7)]#,(4,1),(9,5)] #[(9,5)] #[(4,5)]#
@@ -435,6 +441,8 @@ function generate_traffic!(model)
             for i =1:q_pkts
                 pkt = create_pkt(src,dst,model)
                 push_msg!(sne_src,OFMessage(next_ofmid!(model), model.ticks,src,0,pkt)) # always from port 0
+                in_pkt_count = get_state(sne_src).in_pkt + 1
+                set_in_pkt!(sne_src,in_pkt_count)
             end
         end
     end

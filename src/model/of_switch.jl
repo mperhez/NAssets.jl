@@ -210,17 +210,20 @@ end
 #     #TODO in_processing msgs of controller to install flow for unknown dst
 # end
 
-function forward(msg::OFMessage,src::SimNE,model)
-    #println("Packet $(msg.id) delivered")
+function forward!(msg::OFMessage,src::SimNE,model)
+    println("[$(model.ticks)]($(src.id)) Packet $(msg.id) delivered")
     out_pkt_count = get_state(src).out_pkt + 1
     set_out_pkt!(src,out_pkt_count)
 end
 
-function forward(msg::OFMessage,src::SimNE,dst::SimNE,model)
+function forward!(msg::OFMessage,src::SimNE,dst::SimNE,model)
+    # println("[$(model.ticks)] ($(src.id)) forwarding $msg")
     in_ports = filter(p->p[2]=="s$(src.id)",get_port_edge_list(dst))
     in_port = in_ports[1][1]
     push_msg!(src,dst,OFMessage(next_ofmid!(model),model.ticks,src.id,in_port,msg.data),model)
     #@show msg out_port
+    out_pkt_count = get_state(src).out_pkt + 1
+    set_out_pkt!(src,out_pkt_count)
 end
 
 function route_traffic!(a::SimNE,msg::OFMessage,model)
@@ -238,8 +241,14 @@ function route_traffic!(a::SimNE,msg::OFMessage,model)
                             && (fw.match_rule.in_port == string(msg.in_port) || fw.match_rule.in_port == "*" )
                             && (fw.match_rule.dst == string(msg.data.dst) || fw.match_rule.dst == "*")
                             , get_flow_table(a))
-    #println("[[$(model.ticks)]($(a.id)) flow==> $(flow)")
+    # if a.id == 1
+    #     println("[[$(model.ticks)]($(a.id)) flow==> $(flow)")
+    # end
     if !isempty(flow)
+
+        # if a.id == 1
+        #     println("[[$(model.ticks)]($(a.id)) flow.params ==> $(flow[1].params[1][1])")
+        # end
 
         if flow[1].params[1][1] != 0
             ports = get_port_edge_list(a)
@@ -249,10 +258,10 @@ function route_traffic!(a::SimNE,msg::OFMessage,model)
             # end
             dst = getindex(model,dst_id)
             #flow[1].action(model.ticks,msg,a,dst)
-            forward(msg,a,dst,model)
+            forward!(msg,a,dst,model)
         else
            # flow[1].action(model.ticks,msg,a)
-           forward(msg,a,model)
+           forward!(msg,a,model)
         end
         # flow[1].action == OFS_Output ? out_pkt_count += 1 : out_pkt_count
         #@show flow
@@ -269,7 +278,7 @@ function route_traffic!(a::SimNE,msg::OFMessage,model)
             ctl_msg = OFMessage(of_qid,model.ticks,a.id,msg.in_port,msg.data)
             send_msg!(a.controller_id,ctl_msg,model)
             push!(a.requested_ctl,(model.ticks,msg.data.src,msg.data.dst))
-            println("pending query: $of_qid -> $(msg.data.src) - $(msg.data.dst)")
+            # println("pending query: $of_qid -> $(msg.data.src) - $(msg.data.dst)")
             push_pending_query!(a,of_qid)
         end
         #return package to queue as it does not know what to do with it
@@ -349,8 +358,6 @@ end
 Processes msgs to SimNE
 """
 function process_msg!(sne::SimNE,msg::OFMessage,model)
-    #println("[$(model.ticks)]($(sne.id)) -> processing $(msg.reason)")
-    
     @match msg.reason begin
         Ofp_Protocol(1) =>  
                         begin
@@ -358,6 +365,7 @@ function process_msg!(sne::SimNE,msg::OFMessage,model)
                         end
         Ofp_Protocol(3) => 
                         begin
+                            # println("[$(model.ticks)]($(sne.id)) -> processing $(msg.reason)")
                             install_flow!(msg,sne,model)       
                         end
                             
@@ -462,6 +470,7 @@ function init_state!(sme::SimNE)
     new_state = deepcopy(get_state(sme)) #!isnothing(get_state(sme)) ? deepcopy(get_state(sme)) : NetworkAssetState(sme.id)
     new_state.in_pkt = 0
     new_state.out_pkt = 0
+    new_state.drop_pkt = 0
     push!(sme.state_trj,new_state)
 end
 function init_state!(a::Agent)
@@ -562,7 +571,7 @@ end
 function push_pending_query!(sne::SimNE,new_pending_query::Int64)
     state = get_state(sne)
     push!(state.pending_queries,new_pending_query)
-    println("sending query $new_pending_query")
+    #println("sending query $new_pending_query")
     set_state!(sne,state)
 end
 
@@ -592,17 +601,6 @@ end
 
 function get_state_trj(sne::SimNE)::Vector{State}
     return sne.state_trj
-end
-
-function to_string(s::NetworkAssetState)
-    sep = "; "
-    return  string(s.ne_id) * 
-            sep * string(s.up) *
-            sep * string(s.port_edge_list) * 
-            sep * string(s.in_pkt) *
-            sep * string(s.out_pkt) *
-            sep * string(s.flow_table) *
-            sep * string(s.pending_queries)
 end
 
 """

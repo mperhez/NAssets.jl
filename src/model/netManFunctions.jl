@@ -859,7 +859,7 @@ function load_run_configs()
         for size in [100]#, 50, 100]
             for drop_proportion in [10]
                 for seed in [123]
-                    push!(configs,new_config(seed,ctl_model,size,20,drop_proportion,false,false))
+                    push!(configs,new_config(seed,ctl_model,size,50,drop_proportion,false,false))
                 end
             end
         end
@@ -972,7 +972,8 @@ function single_run(config)
 
     #ags_1 = [ split(string(i-1)*";"*replace(to_string(ags[j][i]),"NetworkAssetState(" => ""),";") for j=1:length(ags)] for i=1:length(ags[j]) ]
     open(sdir*"$(config.size)_$(config.seed)_steps_nelements.csv", "w") do io
-        writedlm(io, ["tick" "id" "up" "ports_edges" "pkt_in" "pkt_out" "flows"], ';')
+        # writedlm(io, ["tick" "id" "up" "ports_edges" "pkt_in" "pkt_out" "pkt_drop" "flows"], ';')
+        writedlm(io,reshape(vcat(["tick"],string.([i for i in fieldnames(NetworkAssetState)])),1,length(fieldnames(NetworkAssetState))+1),';')
         writedlm(io,nes_1,';') 
     end;
     
@@ -982,7 +983,8 @@ function single_run(config)
     #  end
 
     open(sdir*"$(config.size)_$(config.seed)_steps_ctl_agents.csv", "w") do io
-        writedlm(io, ["tick" "id" "up" "paths" "in_ag_msg" "out_ag_msg" "in_of_msg" "out_of_msg" "q_queries" ], ';')
+        # writedlm(io, ["tick" "id" "up" "paths" "in_ag_msg" "out_ag_msg" "in_of_msg" "out_of_msg" "q_queries" ], ';')
+        writedlm(io,reshape(vcat(["tick"],string.([i for i in fieldnames(ControlAgentState)])),1,length(fieldnames(ControlAgentState))+1),';')
         writedlm(io,ctl_ags_1,';') 
     end;
 
@@ -993,3 +995,23 @@ function single_run(config)
 
 end
 
+"""
+Clears cache of control agent
+"""
+function clear_cache!(a::Agent,model::ABM)
+
+    if model.ticks - a.params[:last_cache_graph] == model.clear_cache_graph_freq
+        a.params[:ntw_graph] = a.params[:base_ntw_graph]
+        a.params[:last_cache_graph] = model.ticks
+    end
+
+end
+
+function clear_cache!(sne::SimNE,model::ABM)
+    #placeholder
+end
+
+function to_string(s)
+    sep = "; "
+    return join([getfield(s,a) for a in fieldnames(typeof(s))],sep)
+end

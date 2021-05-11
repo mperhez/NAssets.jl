@@ -26,14 +26,21 @@ function send_to_nbs!(msg_template::AGMessage,a::Agent,model)
     cg = a.params[:ctl_graph]
     nbs = neighbors(cg,to_local_vertex(cg,a.id,:aid))
     gid_nbs = [cg[v,:aid] for v in nbs]
-    # println("[$(model.ticks)]($(a.id)) sending to nbs: $(gid_nbs)")
-    for nb in gid_nbs
+    gid_nbs = [gid for gid in gid_nbs if ~(gid in msg_template.body[:trace]) ]
+    random_nbs = rand(Binomial(1,model.prob_random_walks),length(gid_nbs))
+    random_nbs = [rnb for rnb in random_nbs .* gid_nbs if rnb > 0]
+    # println("[$(model.ticks)]($(a.id)) sending to $(length(gid_nbs)) nbs: $(gid_nbs)")
+    # println("[$(model.ticks)]($(a.id)) sending to $(length(random_nbs)) random_nbs: $(random_nbs)")
+    #println("[$(model.ticks)]($(a.id)) body: $(msg_template.body)")
+    for nb in random_nbs
         if ~(nb in msg_template.body[:trace])
             body = deepcopy(msg_template.body)
             fw_msg = create_amsg!(a.id,nb,msg_template,model)
             send_msg!(nb,fw_msg,model)
         end
     end
+
+
 end
 
 """
@@ -150,8 +157,17 @@ end
     Query by neighbour control agent after receiving AGMessage
 """
 function do_query!(msg::AGMessage,a::Agent,model)
-    query_ignore = 30 #TODO to model
-    ignore = haskey(a.previous_queries,msg.body[:query]) ? model.ticks - a.previous_queries[msg.body[:query]] < query_ignore ? true : false : false
+
+    ignore = false 
+    if haskey(a.previous_queries,msg.body[:query]) 
+        if model.ticks - a.previous_queries[msg.body[:query]] < model.query_cycle
+            bdst = Binomial(1,model.prob_eq_queries_cycle)
+            ignore = ~Bool(first(rand(bdst,1)))
+        end
+    end 
+    
+
+
     sdir = data_dir * "runs2/$(model.ctrl_model)/"
     if !ignore 
         
@@ -162,11 +178,14 @@ function do_query!(msg::AGMessage,a::Agent,model)
         
         # join graph received
         msg_ntw_g = create_subgraph(msg.body[:ntw_edgel],msg.body[:ntw_equiv],:eid)
-        # do not update local graph to avoid it to grow and in case of volatile topo
+        
         jg = join_subgraphs(a.params[:ntw_graph],msg_ntw_g)
+        # update local graph, however the problem it can grow too much
+        a.params[:ntw_graph] = jg
+
         ntw_edgel = [ e for e in edges(jg) if src(e) <  dst(e) ]
         ntw_equiv = [(v,jg[v,:eid]) for v in vertices(jg)]
-        println("[$(model.ticks)]($(a.id)) ==> joint: $(nv(jg))")
+        #println("[$(model.ticks)]($(a.id)) ==> joint: $(nv(jg))")
         #do query
         query = msg.body[:query]
         query_time = model.ticks
@@ -264,19 +283,6 @@ end
 function get_state_trj(a::Agent)::Vector{State}
     return a.state_trj
 end
-
-function to_string(s::ControlAgentState)
-    sep = "; "
-    return  string(s.a_id) * 
-            sep * string(s.up) *
-            sep * string(s.paths) * 
-            sep * string(s.in_ag_msg) *
-            sep * string(s.out_ag_msg) *
-            sep * string(s.in_of_msg) *
-            sep * string(s.out_of_msg) *
-            sep * string(s.q_queries)
-end
-
 
 function get_throughput_up(a::Agent,model)
     v_msg_in = [ s.in_ag_msg for s in a.state_trj ]
