@@ -16,7 +16,7 @@ function initialize(args,user_props;grid_dims=(3,3),seed=0)
         :pkt_id => 0,
         :amsg_id =>0,
         :ofmsg_id=>0,
-        :ofmsg_reattempt=>4,
+        :ofmsg_reattempt=>10,#4,# greater number to avoid duplicated install flows
         :pulses=>pulses,
         :Τ => args[:Τ], # Max time steps to fire
         :ΔΦ => args[:ΔΦ],
@@ -37,8 +37,8 @@ function initialize(args,user_props;grid_dims=(3,3),seed=0)
         :ntw_links_delays =>Dict{Tuple{Int,Int},Int}(),
         :state_trj => Vector{ModelState}(),
         :interval_tpt => 10,
-        :max_queue_ne => 100,
-        :query_cycle => 30, # how long the max_eq_queries_cycle applies for
+        :max_queue_ne => 100,#700
+        :query_cycle => 30,#30, # how long the max_eq_queries_cycle applies for
         :prob_eq_queries_cycle => 1, #base probability of processing equal queries
         :prob_random_walks => 1 # prob. of neighbour nodes to propagate query msgs.
     )
@@ -141,7 +141,7 @@ end
 """
 function model_step!(model)
     init_step_state!(model)
-    # println("=====Tick $(model.ticks)======")
+    log_info("=====Tick $(model.ticks)======")
     for a in allagents(model)
         init_state!(a)
         # if typeof(a) == SimNE 

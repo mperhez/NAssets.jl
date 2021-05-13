@@ -512,11 +512,13 @@ end
 
 function do_agent_step!(a::SimNE,model)
     #Process OF messages (packet data traffic)
+    log_info("[$(model.ticks)]($(a.id)) start step")
     is_up(a) && is_ready(a) ? in_packet_processing(a,model) : nothing #println("queue of $(a.id) is empty")
+    # @debug("[$(model.ticks)]($(a.id)) end step")
 end
 
 function do_agent_step!(a::Agent,model)
-
+    # @debug("[$(model.ticks)]($(a.id)) start step")
     # Process asset-agent messages
     
     ## Process OF Messages (SimNE to (sdn) control messages)
@@ -543,7 +545,7 @@ function do_agent_step!(a::Agent,model)
     #     # [ println("CTL Ag $(a.id) graph has nodes: $(get_prop(ctl_g,nb,:aid))") for nb in neighbors(ctl_g,my_v)]
     # end
 
-    
+    # @debug("[$(model.ticks)]($(a.id)) end step")
 
 end
 
@@ -856,7 +858,7 @@ end
 function load_run_configs() 
     configs = []
     for ctl_model in [ControlModel(4)]#,ControlModel(2) ] #instances(ControlModel)
-        for size in [100]#, 50, 100]
+        for size in [10]#, 50, 100]
             for drop_proportion in [10]
                 for seed in [123]
                     push!(configs,new_config(seed,ctl_model,size,50,drop_proportion,false,false))
@@ -883,6 +885,7 @@ function single_run(config)
     args[:animation] = config.animation
 
     q_ctl_agents = 0
+    run_label = "$(config.size)_$(config.seed)"
 
     if config.ctl_model == ControlModel(1)
         args[:ctl_graph] = MetaGraph()
@@ -913,8 +916,8 @@ function single_run(config)
     if !isdir(sdir)
         mkdir(sdir) 
      end
-    serialize( sdir * "$(config.size)_$(config.seed)_steps_ctl_agents.bin",ctl_ags)
-    serialize( sdir * "$(config.size)_$(config.seed)_steps_nelements.bin",nes)
+    serialize( sdir * run_label * "_steps_ctl_agents.bin",ctl_ags)
+    serialize( sdir * run_label * "_steps_nelements.bin",nes)
     # nwords = Dict(1=>"one",2=>"two",3=>"three",4=>"four",5=>"five",6=>"six",7=>"seven",8=>"eight",9=>"nine",0=>"zero", 10=>"ten")
 
     # for i in 1:length(ctl_ags)
@@ -954,14 +957,14 @@ function single_run(config)
         #     #println(hcat([i 1; i 2 ; i 3] , ags_condition[i]),';')
         # end
 
-    open(sdir*"$(config.size)_$(config.seed)_condition_nelements.csv", "w") do io
+    open(sdir * run_label * "_condition_nelements.csv", "w") do io
         for i=1:nv(ntw_graph)
             writedlm(io,hcat([i 1; i 2 ; i 3] , nes_condition[i]),';')
         end
     end;
 
 
-    open(sdir*"$(config.size)_$(config.seed)_rul_neselements.csv", "w") do io
+    open(sdir * run_label * "_rul_neselements.csv", "w") do io
     #     #for i=1:nv(ntw_graph)
             writedlm(io,nes_rul[1:10],';')
     #     #end
@@ -971,7 +974,7 @@ function single_run(config)
     model_data = [ (m.tick,m.links_load) for m in model_data ]
 
     #ags_1 = [ split(string(i-1)*";"*replace(to_string(ags[j][i]),"NetworkAssetState(" => ""),";") for j=1:length(ags)] for i=1:length(ags[j]) ]
-    open(sdir*"$(config.size)_$(config.seed)_steps_nelements.csv", "w") do io
+    open(sdir * run_label * "_steps_nelements.csv", "w") do io
         # writedlm(io, ["tick" "id" "up" "ports_edges" "pkt_in" "pkt_out" "pkt_drop" "flows"], ';')
         writedlm(io,reshape(vcat(["tick"],string.([i for i in fieldnames(NetworkAssetState)])),1,length(fieldnames(NetworkAssetState))+1),';')
         writedlm(io,nes_1,';') 
@@ -982,14 +985,14 @@ function single_run(config)
     #     write(io, js_ctl_agents)
     #  end
 
-    open(sdir*"$(config.size)_$(config.seed)_steps_ctl_agents.csv", "w") do io
+    open(sdir * run_label * "_steps_ctl_agents.csv", "w") do io
         # writedlm(io, ["tick" "id" "up" "paths" "in_ag_msg" "out_ag_msg" "in_of_msg" "out_of_msg" "q_queries" ], ';')
         writedlm(io,reshape(vcat(["tick"],string.([i for i in fieldnames(ControlAgentState)])),1,length(fieldnames(ControlAgentState))+1),';')
         writedlm(io,ctl_ags_1,';') 
     end;
 
 
-    open(sdir*"$(config.size)_$(config.seed)_steps_model.csv", "w") do io
+    open(sdir * run_label * "_steps_model.csv", "w") do io
         writedlm(io,model_data,';') 
     end;
 
@@ -1014,4 +1017,26 @@ end
 function to_string(s)
     sep = "; "
     return join([getfield(s,a) for a in fieldnames(typeof(s))],sep)
+end
+
+"""
+    Log info msg
+"""
+function log_info(msg)
+    st = string(stacktrace()[2])
+    file_name = lstrip(st[last(findlast("at ",st)):last(findlast(":",st))-1])
+    method_name = lstrip(st[1:last(findfirst("(",st))-1])
+    logger = get_logger(file_name * "|" * method_name)
+    info(logger, msg)
+end
+
+function get_logger(log_name)
+    return haskey(loggers,log_name) ? loggers[log_name] : init_logger(log_name)
+end
+
+function init_logger(log_name)
+    loggers[log_name] = getlogger(log_name)
+    setlevel!(loggers[log_name], "info")
+    push!(loggers[log_name], DefaultHandler(tempname(), DefaultFormatter("[{date} | {level} | {name}]: {msg}")))
+    return loggers[log_name]
 end
