@@ -211,7 +211,7 @@ end
 # end
 
 function forward!(msg::OFMessage,src::SimNE,model)
-    println("[$(model.ticks)]($(src.id)) Packet $(msg.id) delivered")
+    # println("[$(model.ticks)]($(src.id)) Packet $(msg.id) delivered")
     out_pkt_count = get_state(src).out_pkt + 1
     set_out_pkt!(src,out_pkt_count)
 end
