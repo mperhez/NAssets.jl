@@ -211,13 +211,13 @@ end
 # end
 
 function forward!(msg::OFMessage,src::SimNE,model)
-    # println("[$(model.ticks)]($(src.id)) Packet $(msg.id) delivered")
+    # log_info("[$(model.ticks)]($(src.id)) Packet $(msg.id) delivered")
     out_pkt_count = get_state(src).out_pkt + 1
     set_out_pkt!(src,out_pkt_count)
 end
 
 function forward!(msg::OFMessage,src::SimNE,dst::SimNE,model)
-    # println("[$(model.ticks)] ($(src.id)) forwarding $msg")
+    # log_info("[$(model.ticks)] ($(src.id)) forwarding $msg")
     in_ports = filter(p->p[2]=="s$(src.id)",get_port_edge_list(dst))
     in_port = in_ports[1][1]
     push_msg!(src,dst,OFMessage(next_ofmid!(model),model.ticks,src.id,in_port,msg.data),model)
@@ -227,13 +227,13 @@ function forward!(msg::OFMessage,src::SimNE,dst::SimNE,model)
 end
 
 function route_traffic!(a::SimNE,msg::OFMessage,model)
-    # println("[$(model.ticks)]($(a.id)) Routing Msg $(msg)")
+    # log_info("[$(model.ticks)]($(a.id)) Routing Msg $(msg)")
     out_pkt_count = 0
 
     # if a.id == 1 && model.ticks > 80 && model.ticks < 90
-    #     println("[$(model.ticks)]($(a.id)) Found this msg $(msg)")
-    #     println("[$(model.ticks)]($(a.id)) Found this ports $(get_state(a).port_edge_list)")
-    #     println("[$(model.ticks)]($(a.id)) Found this table $(get_state(a).flow_table)")
+    #     log_info("[$(model.ticks)]($(a.id)) Found this msg $(msg)")
+    #     log_info("[$(model.ticks)]($(a.id)) Found this ports $(get_state(a).port_edge_list)")
+    #     log_info("[$(model.ticks)]($(a.id)) Found this table $(get_state(a).flow_table)")
     # end
 
     flow = filter(fw -> 
@@ -242,19 +242,19 @@ function route_traffic!(a::SimNE,msg::OFMessage,model)
                             && (fw.match_rule.dst == string(msg.data.dst) || fw.match_rule.dst == "*")
                             , get_flow_table(a))
     # if a.id == 1
-    #     println("[[$(model.ticks)]($(a.id)) flow==> $(flow)")
+    #     log_info("[[$(model.ticks)]($(a.id)) flow==> $(flow)")
     # end
     if !isempty(flow)
 
         # if a.id == 1
-        #     println("[[$(model.ticks)]($(a.id)) flow.params ==> $(flow[1].params[1][1])")
+        #     log_info("[[$(model.ticks)]($(a.id)) flow.params ==> $(flow[1].params[1][1])")
         # end
 
         if flow[1].params[1][1] != 0
             ports = get_port_edge_list(a)
             dst_id = parse(Int64,filter(x->x[1]==flow[1].params[1],ports)[1][2][2:end])
             # if a.id == 10 && model.ticks in 80:1:90 
-            #     println("[$(model.ticks)]($(a.id)) New destinatio is $(dst_id) ")
+            #     log_info("[$(model.ticks)]($(a.id)) New destinatio is $(dst_id) ")
             # end
             dst = getindex(model,dst_id)
             #flow[1].action(model.ticks,msg,a,dst)
@@ -267,10 +267,10 @@ function route_traffic!(a::SimNE,msg::OFMessage,model)
         #@show flow
     else
         # if a.id == 10 && model.ticks in 80:1:90 
-        #     println("[$(model.ticks)]($(a.id)) else New destinatio is $(get_state(a)) ")
+        #     log_info("[$(model.ticks)]($(a.id)) else New destinatio is $(get_state(a)) ")
         # end
         similar_requests = filter(r->(r[2],r[3]) == (msg.data.src,msg.data.dst) && (model.ticks - r[1]) < model.ofmsg_reattempt+1,a.requested_ctl)
-        #println("[$(model.ticks)]($(a.id)) Similar requests $(similar_requests)")
+        #log_info("[$(model.ticks)]($(a.id)) Similar requests $(similar_requests)")
         if isempty(similar_requests)
             controller = getindex(model,a.controller_id)
             #ask_controller(a,controller,msg)
@@ -278,7 +278,7 @@ function route_traffic!(a::SimNE,msg::OFMessage,model)
             ctl_msg = OFMessage(of_qid,model.ticks,a.id,msg.in_port,msg.data)
             send_msg!(a.controller_id,ctl_msg,model)
             push!(a.requested_ctl,(model.ticks,msg.data.src,msg.data.dst))
-            # println("pending query: $of_qid -> $(msg.data.src) - $(msg.data.dst)")
+            # log_info("pending query: $of_qid -> $(msg.data.src) - $(msg.data.dst)")
             push_pending_query!(a,of_qid)
         end
         #return package to queue as it does not know what to do with it
@@ -293,7 +293,7 @@ end
 """
 function push_msg!(src::SimNE,dst::SimNE,msg::OFMessage,model)
     #put!(sne.queue,msg)
-    #println("[$(model.ticks)] msgs: $(model.ntw_links_msgs)")
+    #log_info("[$(model.ticks)] msgs: $(model.ntw_links_msgs)")
     l = (get_address(src.id,model.ntw_graph),get_address(dst.id,model.ntw_graph))
     l = l[1] < l[2] ? l : (l[2],l[1])
     if !haskey(model.ntw_links_msgs,l)
@@ -320,7 +320,7 @@ end
 
 function install_flow!(msg::OFMessage, sne::SimNE,model)
     #ports = get_port_edge_list(sne,model)
-    # println("[$(model.ticks)] Installing flow: $(sne.id) - $(msg)")
+    # log_info("[$(model.ticks)] Installing flow: $(sne.id) - $(msg)")
     push!(get_state(sne).flow_table,first(msg.data)) #msg.data[1] = flow, msg.data[2] = query_id:qid
     
     pop_pending_query!(sne,last(msg.data))
@@ -342,10 +342,10 @@ function in_packet_processing(a::AbstractAgent,model)
     end
     
     # for i in 1:a.params[:pkt_per_tick]
-    #     #println("[$(model.ticks)]($(a.id)) -> processing $i")
+    #     #log_info("[$(model.ticks)]($(a.id)) -> processing $i")
     #     msg = is_ready(a) ? take_msg!(a) : break
     #     # if model.ticks < 3
-    #     #     println("[$(model.ticks)]($(a.id)) Processing packet $(msg)")
+    #     #     log_info("[$(model.ticks)]($(a.id)) Processing packet $(msg)")
     #     # end
     #     # in_pkt_count += 1
     #     # out_pkt_count += 
@@ -365,12 +365,12 @@ function process_msg!(sne::SimNE,msg::OFMessage,model)
                         end
         Ofp_Protocol(3) => 
                         begin
-                            # println("[$(model.ticks)]($(sne.id)) -> processing $(msg.reason)")
+                            # log_info("[$(model.ticks)]($(sne.id)) -> processing $(msg.reason)")
                             install_flow!(msg,sne,model)       
                         end
                             
         _ => begin
-            println("[$(model.ticks)]($(sne.id)) -> match default")
+            log_info("[$(model.ticks)]($(sne.id)) -> match default")
             end
     end
 end
@@ -385,7 +385,7 @@ function pending_pkt_handler(a::SimNE,model)
     # end
     q_i = 0
     if !isempty(a.pending)
-        # println("[$(model.ticks)]($(a.id)) pending: $(length(a.pending))")
+        # log_info("[$(model.ticks)]($(a.id)) pending: $(length(a.pending))")
 
         for msg in a.pending 
             if msg.reason == OFPR_ACTION
@@ -411,7 +411,7 @@ end
 function throughput(bytes₋₁,bytes₀, τ₋₁,τ₀)
     Δτ = τ₀ - τ₋₁
     Δbytes = bytes₀ - bytes₋₁
-    #println("Δbytes: $(bytes₀)  - $(bytes₋₁) / Δτ: $(Δτ)")
+    #log_info("Δbytes: $(bytes₀)  - $(bytes₋₁) / Δτ: $(Δτ)")
     return Δτ > 0 && Δbytes >= 0 ? Δbytes / Δτ : 0
 end
 
@@ -420,29 +420,29 @@ It simulates operations happening in a network asset
 when the link corresponding to the given dpn_id goes down
 """
 function link_down!(sne::SimNE,dpn_id::Int,model)
-    # println("[$(model.ticks)]($(sne.id)) link down start")
+    # log_info("[$(model.ticks)]($(sne.id)) link down start")
     #remove from list of ports
     new_port_edge_list::Vector{Tuple{Int64,String}} = []
     dpn_port = -1
     for p in get_port_edge_list(sne)
-        # println("[$(model.ticks)]($(sne.id)) port found: $p")
+        # log_info("[$(model.ticks)]($(sne.id)) port found: $p")
         if p[2]!="s"*string(dpn_id)
             push!(new_port_edge_list,p)
         else
             dpn_port = p[1]
         end
     end
-    # println("[$(model.ticks)]($(sne.id)) link down mid")
+    # log_info("[$(model.ticks)]($(sne.id)) link down mid")
     set_port_edge_list!(sne,new_port_edge_list)
     new_flow_table::Vector{Flow} = []
     for f in get_flow_table(sne)
-        # println("[$(model.ticks)]($(sne.id)) dpn_port: $dpn_port in $(f.params) - flow found: $(f)")
+        # log_info("[$(model.ticks)]($(sne.id)) dpn_port: $dpn_port in $(f.params) - flow found: $(f)")
         if  ~(dpn_port in f.params)
             push!(new_flow_table,f)
         end    
     end
     set_flow_table!(sne,new_flow_table)
-    # println("[$(model.ticks)]($(sne.id)) new flow found: $(get_state(sne).flow_table)")
+    # log_info("[$(model.ticks)]($(sne.id)) new flow found: $(get_state(sne).flow_table)")
     controller = getindex(model,sne.controller_id)
     trigger_of_event!(model.ticks,controller,dpn_id,EventOFPPortStatus,model)
 end
@@ -571,7 +571,7 @@ end
 function push_pending_query!(sne::SimNE,new_pending_query::Int64)
     state = get_state(sne)
     push!(state.pending_queries,new_pending_query)
-    #println("sending query $new_pending_query")
+    #log_info("sending query $new_pending_query")
     set_state!(sne,state)
 end
 
@@ -620,9 +620,9 @@ function get_throughput(pb_trj::Array{Float64,1},interval::Int)
     # b_1 = zeros(Float64,min(interval,length(pkt_trj)))
     # b_2 = pkt_trj[1:end-interval]
     # b = vcat(b_1,b_2)
-    # println("calculating tpt......-> $(a) -- $(b_1) -- $(b_2) -- $b ")
+    # log_info("calculating tpt......-> $(a) -- $(b_1) -- $(b_2) -- $b ")
     # result = get_throughput.(a,b,[interval]) 
-    # println("result of tpt is $result")
+    # log_info("result of tpt is $result")
     return acc_pb
 
 end

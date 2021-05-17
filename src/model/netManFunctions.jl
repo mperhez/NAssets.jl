@@ -7,6 +7,49 @@ export ϕ
     COMPLETE=4
 end
 
+
+"""
+    Log info msg
+"""
+function log_info(msg)
+    #st = string(stacktrace()[2])
+    #file_name = lstrip(st[last(findlast("at ",st)):end])
+    #file_name = split(file_name,":")
+    # file_name = lstrip(st[last(findlast("at ",st)):last(findlast(":",st))-1])
+    #method_name = lstrip(st[1:last(findfirst("(",st))-1])
+    # logger = get_logger(file_name * "|" * method_name)
+    # @info(file_name * "]" * msg)
+    #@info msg _module="" _file= replace(first(file_name),".jl"=>"") _line=parse(Int64,last(file_name))
+    @info msg
+end
+
+"""
+    logs an info msg for tick and agent_id passed
+"""
+function log_info(t,aid,msg)
+    @info "[$(t)]($(aid)) $msg"
+end
+
+"""
+    logs an info msg for tick passed
+"""
+function log_info(t,msg)
+    @info "[$(t)] $msg"
+end
+
+function log_debug(t,aid,msg)
+    @debug "[$(t)]($(aid)) $msg"
+end
+
+function log_debug(t,msg)
+    @debug "[$(t)] $msg"
+end
+
+function log_debug(msg)
+    @debug msg
+end
+
+
 function ϕ(t,T,pulse)
     α = 0.5
     Β = 0.5
@@ -210,8 +253,8 @@ function plot_ctl_throughput(
     #     a = getindex(model,model.ctl_graph[i,:aid])
         # tpt_v = get_throughput_up(a,model)
     
-    # println("Plotting...")
-    # println(tpt_v)
+    # log_info("Plotting...")
+    # log_info(tpt_v)
     tpt_p = plot!(tpt_v,xlims=[0,model.N], linealpha=0.5
         # , line=:stem
         ,ylabel = "Quantity of agent messages"
@@ -315,7 +358,7 @@ end
 
 function get_controlled_assets(agent_id::Int,model)
     assets = filter(k->model.mapping_ctl_ntw[k] == agent_id,keys(model.mapping_ctl_ntw))
-    #println("assets controlled by $(agent_id) are: $(length(assets))")
+    #log_info("assets controlled by $(agent_id) are: $(length(assets))")
     return assets
 end
 
@@ -414,9 +457,9 @@ function soft_remove_vertex(g::AbstractGraph,dpn_id::Int)
         rem_edge!(new_g,nb,dpn_id)
     end
 
-    # println("Links of $dpn_id removed => $(all_neighbors(new_g,dpn_id))")
+    # log_info("Links of $dpn_id removed => $(all_neighbors(new_g,dpn_id))")
 
-    # [println(" new g: $v => Props: $(get_prop(new_g,v,:eid))") for v in vertices(new_g)]
+    # [log_info(" new g: $v => Props: $(get_prop(new_g,v,:eid))") for v in vertices(new_g)]
     # sm_g = sparse(g)
     # sm_new_g = deepcopy(sm_g)
 
@@ -444,7 +487,7 @@ function remove_vertex(g::AbstractGraph,dpn_id::Int)
     sm_new_g = spzeros((nv(g)-1),(nv(g)-1))
     for i=1:nv(g)
         for j=1:nv(g)
-            #println(" $i,$j value: $(sparse(ntw)[i,j])")
+            #log_info(" $i,$j value: $(sparse(ntw)[i,j])")
                 x,y =   i < dpn_id && j < dpn_id ? (i,j) : 
                         i < dpn_id && j > dpn_id ? (i,j-1) : 
                         i > dpn_id && j < dpn_id ? (i-1,j) : 
@@ -493,9 +536,9 @@ Update (ntw node) addresses of SimNE agents after removal of a given SimNE
 """
 function update_addresses_removal!(dpn_id::Int,model)
     available_addr = get_address(dpn_id,model.ntw_graph)
-    #println("Current length of g: $(nv(model.ntw_graph))")
+    #log_info("Current length of g: $(nv(model.ntw_graph))")
     for addr::Int=available_addr:nv(model.ntw_graph)
-        #println("Address $addr and its type: $(typeof(addr))")
+        #log_info("Address $addr and its type: $(typeof(addr))")
         update_sne_address!(
             get_eid(addr+1,model),
             addr,
@@ -512,8 +555,9 @@ end
 
 function do_agent_step!(a::SimNE,model)
     #Process OF messages (packet data traffic)
-    log_info("[$(model.ticks)]($(a.id)) start step")
-    is_up(a) && is_ready(a) ? in_packet_processing(a,model) : nothing #println("queue of $(a.id) is empty")
+    # log_info("[$(model.ticks)]($(a.id)) start step")
+    log_info(model.ticks,a.id, "start step")
+    is_up(a) && is_ready(a) ? in_packet_processing(a,model) : nothing #log_info("queue of $(a.id) is empty")
     # @debug("[$(model.ticks)]($(a.id)) end step")
 end
 
@@ -522,7 +566,7 @@ function do_agent_step!(a::Agent,model)
     # Process asset-agent messages
     
     ## Process OF Messages (SimNE to (sdn) control messages)
-    is_up(a) && is_ready(a) ? in_packet_processing(a,model) : nothing #println("queue of $(a.id) is empty")
+    is_up(a) && is_ready(a) ? in_packet_processing(a,model) : nothing #log_info("queue of $(a.id) is empty")
 
     # Process inter-agent messages
 
@@ -538,11 +582,11 @@ function do_agent_step!(a::Agent,model)
     #     if get_prop(ctl_g,v,:aid) == a.id
     #         my_v = v
     #     end
-    #     # println(" Agent $(a.id) => props of node $v are: $(props(ctl_g, v))")
+    #     # log_info(" Agent $(a.id) => props of node $v are: $(props(ctl_g, v))")
     # end
     # for c in controlled
     #     #v = get_prop(ctl_g,c,:eid)
-    #     # [ println("CTL Ag $(a.id) graph has nodes: $(get_prop(ctl_g,nb,:aid))") for nb in neighbors(ctl_g,my_v)]
+    #     # [ log_info("CTL Ag $(a.id) graph has nodes: $(get_prop(ctl_g,nb,:aid))") for nb in neighbors(ctl_g,my_v)]
     # end
 
     # @debug("[$(model.ticks)]($(a.id)) end step")
@@ -554,14 +598,14 @@ end
 """
 function do_receive_messages(a::Agent,model)
     #TODO: check if another periodicity is required, rather than every tick
-    #if !isempty(a.msgs_in) println("[$(model.ticks)]($(a.id)) in msgs: $(a.msgs_in)") end
+    #if !isempty(a.msgs_in) log_info("[$(model.ticks)]($(a.id)) in msgs: $(a.msgs_in)") end
 
     #senders = [ m.sid for m in a.msgs_in ]
-    #println("[$(model.ticks)]($(a.id)) has $(length(a.msgs_in)) msgs to process from $senders" )
+    #log_info("[$(model.ticks)]($(a.id)) has $(length(a.msgs_in)) msgs to process from $senders" )
 
     if model.ctrl_model != ControlModel(1)
         for msg in a.msgs_in
-            #println(msg)
+            #log_info(msg)
             process_msg!(a,msg,model)
         end
     end
@@ -670,8 +714,8 @@ function query_path(lg,s,d)
     end
     
     #gvs = [ lg[v,:eid] for v in vertices(lg)]
-    #println("network contains: gvs: $gvs")
-    # println("query_path:  g v: $(vertices(lg)), s: $(s) - ls: $(ls), d: $d - ld $ld result ==> $(result)")
+    #log_info("network contains: gvs: $gvs")
+    # log_info("query_path:  g v: $(vertices(lg)), s: $(s) - ls: $(ls), d: $d - ld $ld result ==> $(result)")
 
     if !isempty(result.paths)
         path = result.paths
@@ -731,7 +775,7 @@ In eqv, every pair has the form: (lv,gv) where lv is the
 local vertex id and gv is the global vertex id.
 """
 function create_subgraph(egs,eqv,gid_prop)
-    #println("Creating subgraph egs: $(egs) and eqv: $eqv")
+    #log_info("Creating subgraph egs: $(egs) and eqv: $eqv")
     g = MetaGraph()
     set_indexing_prop!(g, gid_prop)
 
@@ -902,7 +946,6 @@ function single_run(config)
     adata = [get_state_trj,get_condition_ts, get_rul_ts]
     mdata = [:mapping_ctl_ntw,get_state_trj]
     result_agents,result_model = run_model(config.n_steps,args,params; agent_data = adata, model_data = mdata)
-    println("End running model...")
     
     ctl_ags = last(result_agents[result_agents[!,:id] .> nv(ntw_graph) ,:],q_ctl_agents)[!,"get_state_trj"]
     nes = last(result_agents[result_agents[!,:id] .<= nv(ntw_graph) ,:],nv(ntw_graph))[!,"get_state_trj"]
@@ -910,7 +953,6 @@ function single_run(config)
     nes_1 = vcat([ [ split(string(j-1)*";"*replace(to_string(nes[i][j]),"NetworkAssetState(" => ""),";") for j=1:length(nes[i])] for i=1:length(nes) ]...)
 
     ctl_ags_1 = vcat([ [ split(string(j-1)*";"*replace(to_string(ctl_ags[i][j]),"ControlAgentState(" => ""),";") for j=1:length(ctl_ags[i])] for i=1:length(ctl_ags) ]...)
-    println(size(ctl_ags))
     
     sdir = data_dir*"runs2/$(config.ctl_model)/"
     if !isdir(sdir)
@@ -922,7 +964,7 @@ function single_run(config)
 
     # for i in 1:length(ctl_ags)
     #     for j in  1:length(ctl_ags[i])
-    #         #println("$i - $j -> $(ctl_ags[i][j].a_id)")
+    #         #log_info("$i - $j -> $(ctl_ags[i][j].a_id)")
     #         ij_paths = ctl_ags[i][j].paths
             
     #         # txt = objecttable(ctl_ags[i][j].paths)
@@ -933,9 +975,9 @@ function single_run(config)
                 
     #             ij_d[ Symbol("$(nwords[k[1]])_$(nwords[k[2]])") ] = [1]
     #         end
-    #         println("$i - $j -> $(keys(ij_d))")
+    #         log_info("$i - $j -> $(keys(ij_d))")
     #         txt = objecttable(ij_d)
-    #         println("$i - $j -> $txt")
+    #         log_info("$i - $j -> $txt")
     #     end
     # end
     
@@ -949,12 +991,12 @@ function single_run(config)
     nes_condition = last(result_agents,q_agents)[!,"get_condition_ts"]
     nes_rul = last(result_agents,q_agents)[!,"get_rul_ts"]
 
-    # println(ags_condition)
+    # log_info(ags_condition)
 
         # for i=1:size(ags_condition,1)#nv(ntw_graph)
-        #     println("testing $i ...")
-        #     println(ags_condition[i])
-        #     #println(hcat([i 1; i 2 ; i 3] , ags_condition[i]),';')
+        #     log_info("testing $i ...")
+        #     log_info(ags_condition[i])
+        #     #log_info(hcat([i 1; i 2 ; i 3] , ags_condition[i]),';')
         # end
 
     open(sdir * run_label * "_condition_nelements.csv", "w") do io
@@ -1019,27 +1061,15 @@ function to_string(s)
     return join([getfield(s,a) for a in fieldnames(typeof(s))],sep)
 end
 
-"""
-    Log info msg
-"""
-function log_info(msg)
-    st = string(stacktrace()[2])
-    file_name = lstrip(st[last(findlast("at ",st)):end])
-    # file_name = lstrip(st[last(findlast("at ",st)):last(findlast(":",st))-1])
-    # method_name = lstrip(st[1:last(findfirst("(",st))-1])
-    # logger = get_logger(file_name * "|" * method_name)
-    # @info(file_name * "]" * msg)
-    @logmsg Logging.Info msg;_file=file_name, _line="123"
-end
 
-function get_logger(log_name)
-    return haskey(loggers,log_name) ? loggers[log_name] : init_logger(log_name)
-end
+# function get_logger(log_name)
+#     return haskey(loggers,log_name) ? loggers[log_name] : init_logger(log_name)
+# end
 
-function init_logger(log_name)
-    loggers[log_name] = getlogger(log_name)
-    setlevel!(loggers[log_name], "info")
-    push!(loggers[log_name],getlogger(name="root"))
-    # push!(loggers[log_name], DefaultHandler(tempname(), DefaultFormatter("[{date} | {level} | {name}]: {msg}")))
-    return loggers[log_name]
-end
+# function init_logger(log_name)
+#     loggers[log_name] = getlogger(log_name)
+#     setlevel!(loggers[log_name], "info")
+#     push!(loggers[log_name],getlogger(name="root"))
+#     # push!(loggers[log_name], DefaultHandler(tempname(), DefaultFormatter("[{date} | {level} | {name}]: {msg}")))
+#     return loggers[log_name]
+# end

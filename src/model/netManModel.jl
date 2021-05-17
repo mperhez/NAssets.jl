@@ -96,7 +96,7 @@ function create_control_agents!(model)
             set_control_agent!(j,id,model)
         end
     else
-        # println(" Nodes CTL: $(nv(model.properties[:ctl_graph]))")
+        # log_info(" Nodes CTL: $(nv(model.properties[:ctl_graph]))")
         for i in 1:nv(model.properties[:ctl_graph])
             #next_fire = rand(0:0.2:model.:Τ)
             id = nextid(model)
@@ -126,7 +126,7 @@ function create_agents!(model)
     
     create_control_agents!(model)
 
-    println("Total agents created: $(length(allagents(model)))")
+    log_info("Total agents created: $(length(allagents(model)))")
 
     init_agents!(model)
 end
@@ -141,11 +141,11 @@ end
 """
 function model_step!(model)
     init_step_state!(model)
-    log_info("=====Tick $(model.ticks)======")
+    log_info(model.ticks,"===========")
     for a in allagents(model)
         init_state!(a)
         # if typeof(a) == SimNE 
-        #     println("($(a.id)) ==> $(a.queue)")
+        #     log_info("($(a.id)) ==> $(a.queue)")
         # end
     end
     generate_traffic!(model) 
@@ -157,7 +157,7 @@ function model_step!(model)
     ctl_links_step!(model)
     
     # if model.ticks in 80:1:90
-    # println("[$(model.ticks)] - AFTER Processing $(get_state(getindex(model,1)))")
+    # log_info("[$(model.ticks)] - AFTER Processing $(get_state(getindex(model,1)))")
     # end    
  
     for a in allagents(model)
@@ -244,7 +244,7 @@ end
         
     # agent_color(a::Agent) = :black#a.color
 # function agent_shape(a)
-#    #[println(c.shape) for c in a] 
+#    #[log_info(c.shape) for c in a] 
    
 #    return [c.shape for c in a] 
 # end
@@ -303,16 +303,16 @@ end
 
 function init_agent!(a::Agent,model)
 
-    # println("Starting Agent $(a.id)")
+    # log_info("Starting Agent $(a.id)")
     
     if model.ctrl_model != ControlModel(1)
         #Calculate sub graphs and init msg channels among agents
         nodes = [get_controlled_assets(a.id,model)...]
         sub_g = get_subgraph(model.ntw_graph,nodes,:eid)
-        # println("Asset Network size $(nv(sub_g))")
+        # log_info("Asset Network size $(nv(sub_g))")
         nodes = [a.id]
         ctl_sub_g = get_subgraph(model.ctl_graph,nodes,:aid)
-        # println("Control Network size $(nv(ctl_sub_g))")
+        # log_info("Control Network size $(nv(ctl_sub_g))")
         a.params[:ntw_graph] = sub_g
         a.params[:base_ntw_graph] = sub_g
         a.params[:last_cache_graph] = 0 #Last time cache was cleared
@@ -382,7 +382,7 @@ function init_agent!(sne::SimNE,model)
    
     init_switch(sne,model)
 
-    # println("Initialised $(sne.id) => $(size(sne.condition_ts))")
+    # log_info("Initialised $(sne.id) => $(size(sne.condition_ts))")
 end
 
 
@@ -426,7 +426,7 @@ end
 
 
 function generate_traffic!(model)
-    # println("[$(model.ticks)] - generating traffic")
+    # log_info("[$(model.ticks)] - generating traffic")
     # q_pkts = abs(round(model.:max_queue_ne*rand(Normal(1,0.15))))
     q_pkts = abs(round(model.:max_queue_ne*rand(Normal(1,0))))
     # q_pkts = model.:max_queue_ne
@@ -447,7 +447,7 @@ function generate_traffic!(model)
         end
     end
 
-   # println("[$(model.ticks)] $(q_pkts) pkts generated")
+   # log_info("[$(model.ticks)] $(q_pkts) pkts generated")
 end
 
 """
@@ -474,7 +474,7 @@ end
 function init_model!(m::ABM)
     #all delays equal initially
     for e in edges(m.ntw_graph)
-        #println("[$(m.ticks)] edge: $((e.src,e.dst))")
+        #log_info("[$(m.ticks)] edge: $((e.src,e.dst))")
         m.ntw_links_delays[(e.src,e.dst)] = 1
     end
 
@@ -504,7 +504,7 @@ function ntw_link_step!(l::Tuple{Int,Int},model)
         
         msgs = model.ntw_links_msgs[l]
         # if model.ticks in 80:1:90 
-        #     println("[$(model.ticks)] - $(l) -> msgs: $(length(first(msgs)))")
+        #     log_info("[$(model.ticks)] - $(l) -> msgs: $(length(first(msgs)))")
         # end
         to_deliver = first(msgs)
         in_pkt_count = 0
@@ -547,19 +547,19 @@ end
 function ctl_links_step!(model)
     if model.ctrl_model != ControlModel(1)
         ctl_ags = filter(a->typeof(a) == Agent,Set(allagents(model)))
-        #println(ctl_ags)
+        #log_info(ctl_ags)
         ctl_link_step!.(ctl_ags)
     end
 
 end
 
 function ctl_link_step!(a::Agent)
-    #println("=== START Processing links of Ag: $(a.id) => $(a.msgs_links) -- $(a.msgs_in) ===")
+    #log_info("=== START Processing links of Ag: $(a.id) => $(a.msgs_links) -- $(a.msgs_in) ===")
     #Merge msgs from all senders to be processed
     a.msgs_in = vcat(a.msgs_links[1,:]...)
     a.msgs_links[1,:] = init_array_vectors(AGMessage,size(a.msgs_links,2),1)
     a.msgs_links = circshift(a.msgs_links,1)
-    #println("=== END Processing links of Ag: $(a.id) => $(a.msgs_links) -- $(a.msgs_in) ===")
+    #log_info("=== END Processing links of Ag: $(a.id) => $(a.msgs_links) -- $(a.msgs_in) ===")
 end
     
 function get_state_trj(m::ABM)::Vector{ModelState}
@@ -570,6 +570,6 @@ end
 Return total of control messages exchanged by agents
 """
 function get_ag_msg(model)
-    #println([ [ s.in_ag_msg for s in a.state_trj ] for a in allagents(model) if typeof(a) == Agent ])
+    #log_info([ [ s.in_ag_msg for s in a.state_trj ] for a in allagents(model) if typeof(a) == Agent ])
     return cumsum(sum.(eachcol([ [ s.in_ag_msg for s in a.state_trj ] for a in allagents(model) if typeof(a) == Agent ]))...)    
 end
