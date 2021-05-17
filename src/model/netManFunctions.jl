@@ -857,7 +857,7 @@ end
 
 function load_run_configs() 
     configs = []
-    for ctl_model in [ControlModel(4)]#,ControlModel(2) ] #instances(ControlModel)
+    for ctl_model in [ControlModel(4),ControlModel(2) ] #instances(ControlModel)
         for size in [10]#, 50, 100]
             for drop_proportion in [10]
                 for seed in [123]
@@ -1024,10 +1024,12 @@ end
 """
 function log_info(msg)
     st = string(stacktrace()[2])
-    file_name = lstrip(st[last(findlast("at ",st)):last(findlast(":",st))-1])
-    method_name = lstrip(st[1:last(findfirst("(",st))-1])
-    logger = get_logger(file_name * "|" * method_name)
-    info(logger, msg)
+    file_name = lstrip(st[last(findlast("at ",st)):end])
+    # file_name = lstrip(st[last(findlast("at ",st)):last(findlast(":",st))-1])
+    # method_name = lstrip(st[1:last(findfirst("(",st))-1])
+    # logger = get_logger(file_name * "|" * method_name)
+    # @info(file_name * "]" * msg)
+    @logmsg Logging.Info msg;_file=file_name, _line="123"
 end
 
 function get_logger(log_name)
@@ -1037,6 +1039,7 @@ end
 function init_logger(log_name)
     loggers[log_name] = getlogger(log_name)
     setlevel!(loggers[log_name], "info")
-    push!(loggers[log_name], DefaultHandler(tempname(), DefaultFormatter("[{date} | {level} | {name}]: {msg}")))
+    push!(loggers[log_name],getlogger(name="root"))
+    # push!(loggers[log_name], DefaultHandler(tempname(), DefaultFormatter("[{date} | {level} | {name}]: {msg}")))
     return loggers[log_name]
 end
