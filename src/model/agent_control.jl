@@ -181,7 +181,7 @@ function do_query!(msg::AGMessage,a::Agent,model)
         
         jg = join_subgraphs(a.params[:ntw_graph],msg_ntw_g)
         # update local graph, however the problem it can grow too much
-        #a.params[:ntw_graph] = jg
+        a.params[:ntw_graph] = jg
 
         ntw_edgel = [ e for e in edges(jg) if src(e) <  dst(e) ]
         ntw_equiv = [(v,jg[v,:eid]) for v in vertices(jg)]

@@ -5,6 +5,15 @@ export ϕ
     RING=2
     MIRROR=3
     COMPLETE=4
+    GRID=5
+    RANDOM=6
+end
+
+@enum NetworkTopology begin
+    RING_TOPO=2
+    COMPLETE_TOPO=4
+    GRID_TOPO=5
+    RANDOM_TOPO=6
 end
 
 
@@ -172,6 +181,7 @@ function load_control_graph(ctl_model,size,seed)
         ControlModel(2) => MetaGraph( [Int(i) for i in ring_graph(size)])
         ControlModel(3) => MetaGraph(watts_strogatz(size,4,0.8)) 
         ControlModel(4) => MetaGraph(LightGraphs.complete_graph(size))
+        ControlModel(5) => MetaGraph( [Int(i) for i in grid2(Int(sqrt(size)))])
     end
     #watts_strogatz(25,4,0.8) #complete_graph(1)
     #ntw = MetaGraph( [Int(i) for i in ring_graph(10)])
@@ -188,12 +198,17 @@ function plot_ctl_network_multi(
 
     nsize = 0.13
     lwidth = 0.5
-    
+
+    method = model.ctrl_model == ControlModel(5) ? :sfdp : :circular
+    Random.seed!(model.seed)
+
     ctl_p = graphplot(
         model.ctl_graph
         ,names = [ i for i in 1:nv(model.ctl_graph) ]
                 #[ get_control_agent(i,model) for i in 1:nv(model.ctl_graph) ]
-        , method = :circular
+        ,method = method#:sfdp#:stress#:shell# #:spectral #:circular
+        #TODO check if required, not working atm
+        #,func = NetworkLayout.SFDP.layout(adjacency_matrix(model.ctl_graph),2)
         , curvature_scalar = 0.0
         ,size=(300,200)
         ,node_weights = [ i > 9 ? 1 : 5 for i in 1:nv(model.ctl_graph)]
@@ -209,6 +224,7 @@ function plot_ctl_network_multi(
         ,titlefontcolor=:white
         ,curves = false
     )
+    #TODO replace buggy annotation not thread-safe
     annotate!((-0.7,0.72,Plots.text("Control Network", 11, :black, :center)))
         
     return ctl_p
@@ -312,14 +328,16 @@ function plot_throughput(
         sne = getindex(model,get_eid(i,model))
         # v_pkt_in = [ s.in_pkt * model.:pkt_size for s in sne.state_trj ]
         tpt_v = get_throughput_up(sne,model)#isempty(v_pkt_in) ? [0] : get_throughput(v_pkt_in,10)
-        tpt_p = plot!(tpt_v,xlims=[0,model.N], linealpha=0.5
+        tpt_p = plot!(tpt_p,tpt_v
+        ,xlims=[0,model.N]
+        , linealpha=0.5
         # , line=:stem
         ,label = "$i"
         ,ylabel = "MB"
         ,legend = :outerright
         )
     end
-    
+    #TODO: This annotation breaks the multithreading as it does not receive the plot object, it seems to take the last one, which might clash among threads.
     annotate!((3*(model.N/4),max_y+1,Plots.text("Throughput ($(model.interval_tpt) steps)", 11, :black, :center)))
 
     return tpt_p
@@ -556,7 +574,7 @@ end
 function do_agent_step!(a::SimNE,model)
     #Process OF messages (packet data traffic)
     # log_info("[$(model.ticks)]($(a.id)) start step")
-    log_info(model.ticks,a.id, "start step")
+    #log_info(model.ticks,a.id, "start step")
     is_up(a) && is_ready(a) ? in_packet_processing(a,model) : nothing #log_info("queue of $(a.id) is empty")
     # @debug("[$(model.ticks)]($(a.id)) end step")
 end
@@ -884,28 +902,34 @@ end
 
 ## main functions
 
-new_config(seed,ctl_model,size,n_steps,drop_proportion,benchmark, animation) =
+new_config(seed,ctl_model,ntw_topo,size,n_steps,drop_proportion,prob_random_walks,benchmark, animation) =
     return ( seed = seed
             ,ctl_model=ctl_model
+            ,ntw_topo = ntw_topo
             ,size=size
             ,n_steps=n_steps
             ,drop_proportion=drop_proportion
+            ,prob_random_walks = prob_random_walks
             ,benchmark = benchmark
             ,animation = animation
             )
 
 function get_dropping_nodes(drop_proportion)
     #TODO calcualte according to proportion
-    return Dict(80=>[3],120=>[2]) # drop time => drop node
+    return Dict(80=>[3]
+    #,120=>[2]
+    ) # drop time => drop node
 end
 
 function load_run_configs() 
     configs = []
-    for ctl_model in [ControlModel(4),ControlModel(2) ] #instances(ControlModel)
-        for size in [10]#, 50, 100]
-            for drop_proportion in [10]
-                for seed in [123]
-                    push!(configs,new_config(seed,ctl_model,size,50,drop_proportion,false,false))
+    for ctl_model in [ControlModel(5)]#, ControlModel(4) ] #instances(ControlModel)
+        for ntw_topo in [NetworkTopology(6)]
+            for size in [16]#, 50, 100]
+                for drop_proportion in [10]
+                    for seed in [123]
+                        push!(configs,new_config(seed,ctl_model,ntw_topo,size,100,drop_proportion,1.0,false,true))
+                    end
                 end
             end
         end
@@ -927,9 +951,10 @@ function single_run(config)
     args[:seed] = config.seed
     args[:benchmark] = config.benchmark
     args[:animation] = config.animation
+    args[:prob_random_walks] = config.prob_random_walks
 
     q_ctl_agents = 0
-    run_label = "$(config.size)_$(config.seed)"
+    run_label = "$(config.size)_$(config.seed)_$(replace(string(config.prob_random_walks),"."=>""))"
 
     if config.ctl_model == ControlModel(1)
         args[:ctl_graph] = MetaGraph()

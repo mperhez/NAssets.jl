@@ -222,8 +222,9 @@ function forward!(msg::OFMessage,src::SimNE,dst::SimNE,model)
     in_port = in_ports[1][1]
     push_msg!(src,dst,OFMessage(next_ofmid!(model),model.ticks,src.id,in_port,msg.data),model)
     #@show msg out_port
-    out_pkt_count = get_state(src).out_pkt + 1
-    set_out_pkt!(src,out_pkt_count)
+    # Next two lines are inside push_msg!
+    # out_pkt_count = get_state(src).out_pkt + 1
+    # set_out_pkt!(src,out_pkt_count)
 end
 
 function route_traffic!(a::SimNE,msg::OFMessage,model)
@@ -631,7 +632,7 @@ end
 It filters throughput only when the given sne is up
 """
 function get_throughput_up(sne::SimNE,model)
-    v_pkt_in = [ s.in_pkt * model.:pkt_size for s in sne.state_trj ]
+    v_pkt_in = [ s.out_pkt * model.:pkt_size for s in sne.state_trj ]
     v_up = [ s.up for s in sne.state_trj ]
     v_tpt = get_throughput(v_pkt_in,model.:interval_tpt)
     return [ v_up[i] ? v_tpt[i] : 0.0   for i=1:length(v_tpt)]
