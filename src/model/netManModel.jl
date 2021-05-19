@@ -37,10 +37,10 @@ function initialize(args,user_props;grid_dims=(3,3),seed=0)
         :ntw_links_delays =>Dict{Tuple{Int,Int},Int}(),
         :state_trj => Vector{ModelState}(),
         :interval_tpt => 10,
-        :max_queue_ne => 100,#700
+        :max_queue_ne => 200,#700
         :query_cycle => 30,#30, # how long the max_eq_queries_cycle applies for
         :prob_eq_queries_cycle => 1, #base probability of processing equal queries
-        :prob_random_walks => 1 # prob. of neighbour nodes to propagate query msgs.
+        :prob_random_walks =>  args[:prob_random_walks]# prob. of neighbour nodes to propagate query msgs.
     )
 
     Random.seed!(seed)
@@ -225,7 +225,7 @@ function run_model(n,args,properties; agent_data, model_data)
                 collect_agent_data!(df, model, agent_data, i)
                 collect_model_data!(df_m, model, model_data, i)
             end
-        plot_label = "$(model.ctrl_model)_$(nv(model.ntw_graph))_animation"
+        plot_label = "$(model.ctrl_model)_$(nv(model.ntw_graph))_$(replace(string(model.prob_random_walks),"."=>""))_animation"
         gif(anim, plots_dir * plot_label * ".gif", fps = 5)
     else
         for i in 0:n
@@ -441,8 +441,6 @@ function generate_traffic!(model)
             for i =1:q_pkts
                 pkt = create_pkt(src,dst,model)
                 push_msg!(sne_src,OFMessage(next_ofmid!(model), model.ticks,src,0,pkt)) # always from port 0
-                in_pkt_count = get_state(sne_src).in_pkt + 1
-                set_in_pkt!(sne_src,in_pkt_count)
             end
         end
     end
@@ -503,6 +501,7 @@ function ntw_link_step!(l::Tuple{Int,Int},model)
     if haskey(model.ntw_links_msgs,l)
         
         msgs = model.ntw_links_msgs[l]
+        log_info(model.ticks," link: -> $l msgs: $(model.ntw_links_msgs[l])")
         # if model.ticks in 80:1:90 
         #     log_info("[$(model.ticks)] - $(l) -> msgs: $(length(first(msgs)))")
         # end
@@ -528,6 +527,7 @@ function ntw_link_step!(l::Tuple{Int,Int},model)
             #push!(model.state_trj,ModelState(model.ticks))
         end
     end
+    
 end
 
 # function init_msgs_link!(msgs::Array{Array{AGMessage,1},1})
