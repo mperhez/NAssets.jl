@@ -1,19 +1,15 @@
 export ϕ
 
-@enum ControlModel begin
-    CENTRALISED=1 
+@enum GraphModel begin
+    CUSTOM=0
+    CENTRALISED=1 # Only for control model
     RING=2
-    MIRROR=3
-    COMPLETE=4
-    GRID=5
-    RANDOM=6
-end
-
-@enum NetworkTopology begin
-    RING_TOPO=2
-    COMPLETE_TOPO=4
-    GRID_TOPO=5
-    RANDOM_TOPO=6
+    COMPLETE=3
+    GRID=4
+    STAR=5
+    BA_RANDOM=6 # Barrabasi_Albert
+    WS_RANDOM=7 # watts_strogatz
+    #SM_RANDOM_TOPO=8 # Stochastic Block Model
 end
 
 
@@ -157,37 +153,39 @@ function find_agent(id,model)
     first(filter(a->a.id == id,Set(allagents(model))))
 end
 
+function get_graph(seed,size,topo;k=0,Β=0,custom_topo=nothing)
+    Random.seed!(seed)
+    ntw = @match topo begin
+        GraphModel(0)=> custom_topo
+        GraphModel(2) => MetaGraph( [Int(i) for i in ring_graph(size)])
+        GraphModel(3) => MetaGraph(LightGraphs.complete_graph(size))
+        GraphModel(4) => MetaGraph( [Int(i) for i in grid2(Int(sqrt(size)))])
+        GraphModel(5) => MetaGraph( [Int(i) for i in Laplacians.star_graph(size)] )
+        GraphModel(6) => MetaGraph(barabasi_albert(size,k))
+        GraphModel(7) => MetaGraph(watts_strogatz(size,k,Β))
+        #GraphModel(8) => MetaGraph(stochastic_block_model())
+    end
+end
+
 """
     load the graph of the network to control
 """
 
-function load_network_graph(seed,size)
-    Random.seed!(seed)
-    #ntw = smallgraph("house")
-    ntw = MetaGraph(watts_strogatz(size,4,0.8))
+function load_network_graph(graph::MetaGraph)
+    ntw = deepcopy(graph)
     set_indexing_prop!(ntw,:eid)
-    #gplot(ntw,layout=circular_layout,nodelabel=nodes(ntw))
     return ntw
 end
-
 
 """
     load the graph of the control system
 """
 
-function load_control_graph(ctl_model,size,seed)
+function load_control_graph(graph::MetaGraph)
     Random.seed!(seed)
-    ntw = @match ctl_model begin
-        ControlModel(2) => MetaGraph( [Int(i) for i in ring_graph(size)])
-        ControlModel(3) => MetaGraph(watts_strogatz(size,4,0.8)) 
-        ControlModel(4) => MetaGraph(LightGraphs.complete_graph(size))
-        ControlModel(5) => MetaGraph( [Int(i) for i in grid2(Int(sqrt(size)))])
-    end
-    #watts_strogatz(25,4,0.8) #complete_graph(1)
-    #ntw = MetaGraph( [Int(i) for i in ring_graph(10)])
+    ntw = deepcopy(graph)
     #indexing can't be done here because aid has not been assigned
     #set_indexing_prop!(ntw,:aid)
-    #gplot(ntw,layout=circular_layout,nodelabel=nodes(ntw))
     return ntw
 end
 
@@ -199,7 +197,7 @@ function plot_ctl_network_multi(
     nsize = 0.13
     lwidth = 0.5
 
-    method = model.ctrl_model == ControlModel(5) ? :sfdp : :circular
+    method = model.ctrl_model == GraphModel(4) ? :sfdp : :circular
     Random.seed!(model.seed)
 
     ctl_p = graphplot(
@@ -291,10 +289,13 @@ function plot_asset_networks(
     nsize = 0.4
     lwidth = 0.5
 
+    method = model.ntw_model == GraphModel(4) ? :sfdp : :circular
+    Random.seed!(model.seed)
+
     ntw_p = graphplot(
         model.ntw_graph
         ,names = [get_eid(i,model) for i=1:nv(model.ntw_graph)]
-        , method = :circular
+        , method = method
        # ,size=(300,200)
         ,node_weights = [ get_eid(i,model) > 9 ? 1 : 10 for i in 1:nv(model.ntw_graph)]  #[ i > 9 ? 1 : 10 for i in 1:nv(model.ntw_graph)]
         ,nodeshape = :hexagon
@@ -353,12 +354,12 @@ function plotabm_networks(
 
     title = plot(title = "Plot title", grid = false, showaxis = false, ticks=false, bottom_margin = -50Plots.px)
 
-    ctl_p = model.ctrl_model != ControlModel(1) ? 
+    ctl_p = model.ctrl_model != GraphModel(1) ? # Centralised
             plot_ctl_network_multi(model;kwargs...) :
             plot_ctl_network_mono(model;kwargs...)
     
 
-    ctl_r = model.ctrl_model != ControlModel(1) ? plot_ctl_throughput(model; kwargs) : plot_empty()
+    ctl_r = model.ctrl_model != GraphModel(1) ? plot_ctl_throughput(model; kwargs) : plot_empty()
 
     ntw_p = plot_asset_networks(model; kwargs)
     
@@ -621,7 +622,7 @@ function do_receive_messages(a::Agent,model)
     #senders = [ m.sid for m in a.msgs_in ]
     #log_info("[$(model.ticks)]($(a.id)) has $(length(a.msgs_in)) msgs to process from $senders" )
 
-    if model.ctrl_model != ControlModel(1)
+    if model.ctrl_model != GraphModel(1)
         for msg in a.msgs_in
             #log_info(msg)
             process_msg!(a,msg,model)
@@ -902,7 +903,7 @@ end
 
 ## main functions
 
-new_config(seed,ctl_model,ntw_topo,size,n_steps,drop_proportion,prob_random_walks,benchmark, animation) =
+new_config(seed,ctl_model,ntw_topo,size,n_steps,drop_proportion,prob_random_walks,benchmark, animation,k,Β,ctl_k,ctl_Β) =
     return ( seed = seed
             ,ctl_model=ctl_model
             ,ntw_topo = ntw_topo
@@ -912,6 +913,12 @@ new_config(seed,ctl_model,ntw_topo,size,n_steps,drop_proportion,prob_random_walk
             ,prob_random_walks = prob_random_walks
             ,benchmark = benchmark
             ,animation = animation
+            ,k=k
+            ,Β = Β
+            ,ctl_k=ctl_k
+            ,ctl_Β = ctl_Β
+            ,custom_topo = nothing
+            ,ctl_custom_topo = nothing
             )
 
 function get_dropping_nodes(drop_proportion)
@@ -923,12 +930,29 @@ end
 
 function load_run_configs() 
     configs = []
-    for ctl_model in [ControlModel(5)]#, ControlModel(4) ] #instances(ControlModel)
-        for ntw_topo in [NetworkTopology(6)]
+    for ctl_model in [GraphModel(2)]#, ControlModel(4) ] #instances(ControlModel)
+        for ntw_topo in [GraphModel(4)]
             for size in [16]#, 50, 100]
                 for drop_proportion in [10]
                     for seed in [123]
-                        push!(configs,new_config(seed,ctl_model,ntw_topo,size,100,drop_proportion,1.0,false,true))
+                        ks = ntw_topo == GraphModel(6) ||
+                            ntw_topo == GraphModel(7) ? [4] : [0]
+                        ctl_ks = ctl_model == GraphModel(6) ||
+                                ctl_model == GraphModel(7) ? [4] : [0]
+                        Βs = ntw_topo == GraphModel(6) ||
+                                ntw_topo == GraphModel(7) ? [0.8] : [0.0]
+                        ctl_Βs = ctl_model == GraphModel(6) ||
+                                    ctl_model == GraphModel(7) ? [0.8] : [0.0]
+                        
+                        for k in ks
+                            for Β in Βs
+                                for ctl_k in ctl_ks
+                                    for ctl_Β in ctl_Βs
+                                        push!(configs,new_config(seed,ctl_model,ntw_topo,size,200,drop_proportion,1.0,false,true,k,Β,ctl_k,ctl_Β))
+                                    end
+                                end
+                            end
+                        end
                     end
                 end
             end
@@ -937,6 +961,24 @@ function load_run_configs()
     return configs
 end
 
+function get_run_label(config)
+    base_label = "$(config.ntw_topo)"
+    if config.ntw_topo == GraphModel(6) ||
+    config.ntw_topo == GraphModel(7)
+        base_label = base_label * "_$(config.k)_$(replace(string(config.Β),"."=>""))"
+    end
+
+    base_label = base_label * "_$(config.ctl_model)"
+
+    if config.ctl_model == GraphModel(6) ||
+        config.ctl_model == GraphModel(7)
+        base_label = base_label * "_$(config.ctl_k)_$(replace(string(config.ctl_Β),"."=>""))"
+    end
+   
+    run_label = base_label * "_$(config.size)_$(config.seed)_$(replace(string(config.prob_random_walks),"."=>""))"
+
+    return run_label
+end
 function single_run(config)
     Random.seed!(config.seed)
     args = Dict()
@@ -944,23 +986,26 @@ function single_run(config)
     args[:N]=config.n_steps
     args[:Τ]=config.size
     args[:ΔΦ]=1
-    ntw_graph = load_network_graph(config.seed,config.size)
+    ntw_graph = load_network_graph(get_graph(config.seed,config.size,config.ntw_topo;k=config.k,Β=config.Β,custom_topo=config.custom_topo))
     args[:ntw_graph]=ntw_graph
     args[:dropping_nodes]= get_dropping_nodes(config.drop_proportion)
     args[:ctrl_model] = config.ctl_model
+    args[:ntw_model] = config.ntw_topo
+
     args[:seed] = config.seed
     args[:benchmark] = config.benchmark
     args[:animation] = config.animation
     args[:prob_random_walks] = config.prob_random_walks
 
     q_ctl_agents = 0
-    run_label = "$(config.size)_$(config.seed)_$(replace(string(config.prob_random_walks),"."=>""))"
-
-    if config.ctl_model == ControlModel(1)
+    run_label = get_run_label(config)
+    args[:run_label] = run_label
+    if config.ctl_model == GraphModel(1)
         args[:ctl_graph] = MetaGraph()
         q_ctl_agents = 1
     else
-        ctl_graph = load_control_graph(config.ctl_model,nv(ntw_graph),config.seed)
+        ctl_graph = get_graph(config.seed,config.size,config.ctl_model;k=config.ctl_k,Β=config.ctl_Β,custom_topo=config.ctl_custom_topo)
+        # ctl_graph = load_control_graph(config.ctl_model,nv(ntw_graph),config.seed)
         args[:ctl_graph]=ctl_graph
         q_ctl_agents = nv(ctl_graph)
     end
@@ -979,7 +1024,9 @@ function single_run(config)
 
     ctl_ags_1 = vcat([ [ split(string(j-1)*";"*replace(to_string(ctl_ags[i][j]),"ControlAgentState(" => ""),";") for j=1:length(ctl_ags[i])] for i=1:length(ctl_ags) ]...)
     
-    sdir = data_dir*"runs2/$(config.ctl_model)/"
+    #sdir = data_dir*"runs2/$(config.ctl_model)/"
+    sdir = data_dir*"runs3/"
+
     if !isdir(sdir)
         mkdir(sdir) 
      end
@@ -1069,8 +1116,7 @@ end
 Clears cache of control agent
 """
 function clear_cache!(a::Agent,model::ABM)
-
-    if model.ticks - a.params[:last_cache_graph] == model.clear_cache_graph_freq
+    if model.ctrl_model != GraphModel(1) && model.ticks - a.params[:last_cache_graph] == model.clear_cache_graph_freq
         a.params[:ntw_graph] = a.params[:base_ntw_graph]
         a.params[:last_cache_graph] = model.ticks
     end

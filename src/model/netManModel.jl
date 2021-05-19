@@ -9,6 +9,7 @@ function initialize(args,user_props;grid_dims=(3,3),seed=0)
 
     # Global model props
     default_props = Dict(
+        :run_label => args[:run_label],
         :seed=>seed,
         :benchmark=>args[:benchmark],
         :animation=>args[:animation],
@@ -29,6 +30,7 @@ function initialize(args,user_props;grid_dims=(3,3),seed=0)
         :clear_cache_graph_freq => 10, # How often the ntw graph is cleared to initial state
         :pkt_per_tick => 2000, # How many packets are processsed per tick
         :ctrl_model => args[:ctrl_model], 
+        :ntw_model => args[:ntw_model], 
         :pkt_size => 0.065, # (in MB) Max pkt size  IP is 65536 bytes
         :freq => 30, # frequency of monitoring
         :N=>args[:N],
@@ -225,7 +227,7 @@ function run_model(n,args,properties; agent_data, model_data)
                 collect_agent_data!(df, model, agent_data, i)
                 collect_model_data!(df_m, model, model_data, i)
             end
-        plot_label = "$(model.ctrl_model)_$(nv(model.ntw_graph))_$(replace(string(model.prob_random_walks),"."=>""))_animation"
+        plot_label = model.run_label * "_anim"
         gif(anim, plots_dir * plot_label * ".gif", fps = 5)
     else
         for i in 0:n
@@ -305,7 +307,7 @@ function init_agent!(a::Agent,model)
 
     # log_info("Starting Agent $(a.id)")
     
-    if model.ctrl_model != ControlModel(1)
+    if model.ctrl_model != GraphModel(1)
         #Calculate sub graphs and init msg channels among agents
         nodes = [get_controlled_assets(a.id,model)...]
         sub_g = get_subgraph(model.ntw_graph,nodes,:eid)
@@ -545,7 +547,7 @@ function init_array_vectors(T,d1,d2)
 end
 
 function ctl_links_step!(model)
-    if model.ctrl_model != ControlModel(1)
+    if model.ctrl_model != GraphModel(1)
         ctl_ags = filter(a->typeof(a) == Agent,Set(allagents(model)))
         #log_info(ctl_ags)
         ctl_link_step!.(ctl_ags)
