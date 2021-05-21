@@ -36,6 +36,15 @@ function log_info(t,aid,msg)
 end
 
 """
+logs only for a given agent
+"""
+function log_info(t,aid,only_id,msg)
+    if aid == only_id
+        @info "[$(t)]($(aid)) $msg"
+    end
+end
+
+"""
     logs an info msg for tick passed
 """
 function log_info(t,msg)
@@ -289,8 +298,31 @@ function plot_asset_networks(
     nsize = 0.4
     lwidth = 0.5
 
-    method = model.ntw_model == GraphModel(4) ? :sfdp : :circular
+    method = :circular #model.ntw_model == #GraphModel(4) ? :sfdp : :circular
     Random.seed!(model.seed)
+
+    edge_color_dict = Dict()
+    edge_width_dict = Dict()
+    edge_style_dict = Dict()
+
+    for e in edges(model.ntw_graph)
+        if model.ticks > 0
+            if is_active_flow((e.src,e.dst),model)
+                edge_color_dict[(e.src,e.dst)] = :green
+                edge_width_dict[(e.src,e.dst)] = 3
+                edge_style_dict[(e.src,e.dst)] = model.ticks % 3 > 0 ? model.ticks % 3 > 1 ? :dashdot : :solid : :dot
+            else
+                edge_color_dict[(e.src,e.dst)] = :dimgray
+                edge_width_dict[(e.src,e.dst)] = 1
+                edge_style_dict[(e.src,e.dst)] = :solid
+            end
+        else
+            edge_color_dict[(e.src,e.dst)] = :red
+            edge_width_dict[(e.src,e.dst)] = 1
+            edge_style_dict[(e.src,e.dst)] = :solid
+        end
+        
+    end
 
     ntw_p = graphplot(
         model.ntw_graph
@@ -301,7 +333,9 @@ function plot_asset_networks(
         ,nodeshape = :hexagon
         ,nodecolor = [ is_up(getindex(model,get_eid(i,model))) ? :lightgray : :red for i in 1:nv(model.ntw_graph) ]
         ,markerstrokecolor = :dimgray
-        ,edgecolor= model.ticks < 1 ? :red : :dimgray
+        ,edgecolor= edge_color_dict
+        ,edgewidth= edge_width_dict
+        ,edgestyle = edge_style_dict
         ,markerstrokewidth = 1.1
         ,node_size=nsize
         ,palette = [:lightgray, :red]
@@ -608,7 +642,9 @@ function do_agent_step!(a::Agent,model)
     #     # [ log_info("CTL Ag $(a.id) graph has nodes: $(get_prop(ctl_g,nb,:aid))") for nb in neighbors(ctl_g,my_v)]
     # end
 
-    # @debug("[$(model.ticks)]($(a.id)) end step")
+    if !isempty(get_state(a).active_paths)
+        log_info(model.ticks,a.id,"-->$(get_state(a).active_paths)")
+    end
 
 end
 
@@ -888,7 +924,7 @@ function isless_paths(a,b)
     end
 end
 
-function record_benchmark!(bdir,seed,size,aid,query_time,query,query_graph,query_paths)
+function record_benchmark!(bdir,run_label,aid,query_time,query,query_graph,query_paths)
     
     if !isdir(bdir)
        mkdir(bdir) 
@@ -897,7 +933,7 @@ function record_benchmark!(bdir,seed,size,aid,query_time,query,query_graph,query
     b = @benchmark begin 
         do_query($query_time,$query,$query_graph,$query_paths)
     end
-    serialize( bdir * "$(size)_$(first(query))_$(last(query))_$(seed)_$(query_time)_$(aid)_benchmark.bin",b)
+    serialize( bdir * run_label *"_$(first(query))_$(last(query))_$(query_time)_$(aid)_bchmk.bin",b)
     #benchmark block end
 end
 
@@ -930,7 +966,7 @@ end
 
 function load_run_configs() 
     configs = []
-    for ctl_model in [GraphModel(2)]#, ControlModel(4) ] #instances(ControlModel)
+    for ctl_model in [GraphModel(1)]#, ControlModel(4) ] #instances(ControlModel)
         for ntw_topo in [GraphModel(4)]
             for size in [16]#, 50, 100]
                 for drop_proportion in [10]

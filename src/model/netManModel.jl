@@ -172,6 +172,7 @@ function model_step!(model)
 
     
     soft_drop_node!(model)
+    log_info(model.ticks,"aflows: $(get_state(model).active_flows)")
 end
 
 """
@@ -326,12 +327,12 @@ function init_agent!(a::Agent,model)
         a.params[:ntw_graph] = model.ntw_graph
     end
     
-    if nv(a.params[:ntw_graph]) > 0
-        all_paths = all_k_shortest_paths(a.params[:ntw_graph])   
-        get_state(a).paths = label_paths(model.ticks,all_paths)
-    else
-        get_state(a).paths = Dict()
-    end
+    # if nv(a.params[:ntw_graph]) > 0
+    #     all_paths = all_k_shortest_paths(a.params[:ntw_graph])   
+    #     get_state(a).paths = label_paths(model.ticks,all_paths)
+    # else
+    #     get_state(a).paths = Dict()
+    # end
 end
 
 function label_paths(time::Int64,paths::Array{LightGraphs.YenState{Float64,Int64},1})
@@ -433,7 +434,7 @@ function generate_traffic!(model)
     q_pkts = abs(round(model.:max_queue_ne*rand(Normal(1,0))))
     # q_pkts = model.:max_queue_ne
     #src,dst = samplepair(1:nv(model.ntw_graph)) # can be replaced for random pair
-    pairs = [(1,7)]#,(4,1),(9,5)] #[(9,5)] #[(4,5)]#
+    pairs =[(1,7),(4,1),(9,5)] #[(9,5)] #[(4,5)]#
 
     for p in pairs
         src,dst = p
@@ -470,6 +471,16 @@ function get_state(m::ABM)
     return last(m.state_trj)
 end
 
+function set_active_flows(m::ABM,af::Vector{Tuple{Int,Int,Flow_Type}})
+    current = pop!(m.state_trj)
+    current.active_flows = af
+    push!(m.state_trj,current_logger)
+end
+
+function set_state!(m::ABM,new_state::ModelState)
+    pop!(m.state_trj)
+    push!(m.state_trj,new_state)
+end
 
 function init_model!(m::ABM)
     #all delays equal initially
@@ -503,7 +514,7 @@ function ntw_link_step!(l::Tuple{Int,Int},model)
     if haskey(model.ntw_links_msgs,l)
         
         msgs = model.ntw_links_msgs[l]
-        log_info(model.ticks," link: -> $l msgs: $(model.ntw_links_msgs[l])")
+        # log_info(model.ticks," link: -> $l msgs: $(model.ntw_links_msgs[l])")
         # if model.ticks in 80:1:90 
         #     log_info("[$(model.ticks)] - $(l) -> msgs: $(length(first(msgs)))")
         # end
@@ -574,4 +585,11 @@ Return total of control messages exchanged by agents
 function get_ag_msg(model)
     #log_info([ [ s.in_ag_msg for s in a.state_trj ] for a in allagents(model) if typeof(a) == Agent ])
     return cumsum(sum.(eachcol([ [ s.in_ag_msg for s in a.state_trj ] for a in allagents(model) if typeof(a) == Agent ]))...)    
+end
+
+
+function is_active_flow(f::Tuple{Int,Int},model)
+    v = !isempty(filter(af->(af[1],af[2]) == f || (af[2],af[1]) == f  ,get_state(model).active_flows))
+    # log_info(model.ticks,"$f ==> $v")
+    return v
 end

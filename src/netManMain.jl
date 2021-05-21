@@ -27,7 +27,7 @@ simplified_logger(logger) = TransformerLogger(logger) do log
 end
 
 function single_run_with_logging(config)
-    run_label = "$(config.ctl_model)_$(config.size)_$(config.seed)"
+    run_label = get_run_label(config)
     io = stdout
     logger = MessageOnlyLogger(io,Logging.Info)
     with_logger(logger) do
@@ -41,7 +41,7 @@ end
 
 function single_run_with_file_logging(config)
     
-    run_label = "$(config.ctl_model)_$(config.size)_$(config.seed)"
+    run_label = get_run_label(config)
 
     io = open( data_dir * run_label * "_log.log", "w+")
     # logger = SimpleLogger(io,Logging.Debug)
@@ -73,6 +73,6 @@ configs = load_run_configs()
 #enable logs
 Logging.disable_logging(Logging.BelowMinLevel)
 Threads.@threads for config in configs
-    #single_run_with_logging(config)
-    single_run_with_file_logging(config)
+    single_run_with_logging(config)
+    #single_run_with_file_logging(config)
 end

@@ -21,36 +21,36 @@ end
 
 
 
-function install_flows!(in_dpid,in_port_start,path,model)
-    # log_info("install flow: $(in_dpid) - $(in_port_start) - $(path)")
-    if !isempty(path)
-        pairs = diag([j == i + 1 ? (path[3][i],path[3][j]) : nothing for i=1:size(path[3],1)-1, j=2:size(path[3],1)])
+# function install_flows!(in_dpid,in_port_start,path,model)
+#     # log_info(model.ticks,"install flow: $(in_dpid) - $(in_port_start) - $(path)")
+#     if !isempty(path)
+#         pairs = diag([j == i + 1 ? (path[3][i],path[3][j]) : nothing for i=1:size(path[3],1)-1, j=2:size(path[3],1)])
         
-        prev_eid = path[1]
-        for p in pairs
-            sne = getindex(model,p[1])
-            prev_sne = getindex(model,prev_eid)
-            port_dst = filter(x->x[2]=="s$(p[2])",get_port_edge_list(sne))[1]
-            out_port = port_dst[1]
-            in_port = p[1] == path[1] ? in_port_start : filter(x->x[2]=="s$(prev_eid)",get_port_edge_list(sne))[1][1]
-            r_src = path[1]
-            r_dst = path[2]
+#         prev_eid = path[1]
+#         for p in pairs
+#             sne = getindex(model,p[1])
+#             prev_sne = getindex(model,prev_eid)
+#             port_dst = filter(x->x[2]=="s$(p[2])",get_port_edge_list(sne))[1]
+#             out_port = port_dst[1]
+#             in_port = p[1] == path[1] ? in_port_start : filter(x->x[2]=="s$(prev_eid)",get_port_edge_list(sne))[1][1]
+#             r_src = path[1]
+#             r_dst = path[2]
             
-            fw = Flow(sne.id,MRule(string(in_port),string(r_src),string(r_dst)),[out_port],OFS_Output)
-            #(ticks,pkt,sne_src,sne_dst)->forward(ticks,pkt,sne_src,sne_dst)
-            # log_info("[$(model.ticks)] {A} Installing flow: $(p[1]) - $(fw.match_rule)")
-            push_flow!(sne,fw)
-            prev_eid = sne.id
-        end
-    else
-        sne = getindex(model,in_dpid)
-        #TODO how to make the rule to be regardless of port in
-        fw =Flow(in_dpid,MRule("*","*",string(in_dpid)),[0],OFS_Output)
-        #(ticks,pkt,src_sne)->forward(ticks,pkt,src_sne)
-        # log_info("[$(model.ticks)]  {B} Installing flow to $(in_dpid): $(fw.match_rule)")
-        push_flow!(sne,fw)
-    end
-end
+#             fw = Flow(sne.id,MRule(string(in_port),string(r_src),string(r_dst)),[out_port],OFS_Output)
+#             #(ticks,pkt,sne_src,sne_dst)->forward(ticks,pkt,sne_src,sne_dst)
+#             # log_info("[$(model.ticks)] {A} Installing flow: $(p[1]) - $(fw.match_rule)")
+#             push_flow!(sne,fw)
+#             prev_eid = sne.id
+#         end
+#     else
+#         sne = getindex(model,in_dpid)
+#         #TODO how to make the rule to be regardless of port in
+#         fw =Flow(in_dpid,MRule("*","*",string(in_dpid)),[0],OFS_Output)
+#         #(ticks,pkt,src_sne)->forward(ticks,pkt,src_sne)
+#         # log_info("[$(model.ticks)]  {B} Installing flow to $(in_dpid): $(fw.match_rule)")
+#         push_flow!(sne,fw)
+#     end
+# end
 
 function install_flow!(a::Agent,path::Array{Int64,1},model::ABM,msg::OFMessage=nothing)
     # find which ones of path I am controlling
@@ -58,7 +58,7 @@ function install_flow!(a::Agent,path::Array{Int64,1},model::ABM,msg::OFMessage=n
     lpath = isempty(path) ? es : path 
     eois = intersect(es,lpath)
     lpath = [ v for v in lpath]
-    # log_info("[$(model.ticks)]($(a.id)) +install_flow! => path: $path -- es: $es -- eois: $eois - msg: -> $msg")
+    # log_info(model.ticks,a.id,"{$(first(get_controlled_assets(a.id,model)))} install_flow! => path: $path -- es: $es -- eois: $eois - msg: -> $msg")
     for e in eois
          i = length(lpath) > 1 ? first(indexin(e,lpath)) : 1
          sne = getindex(model,e)
@@ -84,7 +84,10 @@ function install_flow!(a::Agent,path::Array{Int64,1},model::ABM,msg::OFMessage=n
          out_port = 0
          
          if i < length(lpath)
-             out_port = first(first(filter(p->parse(Int,p[2][2:end]) == lpath[i+1],ports)))
+
+            next_port = filter(p->parse(Int,p[2][2:end]) == lpath[i+1],ports)
+            # log_info(model.ticks,a.id,"--> $next_port")
+            out_port = first(first(next_port))
          end
  
          flow = Flow(  sne.id
@@ -96,12 +99,15 @@ function install_flow!(a::Agent,path::Array{Int64,1},model::ABM,msg::OFMessage=n
          qid = msg.id
          install_msg = OFMessage(next_ofmid!(model), model.ticks,e,1,OFPR_ADD_FLOW,(flow=flow,qid=qid))
          send_msg!(e,install_msg,model)
-         
+
+         next_sne = out_port > 0 ? lpath[i+1] : lpath[i]
+        #  log_info(model.ticks,a.id,"--> ($(sne.id),$(next_sne))")
     end
 end
 
 function process_msg!(a::Agent,msg::OFMessage,model)
-    # log_info("[$(model.ticks)]($(a.id)) -> processing $(msg.reason) ==> $msg")
+    
+    # log_info(model.ticks,a.id,18,"Processing msg: $msg")
     
     @match msg.reason begin
         Ofp_Protocol(1) =>  
@@ -144,8 +150,6 @@ msg: SimNE.id, in_port, DPacket
 """
 function in_packet_handler(a::Agent,msg::OFMessage,model)
 
-    # log_info("[$(model.ticks)]($(a.id)) Processing msg: $msg")
-    
     path::Array{Int64,1} = []
     found = false
    
@@ -210,15 +214,19 @@ function do_query!(msg::OFMessage,a::Agent,model)
     #do query
     query = (msg.dpid,msg.data.dst)
     query_time = model.ticks
-    query_paths = get_state(a).paths
+    
+    query_paths = a.paths
     query_graph = a.params[:ntw_graph]
     
-    sdir = data_dir * "runs2/$(model.ctrl_model)/"
+    sdir = data_dir 
     
-    if model.benchmark record_benchmark!(sdir,model.seed,nv(model.ntw_graph),a.id,query_time,query,query_graph,query_paths) end
+    if model.benchmark 
+        record_benchmark!(sdir,model.run_label,a.id,query_time,query,query_graph,query_paths) 
+    end
     
     path = do_query(query_time,query,query_graph,query_paths)
     
+    # log_info(model.ticks,a.id,18,"path found: $path")
 
     if isempty(path)
         lg = a.params[:ntw_graph]
@@ -254,7 +262,7 @@ function do_query(time::Int64,query::Tuple{Int64,Int64},lg::MetaGraph,paths::Dic
     #query pre-calculated (cache) paths
     query_paths = haskey(paths,query) ? paths[query] : []
     
-    #log_info("Paths found: $paths")
+    #log_info(time,"Precalc Paths found: $paths")
     
     if !isempty(query_paths) 
         #assumes query_paths is sorted by tick,score
@@ -341,8 +349,8 @@ function port_delete_handler(a::Agent,msg::OFMessage,model)
         # log_info("[$(model.ticks)]($(a.id)) Existing paths: $(get_state(a).paths)")
         
         #delete pre-computed paths containing dropping node
-        for path_k in keys(get_state(a).paths)
-            v_paths = get_state(a).paths[path_k]
+        for path_k in keys(a.paths)
+            v_paths = a.paths[path_k]
             new_paths = []
             for path in v_paths
                 if !(msg.data in last(path))
@@ -353,9 +361,11 @@ function port_delete_handler(a::Agent,msg::OFMessage,model)
                 new_paths_dict[path_k] = new_paths 
             end
         end
-        state = get_state(a)
-        state.paths = new_paths_dict
-        set_state!(a,state)
+        a.paths = new_paths_dict
+        #state = get_state(a)
+        #OJO active paths
+        #state.paths = new_paths_dict
+        #set_state!(a,state)
         #delete dropping node from local graph
         lv = to_local_vertex(a.params[:ntw_graph],msg.data)
         a.params[:ntw_graph] = soft_remove_vertex(a.params[:ntw_graph],lv)

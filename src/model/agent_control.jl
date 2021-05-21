@@ -47,7 +47,7 @@ end
     Processing for MATCH_PATH msg
 """
 function do_match!(msg::AGMessage,a::Agent,model)
-    # log_info("[$(model.ticks)]{$(a.id)} =+do_match! -> msg : $(msg), end ag => $(first(msg.body[:trace]))")
+    # log_info(model.ticks,a.id,"do_match! -> msg : $(msg), end ag => $(first(msg.body[:trace]))")
     new_path = msg.body[:path]
     ces = get_controlled_assets(a.id,model)
 
@@ -63,9 +63,9 @@ function do_match!(msg::AGMessage,a::Agent,model)
             spath = last(new_path)[first(indexin(ce,last(new_path))):end]
     
             for i=1:1#length(spath)-1
-                epaths = []            
-                if haskey(get_state(a).paths,(spath[i],last(spath)))
-                    epaths = get_state(a).paths[(spath[i],last(spath))]
+                epaths = []
+                if haskey(a.paths,(spath[i],last(spath)))
+                    epaths = a.paths[(spath[i],last(spath))]
       
                     push!(epaths,new_path)
                     
@@ -80,7 +80,7 @@ function do_match!(msg::AGMessage,a::Agent,model)
                 else
                     epaths = [new_path]
                 end
-                get_state(a).paths[(spath[i],last(spath))] = epaths
+                a.paths[(spath[i],last(spath))] = epaths
                
                 # log_info("[$(model.ticks)]($(a.id)) do_match! -- path added: $(spath[i:end])")
             end
@@ -128,7 +128,7 @@ end
 
 
 function process_msg!(a::Agent,msg::AGMessage,model)
-    # log_info("[$(model.ticks)]($(a.id)) -> processing $(msg.reason)")
+    #log_info(model.ticks,a.id,18,"->processing $(msg)")
     
     @match msg.reason begin
         AG_Protocol(1) => 
@@ -189,11 +189,13 @@ function do_query!(msg::AGMessage,a::Agent,model)
         #do query
         query = msg.body[:query]
         query_time = model.ticks
-        query_paths = get_state(a).paths
+        query_paths = a.paths
         query_graph = jg
         path = Dict()
 
-        if model.benchmark record_benchmark!(sdir,model.seed,nv(model.ntw_graph),a.id,query_time,query,query_graph,query_paths) end
+        if model.benchmark 
+            record_benchmark!(sdir,model.run_label,a.id,query_time,query,query_graph,query_paths) 
+        end
 
         path = do_query(query_time,query,query_graph,query_paths)        
 
