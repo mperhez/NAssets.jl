@@ -45,6 +45,11 @@ function initialize(args,user_props;grid_dims=(3,3),seed=0)
         :prob_random_walks =>  args[:prob_random_walks]# prob. of neighbour nodes to propagate query msgs.
     )
 
+    #required for animation layout to be stable regardless of changes in nodes
+    if args[:animation]
+        default_props[:ntw_graph_anim] = args[:ntw_graph]
+    end
+
     Random.seed!(seed)
     props = merge(default_props,user_props)
     #space = GridSpace(grid_dims, moore=true)

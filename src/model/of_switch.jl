@@ -117,7 +117,7 @@ end
 mutable struct ControlAgentState <: State
     a_id::Int64
     up::Bool
-    paths::Dict{Tuple{Int64,Int64},Array{Tuple{Int64,Float64,Array{Int64}}}}
+    active_paths::Dict{Tuple{Int64,Int64},Array{Tuple{Int64,Float64,Array{Int64}}}}
     in_ag_msg::Float64
     out_ag_msg::Float64
     in_of_msg::Float64
@@ -133,7 +133,7 @@ mutable struct SDNCtlAgState <: State
     health_trj::Vector{Float64}
     #paths::Vector{Tuple{Int64,Int64,Array{Array{Int64}}}} # src,dst,path
     #paths: Dict key: (src,dst) => value: [(tick-updated,score,path)]
-    paths::Dict{Tuple{Int64,Int64},Array{Tuple{Int64,Float64,Array{Int64}}}}
+    active_paths::Dict{Tuple{Int64,Int64},Array{Tuple{Int64,Float64,Array{Int64}}}}
     in_pkt_trj::Vector{Int64}
     out_pkt_trj::Vector{Int64}
     queue::Channel{OFMessage}
@@ -155,6 +155,7 @@ mutable struct Agent <: SOAgent
     pending::Vector{Tuple{Int64,OFMessage}} # Timeout for this msg to be reprocessed & msg
     of_started::Vector{Tuple{Int64,Int64}} # msg.id,  Time when msg was started
     # state::SDNCtlAgState
+    paths::Dict{Tuple{Int64,Int64},Array{Tuple{Int64,Float64,Array{Int64}}}} # pre-calculated paths for operation
     state_trj::Vector{ControlAgentState}
     msgs_links::Array{Vector{AGMessage},2}
     msgs_in::Vector{AGMessage}
@@ -167,7 +168,7 @@ end
 function Agent(id,nid,params)
     # s0 = SDNCtlAgState(zeros((2,2)),Vector{Float64}())
     s0 = ControlAgentState(id,true,Dict(),0,0,0,0,0,[])
-    Agent(id,nid,:lightblue,0.1,Vector{OFMessage}(),Vector{Tuple{Int64,Int64}}(),[s0],Array{Vector{AGMessage}}(undef,1,1),[],Channel{OFMessage}(500),Dict(),params)
+    Agent(id,nid,:lightblue,0.1,Vector{OFMessage}(),Vector{Tuple{Int64,Int64}}(),Dict{Tuple{Int64,Int64},Array{Tuple{Int64,Float64,Array{Int64}}}}(),[s0],Array{Vector{AGMessage}}(undef,1,1),[],Channel{OFMessage}(500),Dict(),params)
 end
 
 
@@ -228,7 +229,7 @@ function forward!(msg::OFMessage,src::SimNE,dst::SimNE,model)
 end
 
 function route_traffic!(a::SimNE,msg::OFMessage,model)
-    # log_info("[$(model.ticks)]($(a.id)) Routing Msg $(msg)")
+    log_info(model.ticks,a.id," Routing Msg $(msg)")
     out_pkt_count = 0
 
     # if a.id == 1 && model.ticks > 80 && model.ticks < 90
@@ -243,13 +244,9 @@ function route_traffic!(a::SimNE,msg::OFMessage,model)
                             && (fw.match_rule.dst == string(msg.data.dst) || fw.match_rule.dst == "*")
                             , get_flow_table(a))
     # if a.id == 1
-    #     log_info("[[$(model.ticks)]($(a.id)) flow==> $(flow)")
+         log_info("[[$(model.ticks)]($(a.id)) flow==> $(flow)")
     # end
     if !isempty(flow)
-
-        # if a.id == 1
-        #     log_info("[[$(model.ticks)]($(a.id)) flow.params ==> $(flow[1].params[1][1])")
-        # end
 
         if flow[1].params[1][1] != 0
             ports = get_port_edge_list(a)
@@ -260,9 +257,14 @@ function route_traffic!(a::SimNE,msg::OFMessage,model)
             dst = getindex(model,dst_id)
             #flow[1].action(model.ticks,msg,a,dst)
             forward!(msg,a,dst,model)
+
+            ftype = msg.data.src == a.id ? msg.data.dst == dst_id ? Flow_Type(-2) : Flow_Type(-1) : msg.data.dst == dst_id ? Flow_Type(1) : Flow_Type(0)
+            record_active_flow!(model,a.id,dst_id,ftype)
+            
         else
            # flow[1].action(model.ticks,msg,a)
            forward!(msg,a,model)
+        #    record_active_flow!(model,a.id,a.id,Flow_Type(1))
         end
         # flow[1].action == OFS_Output ? out_pkt_count += 1 : out_pkt_count
         #@show flow
@@ -448,7 +450,9 @@ function link_down!(sne::SimNE,dpn_id::Int,model)
     trigger_of_event!(model.ticks,controller,dpn_id,EventOFPPortStatus,model)
 end
 
-
+"""
+A controller agent is notified of an event happening in the controlled element
+"""
 function trigger_of_event!(ticks::Int,a::Agent,eid::Int,ev_type::Ofp_Event,model)
     msg = @match ev_type begin
         EventOFPPortStatus =>
@@ -662,4 +666,17 @@ function get_rul_ts(a::Agent)
 end
 function get_rul_ts(sne::SimNE)
     return sne.rul
+end
+
+"""
+    It records active flow for reporting active path
+"""
+function record_active_flow!(m,src,dst,ftype)
+    m_state = get_state(m)
+            nf = (src,dst,ftype)
+            if isempty(filter(af->af==nf,m_state.active_flows))
+                af = m_state.active_flows
+                push!(af,nf)
+            # log_info(m.ticks,"aflows: $(get_state(m).active_flows)")
+            end
 end

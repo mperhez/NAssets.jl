@@ -298,21 +298,21 @@ function plot_asset_networks(
     nsize = 0.4
     lwidth = 0.5
 
-    method = :circular #model.ntw_model == #GraphModel(4) ? :sfdp : :circular
+    method = model.ntw_model == GraphModel(4) ? :sfdp : :circular
     Random.seed!(model.seed)
 
     edge_color_dict = Dict()
     edge_width_dict = Dict()
     edge_style_dict = Dict()
 
-    for e in edges(model.ntw_graph)
+    for e in edges(model.ntw_graph_anim)
         if model.ticks > 0
             if is_active_flow((e.src,e.dst),model)
                 edge_color_dict[(e.src,e.dst)] = :green
                 edge_width_dict[(e.src,e.dst)] = 3
                 edge_style_dict[(e.src,e.dst)] = model.ticks % 3 > 0 ? model.ticks % 3 > 1 ? :dashdot : :solid : :dot
             else
-                edge_color_dict[(e.src,e.dst)] = :dimgray
+                edge_color_dict[(e.src,e.dst)] = has_edge(model.ntw_graph,e.src,e.dst) || has_edge(model.ntw_graph,e.dst,e.src) ? :dimgray : :white
                 edge_width_dict[(e.src,e.dst)] = 1
                 edge_style_dict[(e.src,e.dst)] = :solid
             end
@@ -325,7 +325,7 @@ function plot_asset_networks(
     end
 
     ntw_p = graphplot(
-        model.ntw_graph
+        model.ntw_graph_anim
         ,names = [get_eid(i,model) for i=1:nv(model.ntw_graph)]
         , method = method
        # ,size=(300,200)
@@ -959,14 +959,18 @@ new_config(seed,ctl_model,ntw_topo,size,n_steps,drop_proportion,prob_random_walk
 
 function get_dropping_nodes(drop_proportion)
     #TODO calcualte according to proportion
-    return Dict(80=>[3]
+    return Dict(
+        50 => [3]
+        # , 60 => [6]
+        # , 70 => [10]
+        #50=>[3,6] #TODO simoultaneous drops only work in centralised control
     #,120=>[2]
     ) # drop time => drop node
 end
 
 function load_run_configs() 
     configs = []
-    for ctl_model in [GraphModel(1)]#, ControlModel(4) ] #instances(ControlModel)
+    for ctl_model in [GraphModel(4)]#, ControlModel(4) ] #instances(ControlModel)
         for ntw_topo in [GraphModel(4)]
             for size in [16]#, 50, 100]
                 for drop_proportion in [10]
@@ -984,7 +988,7 @@ function load_run_configs()
                             for Β in Βs
                                 for ctl_k in ctl_ks
                                     for ctl_Β in ctl_Βs
-                                        push!(configs,new_config(seed,ctl_model,ntw_topo,size,200,drop_proportion,1.0,false,true,k,Β,ctl_k,ctl_Β))
+                                        push!(configs,new_config(seed,ctl_model,ntw_topo,size,100,drop_proportion,1.0,false,true,k,Β,ctl_k,ctl_Β))
                                     end
                                 end
                             end
