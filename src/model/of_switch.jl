@@ -229,7 +229,7 @@ function forward!(msg::OFMessage,src::SimNE,dst::SimNE,model)
 end
 
 function route_traffic!(a::SimNE,msg::OFMessage,model)
-    log_info(model.ticks,a.id," Routing Msg $(msg)")
+    # log_info(model.ticks,a.id," Routing Msg $(msg)")
     out_pkt_count = 0
 
     # if a.id == 1 && model.ticks > 80 && model.ticks < 90
@@ -244,7 +244,7 @@ function route_traffic!(a::SimNE,msg::OFMessage,model)
                             && (fw.match_rule.dst == string(msg.data.dst) || fw.match_rule.dst == "*")
                             , get_flow_table(a))
     # if a.id == 1
-         log_info("[[$(model.ticks)]($(a.id)) flow==> $(flow)")
+        #  log_info("[[$(model.ticks)]($(a.id)) flow==> $(flow)")
     # end
     if !isempty(flow)
 

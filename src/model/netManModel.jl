@@ -26,8 +26,8 @@ function initialize(args,user_props;grid_dims=(3,3),seed=0)
         :dropping_nodes=>args[:dropping_nodes],
         :mapping_ctl_ntw => Dict{Int64,Int64}(), # mapping between (Ctl) Agent and SimNE
         :mapping_ntw_sne => Dict{Int64,Int64}(), #mapping btwn the underlying network and the corresponding simNE agent 
-        :max_cache_paths => 2,
-        :clear_cache_graph_freq => 10, # How often the ntw graph is cleared to initial state
+        :max_cache_paths => 1,
+        :clear_cache_graph_freq => 10, # How often the ntw graph is cleared to initial state, 0: no cache
         :pkt_per_tick => 2000, # How many packets are processsed per tick
         :ctrl_model => args[:ctrl_model], 
         :ntw_model => args[:ntw_model], 
@@ -41,7 +41,7 @@ function initialize(args,user_props;grid_dims=(3,3),seed=0)
         :interval_tpt => 10,
         :max_queue_ne => 200,#700
         :query_cycle => 30,#30, # how long the max_eq_queries_cycle applies for
-        :prob_eq_queries_cycle => 1, #base probability of processing equal queries
+        :prob_eq_queries_cycle => 1,#0.7, #base probability of processing equal queries within the same :query_cycle
         :prob_random_walks =>  args[:prob_random_walks]# prob. of neighbour nodes to propagate query msgs.
     )
 
@@ -325,7 +325,7 @@ function init_agent!(a::Agent,model)
         a.params[:base_ntw_graph] = sub_g
         a.params[:last_cache_graph] = 0 #Last time cache was cleared
         a.params[:ctl_graph] = ctl_sub_g
-        a.params[:delay_ctl_link] = 1 # 1: no delay
+        a.params[:delay_ctl_link] = 2 # 1: no delay
         #Init vector of msgs
         a.msgs_links = init_array_vectors(AGMessage,a.params[:delay_ctl_link],degree(a.params[:ctl_graph],to_local_vertex(a.params[:ctl_graph],a.id,:aid)))
     else
@@ -557,7 +557,7 @@ end
     Initialize an array of dimensions d1 x d2 that contains vectors of type T
 """
 function init_array_vectors(T,d1,d2)
-    arr = d2 > 1 ? Array{Vector{T}}(undef,d1,d2) : Array{Vector{T}}(undef,d1)
+    arr = d2 >= 1 ? Array{Vector{T}}(undef,d1,d2) : Array{Vector{T}}(undef,d1)
     [ arr[i,j] = Vector{T}() for i=1:size(arr,1) for j=1:size(arr,2)]
     return arr
 end

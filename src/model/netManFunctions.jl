@@ -39,7 +39,7 @@ end
 logs only for a given agent
 """
 function log_info(t,aid,only_id,msg)
-    if aid == only_id
+    if aid in only_id
         @info "[$(t)]($(aid)) $msg"
     end
 end
@@ -220,11 +220,11 @@ function plot_ctl_network_multi(
         ,size=(300,200)
         ,node_weights = [ i > 9 ? 1 : 5 for i in 1:nv(model.ctl_graph)]
         ,nodeshape = :circle
-        ,nodecolor = [ has_active_controlled_assets(
-                        getindex(model,model.ctl_graph[i,:aid]),model
-                       ) ? :lightblue : :lightgray for i in 1:nv(model.ctl_graph) ]
-        ,markerstrokecolor = :dimgray
-        ,edgecolor=:dimgray
+        # ,nodecolor = [ has_active_controlled_assets(
+        #                 getindex(model,model.ctl_graph[i,:aid]),model
+        #                ) ? :lightblue : :lightgray for i in 1:nv(model.ctl_graph) ]
+        # ,markerstrokecolor = :dimgray
+        # ,edgecolor=:dimgray
         ,markerstrokewidth = 1.1
         ,node_size=nsize
         ,edgestyle = :dot
@@ -298,7 +298,7 @@ function plot_asset_networks(
     nsize = 0.4
     lwidth = 0.5
 
-    method = model.ntw_model == GraphModel(4) ? :sfdp : :circular
+    method = model.ntw_model == GraphModel(4) ? :stress : :circular
     Random.seed!(model.seed)
 
     edge_color_dict = Dict()
@@ -331,8 +331,8 @@ function plot_asset_networks(
        # ,size=(300,200)
         ,node_weights = [ get_eid(i,model) > 9 ? 1 : 10 for i in 1:nv(model.ntw_graph)]  #[ i > 9 ? 1 : 10 for i in 1:nv(model.ntw_graph)]
         ,nodeshape = :hexagon
-        ,nodecolor = [ is_up(getindex(model,get_eid(i,model))) ? :lightgray : :red for i in 1:nv(model.ntw_graph) ]
-        ,markerstrokecolor = :dimgray
+        # ,nodecolor = [ is_up(getindex(model,get_eid(i,model))) ? :lightgray : :red for i in 1:nv(model.ntw_graph) ]
+        # ,markerstrokecolor = :dimgray
         ,edgecolor= edge_color_dict
         ,edgewidth= edge_width_dict
         ,edgestyle = edge_style_dict
@@ -458,8 +458,7 @@ function soft_drop_node!(model)
             link_down!(a,dpn_id,model)
 
             #soft remove 
-            model.ntw_graph = soft_remove_vertex(g,get_address(dpn_id,g))
-            
+            model.ntw_graph = soft_remove_vertex!(g,get_address(dpn_id,g))
         end
         
         
@@ -500,7 +499,7 @@ function hard_drop_node(model)
     
 end
 
-function soft_remove_vertex(g::AbstractGraph,dpn_id::Int)
+function soft_remove_vertex!(g::AbstractGraph,dpn_id::Int)
     
     new_g = deepcopy(g)
     nbs₀ = deepcopy(all_neighbors(new_g,dpn_id))
@@ -509,29 +508,6 @@ function soft_remove_vertex(g::AbstractGraph,dpn_id::Int)
         rem_edge!(new_g,dpn_id,nb)
         rem_edge!(new_g,nb,dpn_id)
     end
-
-    # log_info("Links of $dpn_id removed => $(all_neighbors(new_g,dpn_id))")
-
-    # [log_info(" new g: $v => Props: $(get_prop(new_g,v,:eid))") for v in vertices(new_g)]
-    # sm_g = sparse(g)
-    # sm_new_g = deepcopy(sm_g)
-
-    # [ if i == dpn_id || j == dpn_id ; sm_new_g[i,j] = 0 end for i=1:nv(g), j=1:nv(g)]
-
-    # new_g = MetaGraph(sm_new_g)
-
-    # for v in vertices(g)
-    #     set_props!(new_g,v,props(g,v))
-    # end
-
-    # for i=1:nv(g)
-    #     for j=1:nv(g)
-    #         if i == dpn_id || j == dpn_id
-    #             new_ntw[i,j] = 0
-    #         end
-    #     end
-    # end
-    #[i >=dpn_id ? labels[i] = i+1 : labels[i] = i  for i in keys(labels)]
     return new_g#
 end
 
@@ -622,7 +598,7 @@ function do_agent_step!(a::Agent,model)
     is_up(a) && is_ready(a) ? in_packet_processing(a,model) : nothing #log_info("queue of $(a.id) is empty")
 
     # Process inter-agent messages
-
+    # log_info(model.ticks,a.id,"==> a.paths ==> $(a.paths)")
     do_receive_messages(a,model)
 
 
@@ -960,8 +936,10 @@ new_config(seed,ctl_model,ntw_topo,size,n_steps,drop_proportion,prob_random_walk
 function get_dropping_nodes(drop_proportion)
     #TODO calcualte according to proportion
     return Dict(
-        50 => [3]
-        # , 60 => [6]
+        50 => [3,6]
+        #55: Grid and Grid fails
+        , 55 => [11]
+        #, 115 => [11]
         # , 70 => [10]
         #50=>[3,6] #TODO simoultaneous drops only work in centralised control
     #,120=>[2]
@@ -970,7 +948,7 @@ end
 
 function load_run_configs() 
     configs = []
-    for ctl_model in [GraphModel(4)]#, ControlModel(4) ] #instances(ControlModel)
+    for ctl_model in [GraphModel(6)]#, ControlModel(4) ] #instances(ControlModel)
         for ntw_topo in [GraphModel(4)]
             for size in [16]#, 50, 100]
                 for drop_proportion in [10]
@@ -988,7 +966,7 @@ function load_run_configs()
                             for Β in Βs
                                 for ctl_k in ctl_ks
                                     for ctl_Β in ctl_Βs
-                                        push!(configs,new_config(seed,ctl_model,ntw_topo,size,100,drop_proportion,1.0,false,true,k,Β,ctl_k,ctl_Β))
+                                        push!(configs,new_config(seed,ctl_model,ntw_topo,size,200,drop_proportion,1.0,false,true,k,Β,ctl_k,ctl_Β))
                                     end
                                 end
                             end
@@ -1154,6 +1132,7 @@ end
 
 """
 Clears cache of control agent
+# TODO Opportunity to investigate ways to store relevant cache rather than clearing all
 """
 function clear_cache!(a::Agent,model::ABM)
     if model.ctrl_model != GraphModel(1) && model.ticks - a.params[:last_cache_graph] == model.clear_cache_graph_freq

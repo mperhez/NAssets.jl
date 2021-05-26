@@ -58,7 +58,7 @@ function install_flow!(a::Agent,path::Array{Int64,1},model::ABM,msg::OFMessage=n
     lpath = isempty(path) ? es : path 
     eois = intersect(es,lpath)
     lpath = [ v for v in lpath]
-    # log_info(model.ticks,a.id,"{$(first(get_controlled_assets(a.id,model)))} install_flow! => path: $path -- es: $es -- eois: $eois - msg: -> $msg")
+    log_info(model.ticks,a.id,26,"{$(first(get_controlled_assets(a.id,model)))} install_flow! => path: $path -- es: $es -- eois: $eois - msg: -> $msg")
     for e in eois
          i = length(lpath) > 1 ? first(indexin(e,lpath)) : 1
          sne = getindex(model,e)
@@ -86,19 +86,23 @@ function install_flow!(a::Agent,path::Array{Int64,1},model::ABM,msg::OFMessage=n
          if i < length(lpath)
 
             next_port = filter(p->parse(Int,p[2][2:end]) == lpath[i+1],ports)
-            # log_info(model.ticks,a.id,"--> $next_port")
-            out_port = first(first(next_port))
+            # log_info(model.ticks,a.id,"--> $next_port <--  ports: $ports --- i: $i --- lpath: $lpath")
+            out_port = isempty(next_port) ? -1 : first(first(next_port))
          end
- 
-         flow = Flow(  sne.id
-                 ,MRule(string(in_port)
-                 ,string(r_src)
-                 ,string(r_dst))
-                 ,[out_port]
-                 ,OFS_Output)
-         qid = msg.id
-         install_msg = OFMessage(next_ofmid!(model), model.ticks,e,1,OFPR_ADD_FLOW,(flow=flow,qid=qid))
-         send_msg!(e,install_msg,model)
+         
+         if out_port >= 0 
+            flow = Flow(  sne.id
+                    ,MRule(string(in_port)
+                    ,string(r_src)
+                    ,string(r_dst))
+                    ,[out_port]
+                    ,OFS_Output)
+            qid = msg.id
+            install_msg = OFMessage(next_ofmid!(model), model.ticks,e,1,OFPR_ADD_FLOW,(flow=flow,qid=qid))
+            send_msg!(e,install_msg,model)
+         else
+            log_info(model.ticks,a.id,"ERROR: Unable to find port")            
+         end
 
          next_sne = out_port > 0 ? lpath[i+1] : lpath[i]
         #  log_info(model.ticks,a.id,"--> ($(sne.id),$(next_sne))")
@@ -107,7 +111,9 @@ end
 
 function process_msg!(a::Agent,msg::OFMessage,model)
     
-    # log_info(model.ticks,a.id,18,"Processing msg: $msg")
+    if !get_state(a).up
+        log_info(model.ticks,a.id,"--> is_up? $(get_state(a).up) -- > Processing msg: $msg ")
+    end
     
     @match msg.reason begin
         Ofp_Protocol(1) =>  
@@ -132,7 +138,7 @@ function process_msg!(a::Agent,msg::OFMessage,model)
                         end
         Ofp_Protocol(2) => 
                             begin
-                                #log_info("[$(model.ticks)]($(a.id)) -> match two")
+                                log_info(model.ticks,a.id,"port_delete -> $msg")
                                 port_delete_handler(a,msg,model)
                             end
         _ => begin
@@ -164,7 +170,7 @@ function in_packet_handler(a::Agent,msg::OFMessage,model)
    
     if found 
         #install_flows!(msg.dpid,msg.in_port,path,model) 
-        #log_info("[$(model.ticks)]($(a.id)) msg-> $(msg), path ==> $(path)")
+        #log_info(model.ticks,a.id," msg-> $(msg), path ==> $(path)")
         # log_info("[$(model.ticks)]($(a.id)) in pkt handler: path $path")
         install_flow!(a,path,model,msg)
     else
@@ -223,8 +229,9 @@ function do_query!(msg::OFMessage,a::Agent,model)
     if model.benchmark 
         record_benchmark!(sdir,model.run_label,a.id,query_time,query,query_graph,query_paths) 
     end
-    
+    # log_info(model.ticks,a.id,[20],"starting OF query ==> $(a.paths)")
     path = do_query(query_time,query,query_graph,query_paths)
+    # log_info(model.ticks,a.id,[20],"ending OF query")
     
     # log_info(model.ticks,a.id,18,"path found: $path")
 
@@ -248,7 +255,7 @@ function do_query!(msg::OFMessage,a::Agent,model)
     end
     set_state!(a,new_state)
 
-
+    log_info(model.ticks,a.id,[22,26],"QUERY_GRAPH: nv: $(nv(query_graph)) --- *FOUND* path: $path")
     return isempty(path) ? [] : last(path)
 end
 
@@ -262,7 +269,7 @@ function do_query(time::Int64,query::Tuple{Int64,Int64},lg::MetaGraph,paths::Dic
     #query pre-calculated (cache) paths
     query_paths = haskey(paths,query) ? paths[query] : []
     
-    #log_info(time,"Precalc Paths found: $paths")
+    # log_info(time,"Precalc Paths found: $paths")
     
     if !isempty(query_paths) 
         #assumes query_paths is sorted by tick,score
@@ -283,7 +290,7 @@ function do_query(time::Int64,query::Tuple{Int64,Int64},lg::MetaGraph,paths::Dic
     end
     
 
-    # log_info("Path found: $path")
+    # log_info(time,"!do_query: $query -- graph nv: $(nv(lg))-- Path found: $path")
     
     
     return path
@@ -310,10 +317,12 @@ function pending_pkt_handler(a::Agent,model)
 end
 
 function do_drop!(msg::OFMessage,a::Agent,model)
+    log_info(model.ticks,a.id,[22,26],"Msg to remove node: $msg")
     lg = a.params[:ctl_graph]
     lv = to_local_vertex(lg,a.id)
     nbs = [ lg[nb,:aid] for nb in neighbors(lg,lv) ]
 
+    #Move connections to neighbors
     for nb in nbs
         nbs_nb = setdiff(nbs,[nb])
         body = Dict(new_nbs=>nbs_nb,dpid=>msg.data)
@@ -323,10 +332,13 @@ function do_drop!(msg::OFMessage,a::Agent,model)
     
     
     #remove edges from "actual" control graph
-    soft_remove_vertex(model.ctl_graph,a.id)
+    soft_remove_vertex!(model.ctl_graph,a.id)
     set_down!(a) 
 end
 
+"""
+Set controller agent down
+"""
 function set_down!(a::Agent)
     state = get_state(a)
     state.up = false
@@ -340,20 +352,19 @@ end
 function port_delete_handler(a::Agent,msg::OFMessage,model)
     # init_agent!(a,model)
     new_paths_dict = Dict()
-    dpid = msg.data 
+    dpid = msg.data # id of dropped node
     ces = get_controlled_assets(a.id,model)
 
-    if dpid in ces
+    if dpid in ces # it is agent controlling dropped node
         do_drop!(msg,a,model)
-    else
-        # log_info("[$(model.ticks)]($(a.id)) Existing paths: $(get_state(a).paths)")
+    else # It is agent controlling neighbor of dropped node
         
         #delete pre-computed paths containing dropping node
         for path_k in keys(a.paths)
             v_paths = a.paths[path_k]
             new_paths = []
             for path in v_paths
-                if !(msg.data in last(path))
+                if !(dpid in last(path))
                     push!(new_paths,path)
                 end
             end
@@ -361,15 +372,19 @@ function port_delete_handler(a::Agent,msg::OFMessage,model)
                 new_paths_dict[path_k] = new_paths 
             end
         end
+        #update agent pre-computed paths
         a.paths = new_paths_dict
-        #state = get_state(a)
-        #OJO active paths
-        #state.paths = new_paths_dict
-        #set_state!(a,state)
-        #delete dropping node from local graph
-        lv = to_local_vertex(a.params[:ntw_graph],msg.data)
-        a.params[:ntw_graph] = soft_remove_vertex(a.params[:ntw_graph],lv)
-        # log_info("[$(model.ticks)]($(a.id)) New paths: $(get_state(a).paths)")
+        log_info(model.ticks,a.id,[20],"port_delete, paths: $(keys(a.paths))")
+        if model.ctrl_model != GraphModel(1)
+            lvb = to_local_vertex(a.params[:base_ntw_graph],msg.data)
+            a.params[:base_ntw_graph] = soft_remove_vertex!(a.params[:base_ntw_graph],lvb)
+            a.params[:ntw_graph] = a.params[:base_ntw_graph]
+            a.params[:last_cache_graph] = model.ticks
+        else
+            lv = to_local_vertex(a.params[:ntw_graph],msg.data)
+            a.params[:ntw_graph] = soft_remove_vertex(a.params[:ntw_graph],lv)
+        end
+
     end
 
 end

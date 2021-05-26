@@ -47,7 +47,10 @@ end
     Processing for MATCH_PATH msg
 """
 function do_match!(msg::AGMessage,a::Agent,model)
-    # log_info(model.ticks,a.id,"do_match! -> msg : $(msg), end ag => $(first(msg.body[:trace]))")
+    # log_info(model.ticks,a.id,[20],"do_match! -> msg : $(msg), end ag => $(first(msg.body[:trace]))")
+    # if msg.mid == 4786
+    #     log_info(model.ticks,a.id,"is_up? $(get_state(a).up) --> do_match! -> msg : $(msg), end ag => $(first(msg.body[:trace]))")
+    # end
     new_path = msg.body[:path]
     ces = get_controlled_assets(a.id,model)
 
@@ -55,58 +58,62 @@ function do_match!(msg::AGMessage,a::Agent,model)
     #elements this agent controls that are in path
     ces_in_path  = intersect(ces,last(new_path))
     
+    #due diligence: check if path is invalid according to local Knowledge to avoid using/propagating rubbish. 
+    invalid_path = is_invalid_path(new_path,ces_in_path,model)
 
+    if !invalid_path
+        # is this agent the original requester of path?
+        if first(msg.body[:trace]) == a.id
 
-    if first(msg.body[:trace]) == a.id
-
-        for ce in ces_in_path
-            spath = last(new_path)[first(indexin(ce,last(new_path))):end]
-    
-            for i=1:1#length(spath)-1
-                epaths = []
-                if haskey(a.paths,(spath[i],last(spath)))
-                    epaths = a.paths[(spath[i],last(spath))]
-      
-                    push!(epaths,new_path)
-                    
-                    #sort by score, reverse = false
-                    sort!(epaths,lt=isless_paths)
-    
-                    if length(epaths) > model.max_cache_paths
-                        pop!(epaths)
+            for ce in ces_in_path
+                spath = last(new_path)[first(indexin(ce,last(new_path))):end]
+        
+                for i=1:1#length(spath)-1
+                    epaths = []
+                    if haskey(a.paths,(spath[i],last(spath)))
+                        epaths = a.paths[(spath[i],last(spath))]
+        
+                        push!(epaths,new_path)
+                        
+                        #sort by score, reverse = false
+                        sort!(epaths,lt=isless_paths)
+        
+                        if length(epaths) > model.max_cache_paths
+                            pop!(epaths)
+                        end
+                        
+                        #TODO cases of older paths
+                    else
+                        epaths = [new_path]
                     end
-                    
-                    #TODO cases of older paths
-                else
-                    epaths = [new_path]
+                    a.paths[(spath[i],last(spath))] = epaths
+                
+                    # log_info("[$(model.ticks)]($(a.id)) do_match! -- path added: $(spath[i:end])")
                 end
-                a.paths[(spath[i],last(spath))] = epaths
-               
-                # log_info("[$(model.ticks)]($(a.id)) do_match! -- path added: $(spath[i:end])")
             end
-        end
 
 
 
 
-        #reprocess of msg right after
-        new_pending = []
-        for p in a.pending
-            if last(p).id == msg.body[:of_mid]
-                push!(new_pending,(0,last(p)))
-            else
-                push!(new_pending,p)
+            #reprocess of msg right after
+            new_pending = []
+            for p in a.pending
+                if last(p).id == msg.body[:of_mid]
+                    push!(new_pending,(0,last(p)))
+                else
+                    push!(new_pending,p)
+                end
             end
+            a.pending = new_pending
+            # log_info("[$(model.ticks)]($(a.id)) do_match! -- NEW_PENDING: $(a.pending)")
+        else # This agent is not the original requester of the path
+            #continue back propagation of msg
+            trace_bk = msg.body[:trace_bk]
+            msg.body[:trace_bk] = trace_bk[1:end-1]
+            msg.rid = trace_bk[end-1]
+            msg.sid = a.id
+            send_msg!(trace_bk[end-1],msg,model)
         end
-        a.pending = new_pending
-        # log_info("[$(model.ticks)]($(a.id)) do_match! -- NEW_PENDING: $(a.pending)")
-    else
-        #continue back propagation of msg
-        trace_bk = msg.body[:trace_bk]
-        msg.body[:trace_bk] = trace_bk[1:end-1]
-        msg.rid = trace_bk[end-1]
-        msg.sid = a.id
-        send_msg!(trace_bk[end-1],msg,model)
     end
 end
 
@@ -114,7 +121,7 @@ end
     Prepare MATCH reply
 """
 function do_match!(found_path::Tuple{Int64,Float64,Array{Int64}},msg::AGMessage,a::Agent,model)
-    # log_info("[$(model.ticks)]{$(a.id)} =*do_match! -> msg : $(msg) -> found: $(found_path)")
+    #log_info(model.ticks,a.id,[22],"*do_match! -> msg : $(msg) -> found: $(found_path)")
     query = msg.body[:query]
     trace = msg.body[:trace]
     trace_bk = deepcopy(msg.body[:trace])
@@ -130,6 +137,10 @@ end
 function process_msg!(a::Agent,msg::AGMessage,model)
     #log_info(model.ticks,a.id,18,"->processing $(msg)")
     
+    if !get_state(a).up
+        log_info(model.ticks,a.id,"--> is_up? $(get_state(a).up) -- > Processing AG msg: $msg ")
+    end
+
     @match msg.reason begin
         AG_Protocol(1) => 
                         #Query coming from other agent
@@ -158,6 +169,7 @@ end
 """
 function do_query!(msg::AGMessage,a::Agent,model)
 
+    #define criteria for ignoring a msg from other agent
     ignore = false 
     if haskey(a.previous_queries,msg.body[:query]) 
         if model.ticks - a.previous_queries[msg.body[:query]] < model.query_cycle
@@ -165,41 +177,45 @@ function do_query!(msg::AGMessage,a::Agent,model)
             ignore = ~Bool(first(rand(bdst,1)))
         end
     end 
-    
-    # log_info("[$(model.ticks)]($(a.id)) ignore: $ignore")# -> msg: $msg")
 
-    sdir = data_dir * "runs2/$(model.ctrl_model)/"
     if !ignore 
-        
 
         # visited control ag
         trace = msg.body[:trace]
         push!(trace,a.id)
-        
-        # join graph received
-        msg_ntw_g = create_subgraph(msg.body[:ntw_edgel],msg.body[:ntw_equiv],:eid)
-        
-        jg = join_subgraphs(a.params[:ntw_graph],msg_ntw_g)
-        # update local graph, however the problem it can grow too much
-        a.params[:ntw_graph] = jg
 
-        ntw_edgel = [ e for e in edges(jg) if src(e) <  dst(e) ]
-        ntw_equiv = [(v,jg[v,:eid]) for v in vertices(jg)]
-        #log_info("[$(model.ticks)]($(a.id)) ==> joint: $(nv(jg))")
-        #do query
+        # Aggregated information from other agents
+        ## join graph received
+        msg_ntw_g = create_subgraph(msg.body[:ntw_edgel],msg.body[:ntw_equiv],:eid)
+        jg = join_subgraphs(a.params[:ntw_graph],msg_ntw_g)
+
+        # Update Knowledge Base 
+        # update local graph, however the problem it can grow too much
+        # hence there is a periodic clear_cache to restore to original
+        if model.clear_cache_graph_freq != 0
+            a.params[:ntw_graph] = jg
+        end
+        
         query = msg.body[:query]
         query_time = model.ticks
         query_paths = a.paths
         query_graph = jg
         path = Dict()
 
+        #path for benchmark recording
+        sdir = data_dir * model.run_label
         if model.benchmark 
             record_benchmark!(sdir,model.run_label,a.id,query_time,query,query_graph,query_paths) 
         end
 
-        path = do_query(query_time,query,query_graph,query_paths)        
+        #query
+        # log_info(model.ticks,a.id,[20],"starting query ==> $(a.paths)")
+        path = do_query(query_time,query,query_graph,query_paths)
+        # log_info(model.ticks,a.id,[20],"ending query")        
 
         if isempty(path)
+            ntw_edgel = [ e for e in edges(jg) if src(e) <  dst(e) ]
+            ntw_equiv = [(v,jg[v,:eid]) for v in vertices(jg)]
             of_mid = msg.body[:of_mid]
             nbody = Dict(:query=>query,:trace=>trace,:ntw_edgel => ntw_edgel, :ntw_equiv=>ntw_equiv, :of_mid=>of_mid)
             msg_template = AGMessage(-1,model.ticks,a.id,-1,QUERY_PATH,nbody)
@@ -212,17 +228,8 @@ function do_query!(msg::AGMessage,a::Agent,model)
         new_state = get_state(a)
         new_state.q_queries += 1.0
         set_state!(a,new_state)
-        # serialize(data_dir * "$(model.ticks)_$(a.id)_$(first(query))_$(last(query))_query_graph.bin",jg)
-        # serialize(data_dir * "$(model.ticks)_$(a.id)_$(first(query))_$(last(query))_query_path.bin",get_state(a).paths)
-        # if !isempty(paths)
-        #    #TODO consider case where multiple paths are found
-        #    path = [a.params[:ntw_graph][v,:eid] for v in first(found.paths)]
-        #    do_match!(path,msg,a,model)
-        # else # forward to neighbor controllers
-        #     nbody = Dict(:query=>query,:trace=>trace,:ntw_edgel => ntw_edgel, :ntw_equiv=>ntw_equiv, :of_mid=>of_mid)
-        #     msg_template = AGMessage(-1,model.ticks,a.id,-1,QUERY_PATH,nbody)
-        #     send_to_nbs!(msg_template,a,model)
-        # end
+        
+        #TODO consider case where multiple paths are found
     end
 
 end
@@ -293,4 +300,25 @@ function get_throughput_up(a::Agent,model)
     v_up = [ s.up for s in a.state_trj ]
     v_tpt = get_throughput(v_msg_in,model.:interval_tpt)
     return [ v_up[i] ? v_tpt[i] : 0.0   for i=1:length(v_tpt)]
+end
+
+
+"""
+ Check if path is invalid according to local knowledge. It does not mean is valid as this agent might not have all info to check validity.
+ Only flags invalid if 100% sure.
+ cnes:controlled nes by this agent (a)
+"""
+function is_invalid_path(path,cnes,model)
+    result = false
+    #log_info("invalidity check: $path")
+    for cne in cnes
+        if last(last(path)) != cne
+            sne = getindex(model,cne)
+            cne_i = first(indexin(cne,last(path)))
+            ports_path = filter(p->p[2]=="s$(last(path)[cne_i+1])",get_port_edge_list(sne))
+            result = isempty(ports_path) ? true : result
+        end
+    end
+
+    return result
 end
