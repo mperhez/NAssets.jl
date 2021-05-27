@@ -316,6 +316,10 @@ function pending_pkt_handler(a::Agent,model)
     end
 end
 
+"""
+    Handle control actions when a node(ne) has dropped from the
+    network
+"""
 function do_drop!(msg::OFMessage,a::Agent,model)
     log_info(model.ticks,a.id,[22,26],"Msg to remove node: $msg")
     lg = a.params[:ctl_graph]

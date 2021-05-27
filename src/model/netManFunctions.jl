@@ -936,9 +936,9 @@ new_config(seed,ctl_model,ntw_topo,size,n_steps,drop_proportion,prob_random_walk
 function get_dropping_nodes(drop_proportion)
     #TODO calcualte according to proportion
     return Dict(
-        50 => [3,6]
+       # 50 => [3,6]
         #55: Grid and Grid fails
-        , 55 => [11]
+        #, 55 => [11]
         #, 115 => [11]
         # , 70 => [10]
         #50=>[3,6] #TODO simoultaneous drops only work in centralised control

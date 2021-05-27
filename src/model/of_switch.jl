@@ -343,18 +343,7 @@ function in_packet_processing(a::AbstractAgent,model)
             push_pending!(a,msg)
         end
     end
-    
-    # for i in 1:a.params[:pkt_per_tick]
-    #     #log_info("[$(model.ticks)]($(a.id)) -> processing $i")
-    #     msg = is_ready(a) ? take_msg!(a) : break
-    #     # if model.ticks < 3
-    #     #     log_info("[$(model.ticks)]($(a.id)) Processing packet $(msg)")
-    #     # end
-    #     # in_pkt_count += 1
-    #     # out_pkt_count += 
-    #     process_msg!(a,msg,model)
-    # end
-
+    log_info(model.ticks,a.id,"pending msgs: $(length(a.pending))")
 end
 
 """

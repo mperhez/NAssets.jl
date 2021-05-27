@@ -28,10 +28,9 @@ function initialize(args,user_props;grid_dims=(3,3),seed=0)
         :mapping_ntw_sne => Dict{Int64,Int64}(), #mapping btwn the underlying network and the corresponding simNE agent 
         :max_cache_paths => 1,
         :clear_cache_graph_freq => 10, # How often the ntw graph is cleared to initial state, 0: no cache
-        :pkt_per_tick => 2000, # How many packets are processsed per tick
         :ctrl_model => args[:ctrl_model], 
         :ntw_model => args[:ntw_model], 
-        :pkt_size => 0.065, # (in MB) Max pkt size  IP is 65536 bytes
+        :pkt_size => 0.065, # (in MB) pkt size  IP between 21 is 65536 bytes Ref: Internet Core Protocols: The Definitive Guide by Eric Hall
         :freq => 30, # frequency of monitoring
         :N=>args[:N],
         # key(src,dst)=>value(time_left_at_link =>msg)
@@ -39,7 +38,10 @@ function initialize(args,user_props;grid_dims=(3,3),seed=0)
         :ntw_links_delays =>Dict{Tuple{Int,Int},Int}(),
         :state_trj => Vector{ModelState}(),
         :interval_tpt => 10,
-        :max_queue_ne => 200,#700
+        :pkt_per_tick => 1000, # How many packets are processsed per tick. #TODO which number is reasonable?
+        # I am setting this to 2000 as the expectations is nes
+        # are able to process. Check references e.g. Nokia SR 7750.
+        :max_queue_ne => 300,#700 #This indicates how many pkts/msgs can be stored in tick to be processed the next tick
         :query_cycle => 30,#30, # how long the max_eq_queries_cycle applies for
         :prob_eq_queries_cycle => 1,#0.7, #base probability of processing equal queries within the same :query_cycle
         :prob_random_walks =>  args[:prob_random_walks]# prob. of neighbour nodes to propagate query msgs.
@@ -73,7 +75,7 @@ function create_sim_asset_agents!(model)
         id = nextid(model)
         # @show i
         a = add_agent_pos!(
-                SimNE(id,i,a_params,30*model.:max_queue_ne),model
+                SimNE(id,i,a_params,10*model.pkt_per_tick),model
             )
         
         set_prop!(model.ntw_graph, id, :eid, id )
@@ -148,7 +150,7 @@ end
 """
 function model_step!(model)
     init_step_state!(model)
-    log_info(model.ticks,"===========")
+    log_info(model.ticks,"==========")
     for a in allagents(model)
         init_state!(a)
         # if typeof(a) == SimNE 
@@ -159,14 +161,7 @@ function model_step!(model)
     for e in edges(model.ntw_graph)
         ntw_link_step!((e.src,e.dst),model)
     end
-    
-    
     ctl_links_step!(model)
-    
-    # if model.ticks in 80:1:90
-    # log_info("[$(model.ticks)] - AFTER Processing $(get_state(getindex(model,1)))")
-    # end    
- 
     for a in allagents(model)
         do_agent_step!(a,model)
     end
@@ -174,8 +169,6 @@ function model_step!(model)
         pending_pkt_handler(a,model)
         clear_cache!(a,model)
     end
-
-    
     soft_drop_node!(model)
     log_info(model.ticks,"aflows: $(get_state(model).active_flows)")
 end
@@ -436,8 +429,8 @@ end
 function generate_traffic!(model)
     # log_info("[$(model.ticks)] - generating traffic")
     # q_pkts = abs(round(model.:max_queue_ne*rand(Normal(1,0.15))))
-    q_pkts = abs(round(model.:max_queue_ne*rand(Normal(1,0))))
-    # q_pkts = model.:max_queue_ne
+    q_pkts = abs(round(0.2*model.pkt_per_tick*rand(Normal(1,0))))
+    # q_pkts: A percentage of the model.pkt_per_tick so NEs are able to process traffic coming from different nodes (NEs)
     #src,dst = samplepair(1:nv(model.ntw_graph)) # can be replaced for random pair
     pairs =[(1,7),(4,1),(9,5)] #[(9,5)] #[(4,5)]#
 
@@ -515,16 +508,12 @@ end
 
 
 function ntw_link_step!(l::Tuple{Int,Int},model)
-    
     if haskey(model.ntw_links_msgs,l)
         
         msgs = model.ntw_links_msgs[l]
-        # log_info(model.ticks," link: -> $l msgs: $(model.ntw_links_msgs[l])")
-        # if model.ticks in 80:1:90 
-        #     log_info("[$(model.ticks)] - $(l) -> msgs: $(length(first(msgs)))")
-        # end
         to_deliver = first(msgs)
         in_pkt_count = 0
+
         if !isempty(to_deliver)
             if length(msgs) > 1
                 msgs = msgs[begin+1:end]
@@ -532,26 +521,29 @@ function ntw_link_step!(l::Tuple{Int,Int},model)
             else
                 msgs = [ Vector{OFMessage}() ]
             end
-            
             model.ntw_links_msgs[l] = msgs
 
             for msg in to_deliver
                 #Does it need to check address?, I don't think so
                 dst = msg.dpid == l[1] ? getindex(model,l[2]) : getindex(model,l[1])
-                put!(dst.queue,msg)
-                in_pkt_count = get_state(dst).in_pkt + 1
-                set_in_pkt!(dst,in_pkt_count)
+                if length(dst.queue.data) < dst.queue.sz_max
+                    
+                    put!(dst.queue,msg)
+                    in_pkt_count = get_state(dst).in_pkt + 1
+                    set_in_pkt!(dst,in_pkt_count)
+                else
+                    # log_info(model.ticks,dst.id, "unable to deliver packet")
+                    s = get_state(dst)
+                    s.drop_pkt += 1
+                    set_state!(dst,s)
+                end
             end
-            #push!(model.state_trj,ModelState(model.ticks))
         end
     end
     
 end
 
-# function init_msgs_link!(msgs::Array{Array{AGMessage,1},1})
-#     [ msgs[i] = Vector{AGMessage}() for i=1:length(a.msgs_links) ]
-#     return msgs
-# end
+
 
 """
     Initialize an array of dimensions d1 x d2 that contains vectors of type T
