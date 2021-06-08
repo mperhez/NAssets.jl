@@ -23,7 +23,8 @@ function initialize(args,user_props;grid_dims=(3,3),seed=0)
         :ΔΦ => args[:ΔΦ],
         :ntw_graph => args[:ntw_graph],
         :ctl_graph => args[:ctl_graph],
-        :dropping_nodes=>args[:dropping_nodes],
+        # :dropping_nodes=>args[:dropping_nodes],
+        :dropping_times=>args[:dropping_times],
         :mapping_ctl_ntw => Dict{Int64,Int64}(), # mapping between (Ctl) Agent and SimNE
         :mapping_ntw_sne => Dict{Int64,Int64}(), #mapping btwn the underlying network and the corresponding simNE agent 
         :max_cache_paths => 1,

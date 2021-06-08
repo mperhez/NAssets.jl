@@ -438,29 +438,28 @@ function soft_drop_node!(model)
     #2in controller: update topology and paths
     #in switch detect path/port not available and ask controller
     
-    # dropping node id
-    # dropping time
-    dn = model.dropping_nodes
-    if haskey(dn,model.ticks)
-        dpn_ids = dn[model.ticks]
-        for dpn_id in dpn_ids
-            g = model.ntw_graph
-            dpn_ag = getindex(model,dpn_id)
-            set_down!(dpn_ag)
+    if model.ticks in model.dropping_times
+        #get ids of nodes that are part of active flows
+        active_ids =  unique(vcat([ af[3]==f_S ? [af[2]] : af[3]==f_E ? [af[1]] : [af[1],af[2]] for af in get_state(model).active_flows if af[3]!=f_SE ]...)) 
 
-            for nb in all_neighbors(model.ntw_graph,get_address(dpn_id,g))
-                sne = getindex(model,get_eid(nb,model))
-                link_down!(sne,dpn_id,model)
-            end
-            
-            aid = get_control_agent(dpn_id,model)
-            a = getindex(model,aid)
-            link_down!(a,dpn_id,model)
-
-            #soft remove 
-            model.ntw_graph = soft_remove_vertex!(g,get_address(dpn_id,g))
-        end
+        #pick one random node
+        dpn_id = rand(active_ids)
         
+        g = model.ntw_graph
+        dpn_ag = getindex(model,dpn_id)
+        set_down!(dpn_ag)
+
+        for nb in all_neighbors(model.ntw_graph,get_address(dpn_id,g))
+            sne = getindex(model,get_eid(nb,model))
+            link_down!(sne,dpn_id,model)
+        end
+            
+        aid = get_control_agent(dpn_id,model)
+        a = getindex(model,aid)
+        link_down!(a,dpn_id,model)
+
+        #soft remove 
+        model.ntw_graph = soft_remove_vertex!(g,get_address(dpn_id,g))
         
     end
     
@@ -936,9 +935,9 @@ new_config(seed,ctl_model,ntw_topo,size,n_steps,drop_proportion,prob_random_walk
 function get_dropping_nodes(drop_proportion)
     #TODO calcualte according to proportion
     return Dict(
-       # 50 => [3,6]
+       50 => [3]
         #55: Grid and Grid fails
-        #, 55 => [11]
+        , 75 => [8]
         #, 115 => [11]
         # , 70 => [10]
         #50=>[3,6] #TODO simoultaneous drops only work in centralised control
@@ -946,9 +945,27 @@ function get_dropping_nodes(drop_proportion)
     ) # drop time => drop node
 end
 
+"""
+    return the times when random assets will fail
+    according to total sim time (N), quantity (q) of
+    assets and proportion. It receives also random 
+"""
+function get_dropping_times(seed,stabilisation_period,drop_proportion,q,N)
+    Random.seed!(seed)
+    #events 
+    k = Int(round(q * drop_proportion))
+    #rate events happening within time horizon 
+    λ = k / (N - stabilisation_period)
+    #events happen randomly folling Poisson process with 
+    # λ, after stabilisation_period
+    event_times = stabilisation_period .+ rand(Poisson(λ),(N - stabilisation_period))
+    return event_times
+end
+
+
 function load_run_configs() 
     configs = []
-    for ctl_model in [GraphModel(6)]#, ControlModel(4) ] #instances(ControlModel)
+    for ctl_model in [GraphModel(1)]#, ControlModel(4) ] #instances(ControlModel)
         for ntw_topo in [GraphModel(4)]
             for size in [16]#, 50, 100]
                 for drop_proportion in [10]
@@ -1006,7 +1023,7 @@ function single_run(config)
     args[:ΔΦ]=1
     ntw_graph = load_network_graph(get_graph(config.seed,config.size,config.ntw_topo;k=config.k,Β=config.Β,custom_topo=config.custom_topo))
     args[:ntw_graph]=ntw_graph
-    args[:dropping_nodes]= get_dropping_nodes(config.drop_proportion)
+    # args[:dropping_nodes]= get_dropping_nodes(config.drop_proportion)
     args[:ctrl_model] = config.ctl_model
     args[:ntw_model] = config.ntw_topo
 
@@ -1030,7 +1047,8 @@ function single_run(config)
 
     q_agents = nv(ntw_graph)+q_ctl_agents
     args[:q]=q_agents
-
+    # seed, stabilisation_time,proportion_dropping,q,N
+    args[:dropping_times] = get_dropping_times(config.seed,30,0.2,nv(ntw_graph),config.n_steps)
     adata = [get_state_trj,get_condition_ts, get_rul_ts]
     mdata = [:mapping_ctl_ntw,get_state_trj]
     result_agents,result_model = run_model(config.n_steps,args,params; agent_data = adata, model_data = mdata)

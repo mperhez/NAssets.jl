@@ -49,10 +49,10 @@ end
 Indicates the type of a flow within a path
 """
 @enum Flow_Type begin
-    f_SE = -2
-    f_S = -1
-    f_I = 0
-    f_E = 1
+    f_SE = -2 # start and end
+    f_S = -1 # start
+    f_I = 0 # intermediate
+    f_E = 1 # end
 end
 
 mutable struct ModelState <: State

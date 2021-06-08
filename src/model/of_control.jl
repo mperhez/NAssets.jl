@@ -386,7 +386,7 @@ function port_delete_handler(a::Agent,msg::OFMessage,model)
             a.params[:last_cache_graph] = model.ticks
         else
             lv = to_local_vertex(a.params[:ntw_graph],msg.data)
-            a.params[:ntw_graph] = soft_remove_vertex(a.params[:ntw_graph],lv)
+            a.params[:ntw_graph] = soft_remove_vertex!(a.params[:ntw_graph],lv)
         end
 
     end
