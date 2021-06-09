@@ -66,7 +66,7 @@ function install_flow!(a::Agent,path::Array{Int64,1},model::ABM,msg::OFMessage=n
          
          ports = get_port_edge_list(sne)
  
-        #  log_info("[$(model.ticks)]{$(a.id)}($(sne.id)) - ports: $(ports) - i: $i - i_prev: $i_prev - e: $e -- lpath : $lpath")
+        log_info("[$(model.ticks)]{$(a.id)}($(sne.id)) - ports: $(ports) - i: $i - i_prev: $i_prev - e: $e -- lpath : $lpath")
          #Regardless of where the traffic comes
          r_src = "*" #string("h",first(lpath)) 
          r_dst = last(lpath)
@@ -235,7 +235,7 @@ function do_query!(msg::OFMessage,a::Agent,model)
     
     # log_info(model.ticks,a.id,18,"path found: $path")
 
-    if isempty(path)
+    if isempty(path) && model.ctrl_model != GraphModel(1)
         lg = a.params[:ntw_graph]
         ntw_edgel = [ e for e in edges(lg) if src(e) <  dst(e) ]
         ntw_equiv = [(v,lg[v,:eid]) for v in vertices(lg)]

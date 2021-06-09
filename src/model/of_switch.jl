@@ -333,15 +333,27 @@ function in_packet_processing(a::AbstractAgent,model)
     in_pkt_count = 0
     out_pkt_count = 0
     processed_tick = 0
+    actions_to_process = []
+    log_info(model.ticks,a.id,17,"in_packet_processing==>$(a.queue.data)")
+    
     while is_ready(a)
         msg = take_msg!(a)
 
         if processed_tick <= a.params[:pkt_per_tick]
-            process_msg!(a,msg,model)    
+            #process first non-action msgs which have greater priority e.g. node drop
+            if msg.reason == OFPR_ACTION
+                push!(actions_to_process,msg)
+            else
+                process_msg!(a,msg,model)
+            end
             processed_tick += 1
         else
             push_pending!(a,msg)
         end
+    end
+    #process action msgs
+    for msg in actions_to_process
+        process_msg!(a,msg,model)
     end
     log_info(model.ticks,a.id,"pending msgs: $(length(a.pending))")
 end
@@ -424,18 +436,17 @@ function link_down!(sne::SimNE,dpn_id::Int,model)
             dpn_port = p[1]
         end
     end
-    # log_info("[$(model.ticks)]($(sne.id)) link down mid")
     set_port_edge_list!(sne,new_port_edge_list)
     new_flow_table::Vector{Flow} = []
     for f in get_flow_table(sne)
-        # log_info("[$(model.ticks)]($(sne.id)) dpn_port: $dpn_port in $(f.params) - flow found: $(f)")
         if  ~(dpn_port in f.params)
             push!(new_flow_table,f)
         end    
     end
     set_flow_table!(sne,new_flow_table)
-    # log_info("[$(model.ticks)]($(sne.id)) new flow found: $(get_state(sne).flow_table)")
+    
     controller = getindex(model,sne.controller_id)
+    log_info(model.ticks,sne.id,"Triggering event to ag: $(sne.controller_id) for dpn_id: $dpn_id ")
     trigger_of_event!(model.ticks,controller,dpn_id,EventOFPPortStatus,model)
 end
 

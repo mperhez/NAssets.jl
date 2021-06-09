@@ -166,11 +166,11 @@ function model_step!(model)
     for a in allagents(model)
         do_agent_step!(a,model)
     end
+    soft_drop_node!(model)
     for a in allagents(model)
         pending_pkt_handler(a,model)
         clear_cache!(a,model)
     end
-    soft_drop_node!(model)
     log_info(model.ticks,"aflows: $(get_state(model).active_flows)")
 end
 
@@ -317,14 +317,15 @@ function init_agent!(a::Agent,model)
         # log_info("Control Network size $(nv(ctl_sub_g))")
         a.params[:ntw_graph] = sub_g
         a.params[:base_ntw_graph] = sub_g
-        a.params[:last_cache_graph] = 0 #Last time cache was cleared
         a.params[:ctl_graph] = ctl_sub_g
         a.params[:delay_ctl_link] = 2 # 1: no delay
         #Init vector of msgs
         a.msgs_links = init_array_vectors(AGMessage,a.params[:delay_ctl_link],degree(a.params[:ctl_graph],to_local_vertex(a.params[:ctl_graph],a.id,:aid)))
     else
         a.params[:ntw_graph] = model.ntw_graph
+        a.params[:base_ntw_graph] = model.ntw_graph
     end
+    a.params[:last_cache_graph] = 0 #Last time cache was cleared
     
     # if nv(a.params[:ntw_graph]) > 0
     #     all_paths = all_k_shortest_paths(a.params[:ntw_graph])   
@@ -433,7 +434,7 @@ function generate_traffic!(model)
     q_pkts = abs(round(0.2*model.pkt_per_tick*rand(Normal(1,0))))
     # q_pkts: A percentage of the model.pkt_per_tick so NEs are able to process traffic coming from different nodes (NEs)
     #src,dst = samplepair(1:nv(model.ntw_graph)) # can be replaced for random pair
-    pairs =[(1,7),(4,1),(9,5)] #[(9,5)] #[(4,5)]#
+    pairs =[(1,7),(4,1),(5,16)] #[(9,5)] #[(4,5)]#
 
     for p in pairs
         src,dst = p

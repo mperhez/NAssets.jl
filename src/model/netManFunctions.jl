@@ -244,7 +244,7 @@ function plot_ctl_network_mono(
     kwargs...,
 )
 
-    ctl_p = plot(circle_shape(0,0,0.1)
+    ctl_p = Plots.plot(circle_shape(0,0,0.1)
                  , seriestype = [:shape]
                  , lw=0.5 
                  , c=:lightblue
@@ -271,14 +271,14 @@ function plot_ctl_throughput(
 )
     tpt_v = get_ag_msg(model)
     max_y = maximum(tpt_v)+5
-    tpt_p = plot(title="tpt",titlefontcolor=:white,ylims=[0,max_y])
+    tpt_p = Plots.plot(title="tpt",titlefontcolor=:white,ylims=[0,max_y])
     # for i=1:nv(model.ctl_graph)
     #     a = getindex(model,model.ctl_graph[i,:aid])
         # tpt_v = get_throughput_up(a,model)
     
     # log_info("Plotting...")
     # log_info(tpt_v)
-    tpt_p = plot!(tpt_v,xlims=[0,model.N], linealpha=0.5
+    tpt_p = Plots.plot!(tpt_v,xlims=[0,model.N], linealpha=0.5
         # , line=:stem
         ,ylabel = "Quantity of agent messages"
         ,legend = false#:outerright
@@ -350,7 +350,7 @@ end
 
 
 function plot_empty()
-    return plot(title="false", titlefontcolor=:white ,showaxis = false, ticks=false,grid=false)
+    return Plots.plot(title="false", titlefontcolor=:white ,showaxis = false, ticks=false,grid=false)
 end
 
 function plot_throughput(
@@ -358,12 +358,12 @@ function plot_throughput(
     kwargs...
 )
     max_y = 100
-    tpt_p = plot(title="tpt",titlefontcolor=:white,ylims=[0,max_y])
+    tpt_p = Plots.plot(title="tpt",titlefontcolor=:white,ylims=[0,max_y])
     for i=1:nv(model.ntw_graph)
         sne = getindex(model,get_eid(i,model))
         # v_pkt_in = [ s.in_pkt * model.:pkt_size for s in sne.state_trj ]
         tpt_v = get_throughput_up(sne,model)#isempty(v_pkt_in) ? [0] : get_throughput(v_pkt_in,10)
-        tpt_p = plot!(tpt_p,tpt_v
+        tpt_p = Plots.plot!(tpt_p,tpt_v
         ,xlims=[0,model.N]
         , linealpha=0.5
         # , line=:stem
@@ -386,7 +386,7 @@ function plotabm_networks(
     
     l =  @layout([A{0.01h}; [B C ; D E]])  #(2,2) #@layout [a{1w} [grid(1,2) b{0.2h}] ] #@layout [a{1w};(1,2)]
 
-    title = plot(title = "Plot title", grid = false, showaxis = false, ticks=false, bottom_margin = -50Plots.px)
+    title = Plots.plot(title = "Plot title", grid = false, showaxis = false, ticks=false, bottom_margin = -50Plots.px)
 
     ctl_p = model.ctrl_model != GraphModel(1) ? # Centralised
             plot_ctl_network_multi(model;kwargs...) :
@@ -444,7 +444,7 @@ function soft_drop_node!(model)
 
         #pick one random node
         dpn_id = rand(active_ids)
-        
+        log_info(model.ticks,"Removing ntw node: $dpn_id...")
         g = model.ntw_graph
         dpn_ag = getindex(model,dpn_id)
         set_down!(dpn_ag)
@@ -946,6 +946,14 @@ function get_dropping_nodes(drop_proportion)
 end
 
 """
+    It returns the next event time for a given random number and rate of events
+"""
+function next_event_time(rn,λ)
+    return -log(1.0-rn)/λ
+end
+
+
+"""
     return the times when random assets will fail
     according to total sim time (N), quantity (q) of
     assets and proportion. It receives also random 
@@ -955,13 +963,14 @@ function get_dropping_times(seed,stabilisation_period,drop_proportion,q,N)
     #events 
     k = Int(round(q * drop_proportion))
     #rate events happening within time horizon 
-    λ = k / (N - stabilisation_period)
+    λ = k / (N - 2*stabilisation_period) # stabilisation period is substracted twice, so the disruption comes after this period and also allows for the same time to fix before simulation ends.
     #events happen randomly folling Poisson process with 
     # λ, after stabilisation_period
-    event_times = stabilisation_period .+ rand(Poisson(λ),(N - stabilisation_period))
+    
+    event_times = Int.(round.(sort(stabilisation_period .+ next_event_time.(rand(k),[λ]))))
+    log_info("Dropping times are: $event_times")
     return event_times
 end
-
 
 function load_run_configs() 
     configs = []
@@ -983,7 +992,7 @@ function load_run_configs()
                             for Β in Βs
                                 for ctl_k in ctl_ks
                                     for ctl_Β in ctl_Βs
-                                        push!(configs,new_config(seed,ctl_model,ntw_topo,size,200,drop_proportion,1.0,false,true,k,Β,ctl_k,ctl_Β))
+                                        push!(configs,new_config(seed,ctl_model,ntw_topo,size,100,drop_proportion,1.0,false,true,k,Β,ctl_k,ctl_Β))
                                     end
                                 end
                             end
@@ -1153,7 +1162,7 @@ Clears cache of control agent
 # TODO Opportunity to investigate ways to store relevant cache rather than clearing all
 """
 function clear_cache!(a::Agent,model::ABM)
-    if model.ctrl_model != GraphModel(1) && model.ticks - a.params[:last_cache_graph] == model.clear_cache_graph_freq
+    if model.ticks - a.params[:last_cache_graph] == model.clear_cache_graph_freq
         a.params[:ntw_graph] = a.params[:base_ntw_graph]
         a.params[:last_cache_graph] = model.ticks
     end
