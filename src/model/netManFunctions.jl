@@ -731,11 +731,12 @@ Search for a path between nodes s and d in the local graph lg
 It assumes property :eid of each vertex is global id of vertex
 """
 
-function query_path(lg,s,d)
+function query_paths(lg,s,d)
     ls = to_local_vertex(lg,s)
     ld = to_local_vertex(lg,d)
-    result =   LightGraphs.YenState{Float64,Int64}([],[])
-    path = []
+    paths = []
+    scores = []
+    result =   LightGraphs.YenState{Float64,Int64}(scores,paths)
     
     if ls > 0 && ld > 0
             #slg = SimpleGraph(lg)
@@ -746,23 +747,33 @@ function query_path(lg,s,d)
     #gvs = [ lg[v,:eid] for v in vertices(lg)]
     #log_info("network contains: gvs: $gvs")
     # log_info("query_path:  g v: $(vertices(lg)), s: $(s) - ls: $(ls), d: $d - ld $ld result ==> $(result)")
-
-    if !isempty(result.paths)
-        path = result.paths
-        path = !isempty(path) && typeof(path) == Array{Array{Int64,1},1} ? first(path) : path
-        path = [ lg[v,:eid] for v in path]
-        result =   LightGraphs.YenState{Float64,Int}([length(path)],[path])
+    
+    
+    for path in result.paths
+        # path = !isempty(path) && typeof(path) == Array{Array{Int64,1},1} ? first(path) : path
+        #convert paths to global graph (eids)
+        cpath = [ lg[v,:eid] for v in path]
+        push!(paths,cpath)
+        push!(scores,score_path(cpath))
     end
+
+    result =   LightGraphs.YenState{Float64,Int}(scores,paths)
 
     return result
 end
 
+"""
+    It gives a score to the given path, initially only based on length of path
+"""
+function score_path(path)
+    return length(path)
+end
 
 """
     Local search receiving source and destination in a tuple
 """
-function query_path(lg,t)
-    query_path(lg,first(t),last(t))
+function query_paths(lg,t)
+    query_paths(lg,t...)
 end
 
 
@@ -868,14 +879,6 @@ function plot_subg(sg)
           )
 end
 
-"""
-    Return one path for each 
-"""
-function all_k_shortest_paths(g::MetaGraph)
-    ps = [ (g[s,:eid],g[d,:eid]) for s in vertices(g), d in vertices(g) if s < d]
-    return query_path.([g], ps)
-end
-
 function has_prop_vertex(value,g,prop)
     gvs = [ g[v,prop] for v in vertices(g) ]
     return value in gvs
@@ -974,7 +977,7 @@ end
 
 function load_run_configs() 
     configs = []
-    for ctl_model in [GraphModel(1)]#, ControlModel(4) ] #instances(ControlModel)
+    for ctl_model in [GraphModel(6)]#, ControlModel(4) ] #instances(ControlModel)
         for ntw_topo in [GraphModel(4)]
             for size in [16]#, 50, 100]
                 for drop_proportion in [10]
@@ -992,7 +995,7 @@ function load_run_configs()
                             for Β in Βs
                                 for ctl_k in ctl_ks
                                     for ctl_Β in ctl_Βs
-                                        push!(configs,new_config(seed,ctl_model,ntw_topo,size,100,drop_proportion,1.0,false,true,k,Β,ctl_k,ctl_Β))
+                                        push!(configs,new_config(seed,ctl_model,ntw_topo,size,200,drop_proportion,1.0,false,true,k,Β,ctl_k,ctl_Β))
                                     end
                                 end
                             end
@@ -1163,7 +1166,9 @@ Clears cache of control agent
 """
 function clear_cache!(a::Agent,model::ABM)
     if model.ticks - a.params[:last_cache_graph] == model.clear_cache_graph_freq
+        log_info(model.ticks,a.id,20,"cc prev My graph-> vertices: $(nv(a.params[:ntw_graph])) -- edges: $(ne(a.params[:ntw_graph]))")
         a.params[:ntw_graph] = a.params[:base_ntw_graph]
+        log_info(model.ticks,a.id,20,"cc after My graph-> vertices: $(nv(a.params[:ntw_graph])) -- edges: $(ne(a.params[:ntw_graph]))")
         a.params[:last_cache_graph] = model.ticks
     end
 

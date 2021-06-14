@@ -27,8 +27,6 @@ function initialize(args,user_props;grid_dims=(3,3),seed=0)
         :dropping_times=>args[:dropping_times],
         :mapping_ctl_ntw => Dict{Int64,Int64}(), # mapping between (Ctl) Agent and SimNE
         :mapping_ntw_sne => Dict{Int64,Int64}(), #mapping btwn the underlying network and the corresponding simNE agent 
-        :max_cache_paths => 1,
-        :clear_cache_graph_freq => 10, # How often the ntw graph is cleared to initial state, 0: no cache
         :ctrl_model => args[:ctrl_model], 
         :ntw_model => args[:ntw_model], 
         :pkt_size => 0.065, # (in MB) pkt size  IP between 21 is 65536 bytes Ref: Internet Core Protocols: The Definitive Guide by Eric Hall
@@ -43,8 +41,10 @@ function initialize(args,user_props;grid_dims=(3,3),seed=0)
         # I am setting this to 2000 as the expectations is nes
         # are able to process. Check references e.g. Nokia SR 7750.
         :max_queue_ne => 300,#700 #This indicates how many pkts/msgs can be stored in tick to be processed the next tick
-        :query_cycle => 30,#30, # how long the max_eq_queries_cycle applies for
-        :prob_eq_queries_cycle => 1,#0.7, #base probability of processing equal queries within the same :query_cycle
+        :max_cache_paths => 1,
+        :clear_cache_graph_freq => 30, # How often the ntw graph is cleared to initial state, 0: no cache. A value of 10, is not enough in a 16 mesh network to find paths when queries are not repeated, prob_eq_query. Carefully, this should be higher than query cycle when prob_eq_queries_cycle = 0.
+        :query_cycle => 10,#30, # how long the max_eq_queries_cycle applies for
+        :prob_eq_queries_cycle => 0,#0.1,#1,#0.7, #base probability of processing equal queries within the same :query_cycle. 0 means won't process the same query within the query_cycle, 1: means will process always repeated queries regardless of query_cycle
         :prob_random_walks =>  args[:prob_random_walks]# prob. of neighbour nodes to propagate query msgs.
     )
 
@@ -164,6 +164,7 @@ function model_step!(model)
     end
     ctl_links_step!(model)
     for a in allagents(model)
+        log_info(model.ticks,a.id,"---------")
         do_agent_step!(a,model)
     end
     soft_drop_node!(model)
@@ -326,13 +327,6 @@ function init_agent!(a::Agent,model)
         a.params[:base_ntw_graph] = model.ntw_graph
     end
     a.params[:last_cache_graph] = 0 #Last time cache was cleared
-    
-    # if nv(a.params[:ntw_graph]) > 0
-    #     all_paths = all_k_shortest_paths(a.params[:ntw_graph])   
-    #     get_state(a).paths = label_paths(model.ticks,all_paths)
-    # else
-    #     get_state(a).paths = Dict()
-    # end
 end
 
 function label_paths(time::Int64,paths::Array{LightGraphs.YenState{Float64,Int64},1})
@@ -434,7 +428,7 @@ function generate_traffic!(model)
     q_pkts = abs(round(0.2*model.pkt_per_tick*rand(Normal(1,0))))
     # q_pkts: A percentage of the model.pkt_per_tick so NEs are able to process traffic coming from different nodes (NEs)
     #src,dst = samplepair(1:nv(model.ntw_graph)) # can be replaced for random pair
-    pairs =[(1,7),(4,1),(5,16)] #[(9,5)] #[(4,5)]#
+    pairs =[(1,7),(4,1),(5,14)] #[(9,5)] #[(4,5)]#
 
     for p in pairs
         src,dst = p

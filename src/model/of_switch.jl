@@ -43,7 +43,7 @@ mutable struct OFMessage <: CTLMessage
     id::Int64
     ticks::Int
     dpid::Int # sender of msg,  aka SimNE.id aka switch.id
-    in_port::Int # (Optional) sender's input port
+    in_port::Int # (Optional) sender's input port, in SimNE to ControlAg comm, this is the port where the packet was received
     reason::Ofp_Protocol
     data::Any
 end
@@ -324,8 +324,14 @@ end
 function install_flow!(msg::OFMessage, sne::SimNE,model)
     #ports = get_port_edge_list(sne,model)
     # log_info("[$(model.ticks)] Installing flow: $(sne.id) - $(msg)")
-    push!(get_state(sne).flow_table,first(msg.data)) #msg.data[1] = flow, msg.data[2] = query_id:qid
+    nf = first(msg.data)
+    ft = get_state(sne).flow_table
     
+    #Assumes only one flow to a given destination, hence replace existing flows leading towards the same destination
+    nft = [ f for f in ft if f.match_rule.dst != nf.match_rule.dst ]
+    
+    push!(nft,nf) #msg.data[1] = flow, msg.data[2] = query_id:qid
+    set_flow_table!(sne,nft)
     pop_pending_query!(sne,last(msg.data))
 end
 
@@ -428,23 +434,26 @@ function link_down!(sne::SimNE,dpn_id::Int,model)
     #remove from list of ports
     new_port_edge_list::Vector{Tuple{Int64,String}} = []
     dpn_port = -1
-    for p in get_port_edge_list(sne)
-        # log_info("[$(model.ticks)]($(sne.id)) port found: $p")
+    ports = get_port_edge_list(sne)
+    for p in ports
         if p[2]!="s"*string(dpn_id)
             push!(new_port_edge_list,p)
         else
             dpn_port = p[1]
         end
     end
-    set_port_edge_list!(sne,new_port_edge_list)
     new_flow_table::Vector{Flow} = []
+    
     for f in get_flow_table(sne)
+        log_info(model.ticks,sne.id,"Existing flow: $f --> $dpn_port ---> $(f.params) --> all ports: $ports")
         if  ~(dpn_port in f.params)
             push!(new_flow_table,f)
         end    
     end
     set_flow_table!(sne,new_flow_table)
-    
+    set_port_edge_list!(sne,new_port_edge_list)
+    log_info(model.ticks,sne.id,"New flow table: $new_flow_table ---> all ports: $(get_port_edge_list(sne))")
+
     controller = getindex(model,sne.controller_id)
     log_info(model.ticks,sne.id,"Triggering event to ag: $(sne.controller_id) for dpn_id: $dpn_id ")
     trigger_of_event!(model.ticks,controller,dpn_id,EventOFPPortStatus,model)

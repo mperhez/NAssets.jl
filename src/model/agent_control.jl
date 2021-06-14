@@ -51,6 +51,7 @@ function do_match!(msg::AGMessage,a::Agent,model)
     # if msg.mid == 4786
     #     log_info(model.ticks,a.id,"is_up? $(get_state(a).up) --> do_match! -> msg : $(msg), end ag => $(first(msg.body[:trace]))")
     # end
+    
     new_path = msg.body[:path]
     ces = get_controlled_assets(a.id,model)
 
@@ -121,7 +122,7 @@ end
     Prepare MATCH reply
 """
 function do_match!(found_path::Tuple{Int64,Float64,Array{Int64}},msg::AGMessage,a::Agent,model)
-    #log_info(model.ticks,a.id,[22],"*do_match! -> msg : $(msg) -> found: $(found_path)")
+    log_info(model.ticks,a.id,"*do_match! -> msg : $(msg) -> found: $(found_path)")
     query = msg.body[:query]
     trace = msg.body[:trace]
     trace_bk = deepcopy(msg.body[:trace])
@@ -137,10 +138,9 @@ end
 function process_msg!(a::Agent,msg::AGMessage,model)
     #log_info(model.ticks,a.id,18,"->processing $(msg)")
     
-    if !get_state(a).up
-        log_info(model.ticks,a.id,"--> is_up? $(get_state(a).up) -- > Processing AG msg: $msg ")
-    end
-
+    # if model.ticks == 83
+    #     log_info(model.ticks,a.id,"--> is_up? $(get_state(a).up) -- > Processing AG msg: $msg ")
+    # end
     @match msg.reason begin
         AG_Protocol(1) => 
                         #Query coming from other agent
@@ -183,53 +183,61 @@ function do_query!(msg::AGMessage,a::Agent,model)
         # visited control ag
         trace = msg.body[:trace]
         push!(trace,a.id)
-
-        # Aggregated information from other agents
-        ## join graph received
-        msg_ntw_g = create_subgraph(msg.body[:ntw_edgel],msg.body[:ntw_equiv],:eid)
-        jg = join_subgraphs(a.params[:ntw_graph],msg_ntw_g)
-
-        # Update Knowledge Base 
-        # update local graph, however the problem it can grow too much
-        # hence there is a periodic clear_cache to restore to original
-        if model.clear_cache_graph_freq != 0
-            a.params[:ntw_graph] = jg
-        end
-        
         query = msg.body[:query]
-        query_time = model.ticks
-        query_paths = a.paths
-        query_graph = jg
-        path = Dict()
 
-        #path for benchmark recording
-        sdir = data_dir * model.run_label
-        if model.benchmark 
-            record_benchmark!(sdir,model.run_label,a.id,query_time,query,query_graph,query_paths) 
-        end
+        if get_state(a).up
+            # Aggregated information from other agents
+            ## join graph received
+            msg_ntw_g = create_subgraph(msg.body[:ntw_edgel],msg.body[:ntw_equiv],:eid)
+            jg = join_subgraphs(a.params[:ntw_graph],msg_ntw_g)
 
-        #query
-        # log_info(model.ticks,a.id,[20],"starting query ==> $(a.paths)")
-        path = do_query(query_time,query,query_graph,query_paths)
-        # log_info(model.ticks,a.id,[20],"ending query")        
+            # Update Knowledge Base 
+            # update local graph, however the problem it can grow too much
+            # hence there is a periodic clear_cache to restore to original
+            if model.clear_cache_graph_freq != 0
+                a.params[:ntw_graph] = jg
+            end
+            
+            
+            query_time = model.ticks
+            query_paths = a.paths
+            query_graph = jg
+            path = Dict()
 
-        if isempty(path)
-            ntw_edgel = [ e for e in edges(jg) if src(e) <  dst(e) ]
-            ntw_equiv = [(v,jg[v,:eid]) for v in vertices(jg)]
-            of_mid = msg.body[:of_mid]
-            nbody = Dict(:query=>query,:trace=>trace,:ntw_edgel => ntw_edgel, :ntw_equiv=>ntw_equiv, :of_mid=>of_mid)
-            msg_template = AGMessage(-1,model.ticks,a.id,-1,QUERY_PATH,nbody)
-            send_to_nbs!(msg_template,a,model)
-        else
-            do_match!(path,msg,a,model)
-        end
+            #path for benchmark recording
+            sdir = data_dir * model.run_label
+            if model.benchmark 
+                record_benchmark!(sdir,model.run_label,a.id,query_time,query,query_graph,query_paths) 
+            end
 
-        a.previous_queries[msg.body[:query]] = model.ticks
-        new_state = get_state(a)
-        new_state.q_queries += 1.0
-        set_state!(a,new_state)
+            #query
+            # log_info(model.ticks,a.id,[20],"starting query ==> $(a.paths)")
+            path = do_query(query_time,query,query_graph,query_paths)
+            # log_info(model.ticks,a.id,[20],"ending query")        
+
+            if isempty(path)
+                ntw_edgel = [ e for e in edges(jg) if src(e) <  dst(e) ]
+                ntw_equiv = [(v,jg[v,:eid]) for v in vertices(jg)]
+                of_mid = msg.body[:of_mid]
+                nbody = Dict(:query=>query,:trace=>trace,:ntw_edgel => ntw_edgel, :ntw_equiv=>ntw_equiv, :of_mid=>of_mid)
+                msg_template = AGMessage(-1,model.ticks,a.id,-1,QUERY_PATH,nbody)
+                send_to_nbs!(msg_template,a,model)
+            else
+                do_match!(path,msg,a,model)
+            end
+            squery = (msg.body[:query][1],msg.body[:query][2])
+            a.previous_queries[squery] = model.ticks
+            new_state = get_state(a)
+            new_state.q_queries += 1.0
+            set_state!(a,new_state)
         
         #TODO consider case where multiple paths are found
+        else
+            of_mid = msg.body[:of_mid]
+            nbody = Dict(:query=>query,:trace=>trace,:ntw_edgel => msg.body[:ntw_edgel], :ntw_equiv=>msg.body[:ntw_equiv], :of_mid=>of_mid)
+            msg_template = AGMessage(-1,model.ticks,a.id,-1,QUERY_PATH,nbody)
+            send_to_nbs!(msg_template,a,model)
+        end
     end
 
 end
@@ -274,7 +282,10 @@ function link_down!(a::Agent,dpn_id::Int,model)
     # send_msg!(agent.id,ld_msg,model)
 
     set_control_agent!(dpn_id,0,model)
-    init_agent!(a,model)
+    # init_agent!(a,model)
+    s = get_state(a)
+    s.up = false
+    set_state!(a,s)
 end
 
 function get_state(a::Agent)::State

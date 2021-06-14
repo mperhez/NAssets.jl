@@ -58,7 +58,7 @@ function install_flow!(a::Agent,path::Array{Int64,1},model::ABM,msg::OFMessage=n
     lpath = isempty(path) ? es : path 
     eois = intersect(es,lpath)
     lpath = [ v for v in lpath]
-    log_info(model.ticks,a.id,26,"{$(first(get_controlled_assets(a.id,model)))} install_flow! => path: $path -- es: $es -- eois: $eois - msg: -> $msg")
+    log_info(model.ticks,a.id,"{$(get_controlled_assets(a.id,model))} install_flow! => path: $path -- es: $es -- eois: $eois - msg: -> $msg")
     for e in eois
          i = length(lpath) > 1 ? first(indexin(e,lpath)) : 1
          sne = getindex(model,e)
@@ -111,10 +111,11 @@ end
 
 function process_msg!(a::Agent,msg::OFMessage,model)
     
-    if !get_state(a).up
-        log_info(model.ticks,a.id,"--> is_up? $(get_state(a).up) -- > Processing msg: $msg ")
-    end
-    
+    # if !get_state(a).up
+    #     log_info(model.ticks,a.id,"--> is_up? $(get_state(a).up) -- > Processing msg: $msg ")
+    # end
+    # log_info(model.ticks,a.id,20,"OF My graph-> vertices: $(nv(a.params[:ntw_graph])) -- edges: $(ne(a.params[:ntw_graph]))")
+
     @match msg.reason begin
         Ofp_Protocol(1) =>  
                         begin
@@ -170,8 +171,6 @@ function in_packet_handler(a::Agent,msg::OFMessage,model)
    
     if found 
         #install_flows!(msg.dpid,msg.in_port,path,model) 
-        #log_info(model.ticks,a.id," msg-> $(msg), path ==> $(path)")
-        # log_info("[$(model.ticks)]($(a.id)) in pkt handler: path $path")
         install_flow!(a,path,model,msg)
     else
         #add to pending list only if has not been
@@ -192,107 +191,117 @@ function in_packet_handler(a::Agent,msg::OFMessage,model)
     
 end
 
-
-# function do_query!(a::Agent,model,of_mid::Int64,query::Tuple{Int64,Int64})
-#     lg = a.params[:ntw_graph]
-#     found = query_path(lg,query)
-#     path = []
-    
-#     previous = filter(x->x[1]==of_mid,a.of_started)
-#     log_info("[$(model.ticks)]($(a.id)) do_query! => $(found) -- previous $previous")
-#     if isempty(found.paths) &&  isempty(previous)# forward to neighbor controllers
-       
-#        ntw_edgel = [ e for e in edges(lg) if src(e) <  dst(e) ]
-#        ntw_equiv = [(v,lg[v,:eid]) for v in vertices(lg)]
-#        nbody = Dict(:query=>query,:trace=>[a.id],:ntw_edgel => ntw_edgel, :ntw_equiv=>ntw_equiv, :of_mid=>of_mid)
-#        msg_template = AGMessage(-1,model.ticks,a.id,-1,QUERY_PATH,nbody)
-#        send_to_nbs!(msg_template,a,model)
-#     else
-#         path = isempty(found.paths) ? [] : [a.params[:ntw_graph][v,:eid] for v in first(found.paths)]
-#     end
-#     return path#found.paths
-# end
-
 """
     Initial query by controller receiving OF message
 """
 function do_query!(msg::OFMessage,a::Agent,model)
-    #do query
-    query = (msg.dpid,msg.data.dst)
-    query_time = model.ticks
-    
-    query_paths = a.paths
-    query_graph = a.params[:ntw_graph]
-    
-    sdir = data_dir 
-    
-    if model.benchmark 
-        record_benchmark!(sdir,model.run_label,a.id,query_time,query,query_graph,query_paths) 
-    end
-    # log_info(model.ticks,a.id,[20],"starting OF query ==> $(a.paths)")
-    path = do_query(query_time,query,query_graph,query_paths)
-    # log_info(model.ticks,a.id,[20],"ending OF query")
-    
-    # log_info(model.ticks,a.id,18,"path found: $path")
+    # If asset's network does not have any edge, there is no way to transport packets 
+    ignore = ne(a.params[:ntw_graph]) > 0 ? false : true
+    path = []
+    if !ignore
+        #do query
+        #query = (msg.dpid,msg.data.dst)
 
-    if isempty(path) && model.ctrl_model != GraphModel(1)
-        lg = a.params[:ntw_graph]
-        ntw_edgel = [ e for e in edges(lg) if src(e) <  dst(e) ]
-        ntw_equiv = [(v,lg[v,:eid]) for v in vertices(lg)]
-        trace = [a.id]
-        of_mid = msg.id 
-        body = Dict(:query=>query,:trace=>trace,:ntw_edgel => ntw_edgel, :ntw_equiv=>ntw_equiv, :of_mid=>of_mid)
-        msg_template = AGMessage(-1,model.ticks,a.id,-1,QUERY_PATH,body)
-        send_to_nbs!(msg_template,a,model)
-    end
-    
-    new_state = get_state(a)
-    new_state.q_queries += 1.0
-    if !isempty(path) && msg.dpid != msg.data.dst #&&  msg.data.src in first(get_controlled_assets(a.id,model))
-        #body: $(msg.body[:query])
-        #log_info("[$(model.ticks)]($(a.id))   in:  $(msg.data.src in first(get_controlled_assets(a.id,model))) -- ca: $(first(get_controlled_assets(a.id,model))) -- query: $(msg.dpid) - $(msg.data.dst)  -> score: $(path)") 
-        push!(new_state.path_scores,(msg.dpid,msg.data.dst,path[2]))
-    end
-    set_state!(a,new_state)
+        exc = Int64[]
+        
+        # Avoid returning original source node
+        if msg.dpid != msg.data.src
+            push!(exc,msg.data.src)
+        end
 
-    log_info(model.ticks,a.id,[22,26],"QUERY_GRAPH: nv: $(nv(query_graph)) --- *FOUND* path: $path")
+        # If packet is not originated in a host connected to this sne
+        if msg.in_port != 0
+            #find out previous sne node
+            ports = get_port_edge_list(getindex(model,msg.dpid))
+            prv_id = parse(Int64,filter(x->x[1]==msg.in_port,ports)[1][2][2:end])
+            # if previous node has not been already pushed to exc
+            if msg.data.src != prv_id
+                push!(exc,prv_id)
+            end
+        end
+
+        #log_info(model.ticks,a.id,"do_query! - OF - $msg ")
+        # src (from this sne) to dst, avoiding exc
+        query = (msg.dpid,msg.data.dst,exc)       
+        query_time = model.ticks
+        
+        query_paths = a.paths
+        query_graph = a.params[:ntw_graph]
+        
+        sdir = data_dir 
+        
+        if model.benchmark 
+            record_benchmark!(sdir,model.run_label,a.id,query_time,query,query_graph,query_paths) 
+        end
+        # log_info(model.ticks,a.id,[20],"starting OF query ==> $(a.paths)")
+        path = do_query(query_time,query,query_graph,query_paths)
+        # log_info(model.ticks,a.id,[20],"ending OF query")
+        
+        # log_info(model.ticks,a.id,18,"path found: $path")
+        if isempty(path) && model.ctrl_model != GraphModel(1)
+            lg = a.params[:ntw_graph]
+            ntw_edgel = [ e for e in edges(lg) if src(e) <  dst(e) ]
+            ntw_equiv = [(v,lg[v,:eid]) for v in vertices(lg)]
+            trace = [a.id]
+            of_mid = msg.id 
+            body = Dict(:query=>query,:trace=>trace,:ntw_edgel => ntw_edgel, :ntw_equiv=>ntw_equiv, :of_mid=>of_mid)
+            msg_template = AGMessage(-1,model.ticks,a.id,-1,QUERY_PATH,body)
+            send_to_nbs!(msg_template,a,model)
+        end
+        
+        new_state = get_state(a)
+        new_state.q_queries += 1.0
+        if !isempty(path) && msg.dpid != msg.data.dst #&&  msg.data.src in first(get_controlled_assets(a.id,model))
+            #body: $(msg.body[:query])
+            push!(new_state.path_scores,(msg.dpid,msg.data.dst,path[2]))
+        end
+        set_state!(a,new_state)
+    end
     return isempty(path) ? [] : last(path)
 end
 
 """
     Query local calculated paths and local graph
 """
-function do_query(time::Int64,query::Tuple{Int64,Int64},lg::MetaGraph,paths::Dict{Tuple{Int64,Int64},Array{Tuple{Int64,Float64,Array{Int64}}}})
+function do_query(time::Int64,query::Tuple{Int64,Int64,Array{Int64}},lg::MetaGraph,paths::Dict{Tuple{Int64,Int64},Array{Tuple{Int64,Float64,Array{Int64}}}})
     path = []
-    cp_path = []
-    lg_path = []
+    cp_paths = []
+    lg_paths = []
+    #short query, only src and dst
+    squery = (query[1],query[2])
     #query pre-calculated (cache) paths
-    query_paths = haskey(paths,query) ? paths[query] : []
+    qry_paths = haskey(paths,squery) ? paths[squery] : []
     
     # log_info(time,"Precalc Paths found: $paths")
     
-    if !isempty(query_paths) 
+    for cpp in qry_paths
         #assumes query_paths is sorted by tick,score
-        cp_path = first(query_paths)
+        # if path does not contain exclusions
+        if length(intersect(cpp,query[3])) == 0
+            push!(cp_paths,cpp)
+        end
     end
 
     #query graph path regardless of cache, in case there is another
-    path_state = query_path(lg,query)
+    # TODO: Do this only if cache path is too old
+    path_state = query_paths(lg,squery)
 
-    if !isempty(path_state.paths)
-        lg_path = (time,last(path_state.dists),last(path_state.paths))
+    for lg_path in path_state.paths
+        # if path does not contain exclusions
+        if length(intersect(lg_path,query[3])) == 0
+            push!(lg_paths,(time,last(path_state.dists),last(path_state.paths)))
+        end
     end
 
-    if !isempty(lg_path)
-        path = lg_path
-    elseif !isempty(cp_path)
-        path = cp_path
+    if !isempty(lg_paths)
+        #assumes query_paths is sorted by tick,score
+        path = first(lg_paths)
+    elseif !isempty(cp_paths)
+        path = first(cp_paths)
     end
     
-
     # log_info(time,"!do_query: $query -- graph nv: $(nv(lg))-- Path found: $path")
-    
-    
+        
     return path
 end
 
@@ -378,7 +387,6 @@ function port_delete_handler(a::Agent,msg::OFMessage,model)
         end
         #update agent pre-computed paths
         a.paths = new_paths_dict
-        log_info(model.ticks,a.id,[20],"port_delete, paths: $(keys(a.paths))")
         if model.ctrl_model != GraphModel(1)
             lvb = to_local_vertex(a.params[:base_ntw_graph],msg.data)
             a.params[:base_ntw_graph] = soft_remove_vertex!(a.params[:base_ntw_graph],lvb)
@@ -388,6 +396,8 @@ function port_delete_handler(a::Agent,msg::OFMessage,model)
             lv = to_local_vertex(a.params[:ntw_graph],msg.data)
             a.params[:ntw_graph] = soft_remove_vertex!(a.params[:ntw_graph],lv)
         end
+
+        #flows involving this NE should have been deleted at NE 
 
     end
 
