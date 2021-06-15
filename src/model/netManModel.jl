@@ -163,9 +163,20 @@ function model_step!(model)
         ntw_link_step!((e.src,e.dst),model)
     end
     ctl_links_step!(model)
-    for a in allagents(model)
-        log_info(model.ticks,a.id,"---------")
-        do_agent_step!(a,model)
+
+    # Run controllers first
+    for a in allagents(model) 
+        if typeof(a) == Agent
+            log_info(model.ticks,a.id,"---------")
+            do_agent_step!(a,model)
+        end
+    end
+    #Then run SimNEs
+    for a in allagents(model) 
+        if typeof(a) == SimNE
+            log_info(model.ticks,a.id,"---------")
+            do_agent_step!(a,model)
+        end
     end
     soft_drop_node!(model)
     for a in allagents(model)

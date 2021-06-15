@@ -29,9 +29,12 @@ function send_to_nbs!(msg_template::AGMessage,a::Agent,model)
     gid_nbs = [gid for gid in gid_nbs if ~(gid in msg_template.body[:trace]) ]
     random_nbs = rand(Binomial(1,model.prob_random_walks),length(gid_nbs))
     random_nbs = [rnb for rnb in random_nbs .* gid_nbs if rnb > 0]
-    # log_info("[$(model.ticks)]($(a.id)) sending to $(length(gid_nbs)) nbs: $(gid_nbs)")
+    log_info(model.ticks,a.id,"sending msg: $msg_template  to $(length(gid_nbs)) nbs: $(gid_nbs)")
     # log_info("[$(model.ticks)]($(a.id)) sending to $(length(random_nbs)) random_nbs: $(random_nbs)")
     #log_info("[$(model.ticks)]($(a.id)) body: $(msg_template.body)")
+    
+    
+    #disable msgs
     for nb in random_nbs
         if ~(nb in msg_template.body[:trace])
             body = deepcopy(msg_template.body)
@@ -226,7 +229,7 @@ function do_query!(msg::AGMessage,a::Agent,model)
                 do_match!(path,msg,a,model)
             end
             squery = (msg.body[:query][1],msg.body[:query][2])
-            a.previous_queries[squery] = model.ticks
+            a.previous_queries[query] = model.ticks
             new_state = get_state(a)
             new_state.q_queries += 1.0
             set_state!(a,new_state)

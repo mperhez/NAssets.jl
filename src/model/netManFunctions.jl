@@ -443,7 +443,12 @@ function soft_drop_node!(model)
         active_ids =  unique(vcat([ af[3]==f_S ? [af[2]] : af[3]==f_E ? [af[1]] : [af[1],af[2]] for af in get_state(model).active_flows if af[3]!=f_SE ]...)) 
 
         #pick one random node
-        dpn_id = rand(active_ids)
+        #disabled while testing
+        # dpn_id = !isempty(active_ids) ? rand(active_ids) : rand(get_live_snes(model))
+
+        #for testing only
+        dpn_id = rand([ sid for sid in [3,10,13] if get_state(getindex(model,sid)).up  ])
+
         log_info(model.ticks,"Removing ntw node: $dpn_id...")
         g = model.ntw_graph
         dpn_ag = getindex(model,dpn_id)
@@ -971,6 +976,10 @@ function get_dropping_times(seed,stabilisation_period,drop_proportion,q,N)
     # λ, after stabilisation_period
     
     event_times = Int.(round.(sort(stabilisation_period .+ next_event_time.(rand(k),[λ]))))
+
+    #For testing
+    event_times = [30,40,50]
+
     log_info("Dropping times are: $event_times")
     return event_times
 end
@@ -995,7 +1004,7 @@ function load_run_configs()
                             for Β in Βs
                                 for ctl_k in ctl_ks
                                     for ctl_Β in ctl_Βs
-                                        push!(configs,new_config(seed,ctl_model,ntw_topo,size,200,drop_proportion,1.0,false,true,k,Β,ctl_k,ctl_Β))
+                                        push!(configs,new_config(seed,ctl_model,ntw_topo,size,80,drop_proportion,1.0,false,true,k,Β,ctl_k,ctl_Β))
                                     end
                                 end
                             end
@@ -1183,7 +1192,12 @@ function to_string(s)
     return join([getfield(s,a) for a in fieldnames(typeof(s))],sep)
 end
 
-
+"""
+    Return SNEs that are up
+"""
+function get_live_snes(model)
+    return [ sne.id for sne in allagents(model) if typeof(sne) == SimNE && get_state(sne).up  ]
+end
 # function get_logger(log_name)
 #     return haskey(loggers,log_name) ? loggers[log_name] : init_logger(log_name)
 # end

@@ -160,7 +160,7 @@ mutable struct Agent <: SOAgent
     msgs_links::Array{Vector{AGMessage},2}
     msgs_in::Vector{AGMessage}
     queue::Channel{OFMessage}
-    previous_queries::Dict{Tuple{Int64,Int64},Int64} # (src,dst):tick last queried
+    previous_queries::Dict{Tuple{Int64,Int64,Array{Int64}},Int64} # (src,dst):tick last queried
     params::Dict{Symbol,Any}
 end
 

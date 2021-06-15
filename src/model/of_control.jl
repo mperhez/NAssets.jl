@@ -58,13 +58,15 @@ function install_flow!(a::Agent,path::Array{Int64,1},model::ABM,msg::OFMessage=n
     lpath = isempty(path) ? es : path 
     eois = intersect(es,lpath)
     lpath = [ v for v in lpath]
+    
     log_info(model.ticks,a.id,"{$(get_controlled_assets(a.id,model))} install_flow! => path: $path -- es: $es -- eois: $eois - msg: -> $msg")
+    
     for e in eois
-         i = length(lpath) > 1 ? first(indexin(e,lpath)) : 1
-         sne = getindex(model,e)
-         i_prev = i > 1 ? i - 1 : i
+        i = length(lpath) > 1 ? first(indexin(e,lpath)) : 1
+        sne = getindex(model,e)
+        i_prev = i > 1 ? i - 1 : i
          
-         ports = get_port_edge_list(sne)
+        ports = get_port_edge_list(sne)
  
         log_info("[$(model.ticks)]{$(a.id)}($(sne.id)) - ports: $(ports) - i: $i - i_prev: $i_prev - e: $e -- lpath : $lpath")
          #Regardless of where the traffic comes
@@ -72,21 +74,15 @@ function install_flow!(a::Agent,path::Array{Int64,1},model::ABM,msg::OFMessage=n
          r_dst = last(lpath)
          in_port = 0
          if i == 1
-             #of_msg₀ = first(filter(ofm -> ofm.id == of_mid,a.pending))
-            #  log_info("[$(model.ticks)]($(a.id)) Setting first entry port of path $lpath to $(msg)")
              in_port = msg.in_port
              #TODO of_msg remove from pending
          else
-             #in_port = first(filter(p->parse(Int,p[2][2:end]) == lpath[i_prev],ports))
              in_port = first([ first(p) for p in ports if parse(Int,p[2][2:end]) == lpath[i_prev]])
-            #  log_info("FIltered equal to: prev: $(lpath[i_prev]) in: $in_port")
          end
          out_port = 0
          
          if i < length(lpath)
-
             next_port = filter(p->parse(Int,p[2][2:end]) == lpath[i+1],ports)
-            # log_info(model.ticks,a.id,"--> $next_port <--  ports: $ports --- i: $i --- lpath: $lpath")
             out_port = isempty(next_port) ? -1 : first(first(next_port))
          end
          
