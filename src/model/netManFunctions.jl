@@ -447,7 +447,7 @@ function soft_drop_node!(model)
         # dpn_id = !isempty(active_ids) ? rand(active_ids) : rand(get_live_snes(model))
 
         #for testing only
-        dpn_id = rand([ sid for sid in [3,10,13] if get_state(getindex(model,sid)).up  ])
+        dpn_id = rand([ sid for sid in [3,13,10] if get_state(getindex(model,sid)).up  ])
 
         log_info(model.ticks,"Removing ntw node: $dpn_id...")
         g = model.ntw_graph
@@ -606,21 +606,7 @@ function do_agent_step!(a::Agent,model)
     do_receive_messages(a,model)
 
 
-    #Find the shortest path
-
-    # ctl_g = a.params[:ctl_graph]
-    # controlled = get_controlled_assets(a.id,model)
-    # my_v = 0
-    # for v in vertices(ctl_g)
-    #     if get_prop(ctl_g,v,:aid) == a.id
-    #         my_v = v
-    #     end
-    #     # log_info(" Agent $(a.id) => props of node $v are: $(props(ctl_g, v))")
-    # end
-    # for c in controlled
-    #     #v = get_prop(ctl_g,c,:eid)
-    #     # [ log_info("CTL Ag $(a.id) graph has nodes: $(get_prop(ctl_g,nb,:aid))") for nb in neighbors(ctl_g,my_v)]
-    # end
+    do_confidence_check!(a,model)
 
     if !isempty(get_state(a).active_paths)
         log_info(model.ticks,a.id,"-->$(get_state(a).active_paths)")
@@ -978,7 +964,7 @@ function get_dropping_times(seed,stabilisation_period,drop_proportion,q,N)
     event_times = Int.(round.(sort(stabilisation_period .+ next_event_time.(rand(k),[λ]))))
 
     #For testing
-    event_times = [30,40,50]
+    event_times = [30,40,60]
 
     log_info("Dropping times are: $event_times")
     return event_times
@@ -1004,7 +990,7 @@ function load_run_configs()
                             for Β in Βs
                                 for ctl_k in ctl_ks
                                     for ctl_Β in ctl_Βs
-                                        push!(configs,new_config(seed,ctl_model,ntw_topo,size,80,drop_proportion,1.0,false,true,k,Β,ctl_k,ctl_Β))
+                                        push!(configs,new_config(seed,ctl_model,ntw_topo,size,160,drop_proportion,1.0,false,true,k,Β,ctl_k,ctl_Β))
                                     end
                                 end
                             end

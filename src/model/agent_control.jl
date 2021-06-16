@@ -124,7 +124,7 @@ end
 """
     Prepare MATCH reply
 """
-function do_match!(found_path::Tuple{Int64,Float64,Array{Int64}},msg::AGMessage,a::Agent,model)
+function do_match!(found_path::Tuple{Int64,Float64,Float64,Array{Int64}},msg::AGMessage,a::Agent,model)
     log_info(model.ticks,a.id,"*do_match! -> msg : $(msg) -> found: $(found_path)")
     query = msg.body[:query]
     trace = msg.body[:trace]
@@ -171,11 +171,11 @@ end
     Query by neighbour control agent after receiving AGMessage
 """
 function do_query!(msg::AGMessage,a::Agent,model)
-
+    log_info(model.ticks,a.id,"query msg is: $msg")
     #define criteria for ignoring a msg from other agent
     ignore = false 
     if haskey(a.previous_queries,msg.body[:query]) 
-        if model.ticks - a.previous_queries[msg.body[:query]] < model.query_cycle
+        if model.ticks - first(a.previous_queries[msg.body[:query]]) < model.query_cycle
             bdst = Binomial(1,model.prob_eq_queries_cycle)
             ignore = ~Bool(first(rand(bdst,1)))
         end
@@ -229,7 +229,7 @@ function do_query!(msg::AGMessage,a::Agent,model)
                 do_match!(path,msg,a,model)
             end
             squery = (msg.body[:query][1],msg.body[:query][2])
-            a.previous_queries[query] = model.ticks
+            a.previous_queries[query] = (model.ticks,[-1])
             new_state = get_state(a)
             new_state.q_queries += 1.0
             set_state!(a,new_state)

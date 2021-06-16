@@ -19,39 +19,9 @@ function send_msg!(receiver::Int64,msg::OFMessage,model)
     put!(queue,msg)
 end 
 
-
-
-# function install_flows!(in_dpid,in_port_start,path,model)
-#     # log_info(model.ticks,"install flow: $(in_dpid) - $(in_port_start) - $(path)")
-#     if !isempty(path)
-#         pairs = diag([j == i + 1 ? (path[3][i],path[3][j]) : nothing for i=1:size(path[3],1)-1, j=2:size(path[3],1)])
-        
-#         prev_eid = path[1]
-#         for p in pairs
-#             sne = getindex(model,p[1])
-#             prev_sne = getindex(model,prev_eid)
-#             port_dst = filter(x->x[2]=="s$(p[2])",get_port_edge_list(sne))[1]
-#             out_port = port_dst[1]
-#             in_port = p[1] == path[1] ? in_port_start : filter(x->x[2]=="s$(prev_eid)",get_port_edge_list(sne))[1][1]
-#             r_src = path[1]
-#             r_dst = path[2]
-            
-#             fw = Flow(sne.id,MRule(string(in_port),string(r_src),string(r_dst)),[out_port],OFS_Output)
-#             #(ticks,pkt,sne_src,sne_dst)->forward(ticks,pkt,sne_src,sne_dst)
-#             # log_info("[$(model.ticks)] {A} Installing flow: $(p[1]) - $(fw.match_rule)")
-#             push_flow!(sne,fw)
-#             prev_eid = sne.id
-#         end
-#     else
-#         sne = getindex(model,in_dpid)
-#         #TODO how to make the rule to be regardless of port in
-#         fw =Flow(in_dpid,MRule("*","*",string(in_dpid)),[0],OFS_Output)
-#         #(ticks,pkt,src_sne)->forward(ticks,pkt,src_sne)
-#         # log_info("[$(model.ticks)]  {B} Installing flow to $(in_dpid): $(fw.match_rule)")
-#         push_flow!(sne,fw)
-#     end
-# end
-
+"""
+    Function that makes a control agent trigger a flow install in the sne
+"""
 function install_flow!(a::Agent,path::Array{Int64,1},model::ABM,msg::OFMessage=nothing)
     # find which ones of path I am controlling
     es = get_controlled_assets(a.id,model)
@@ -110,28 +80,12 @@ function process_msg!(a::Agent,msg::OFMessage,model)
     # if !get_state(a).up
     #     log_info(model.ticks,a.id,"--> is_up? $(get_state(a).up) -- > Processing msg: $msg ")
     # end
-    # log_info(model.ticks,a.id,20,"OF My graph-> vertices: $(nv(a.params[:ntw_graph])) -- edges: $(ne(a.params[:ntw_graph]))")
-
+  
     @match msg.reason begin
         Ofp_Protocol(1) =>  
                         begin
-                            #log_info("[$(model.ticks)]($(a.id)) -> match one")
-                            #previous = filter(x->x[1]==msg.id,a.of_started)
-                            #if isempty(previous) || (model.ticks - last(first(previous))) < model.ofmsg_reattempt
-                            
-                            # open(data_dir*"exp_raw/"*"$(model.ticks)-test$(a.id).txt", "w") do io
-                                #     #for i=1:nv(ntw_graph)
-                                # b = @benchmark in_packet_handler($a,$msg,$model)
-                                in_packet_handler(a,msg,model)
-                                # show(io,MIME"text/plain"(),b)
-                                #     #end
-                            # end;
-                            
-                            #elseif  (model.ticks - last(first(previous))) < model.ofmsg_reattempt
-                                #return package to queue as it does not know what to do with it
-                            #    push!(a.pending,msg)
-                           # end
-                        
+                            log_info(model.ticks,a.id,"in_pkt -> $msg ===> prv_queries:  $(a.previous_queries)")
+                            in_packet_handler(a,msg,model)
                         end
         Ofp_Protocol(2) => 
                             begin
@@ -152,7 +106,6 @@ end
 msg: SimNE.id, in_port, DPacket
 """
 function in_packet_handler(a::Agent,msg::OFMessage,model)
-
     path::Array{Int64,1} = []
     found = false
    
@@ -175,6 +128,19 @@ function in_packet_handler(a::Agent,msg::OFMessage,model)
         if isempty(started)
             push!(a.pending,(model.ofmsg_reattempt,msg))
         end
+        query = (msg.dpid,msg.data.dst,get_exclusions(msg,model))
+        if haskey(a.previous_queries,query) 
+
+            if model.ticks - first(a.previous_queries[query]) > 2*model.ofmsg_reattempt
+                #return pkt
+
+                ports = get_port_edge_list(getindex(model,msg.dpid))
+
+                in_sne = first([ parse(Int,p[2][2:end]) for p in ports if first(p) == msg.in_port])
+                #TODO install flow + change msg reason to RETURN
+                install_flow!(a,[msg.dpid,in_sne,msg.data.dst],model,msg)
+            end
+        end
     end
     
     push!(a.of_started,(msg.id,model.ticks))
@@ -188,6 +154,31 @@ function in_packet_handler(a::Agent,msg::OFMessage,model)
 end
 
 """
+    Get query exclusions for a given message
+"""
+function get_exclusions(msg::OFMessage,model)
+    exc = Int64[]
+        
+    # Avoid returning original source node
+    if msg.dpid != msg.data.src
+        push!(exc,msg.data.src)
+    end
+
+    # If packet is not originated in a host connected to this sne
+    if msg.in_port != 0
+        #find out previous sne node
+        ports = get_port_edge_list(getindex(model,msg.dpid))
+        prv_id = parse(Int64,filter(x->x[1]==msg.in_port,ports)[1][2][2:end])
+        # if previous node has not been already pushed to exc
+        if msg.data.src != prv_id
+            push!(exc,prv_id)
+        end
+    end
+
+    return exc   
+end
+
+"""
     Initial query by controller receiving OF message
 """
 function do_query!(msg::OFMessage,a::Agent,model)
@@ -198,27 +189,27 @@ function do_query!(msg::OFMessage,a::Agent,model)
         #do query
         #query = (msg.dpid,msg.data.dst)
 
-        exc = Int64[]
+        # exc = Int64[]
         
-        # Avoid returning original source node
-        if msg.dpid != msg.data.src
-            push!(exc,msg.data.src)
-        end
+        # # Avoid returning original source node
+        # if msg.dpid != msg.data.src
+        #     push!(exc,msg.data.src)
+        # end
 
-        # If packet is not originated in a host connected to this sne
-        if msg.in_port != 0
-            #find out previous sne node
-            ports = get_port_edge_list(getindex(model,msg.dpid))
-            prv_id = parse(Int64,filter(x->x[1]==msg.in_port,ports)[1][2][2:end])
-            # if previous node has not been already pushed to exc
-            if msg.data.src != prv_id
-                push!(exc,prv_id)
-            end
-        end
+        # # If packet is not originated in a host connected to this sne
+        # if msg.in_port != 0
+        #     #find out previous sne node
+        #     ports = get_port_edge_list(getindex(model,msg.dpid))
+        #     prv_id = parse(Int64,filter(x->x[1]==msg.in_port,ports)[1][2][2:end])
+        #     # if previous node has not been already pushed to exc
+        #     if msg.data.src != prv_id
+        #         push!(exc,prv_id)
+        #     end
+        # end
 
         #log_info(model.ticks,a.id,"do_query! - OF - $msg ")
         # src (from this sne) to dst, avoiding exc
-        query = (msg.dpid,msg.data.dst,exc)       
+        query = (msg.dpid,msg.data.dst,get_exclusions(msg,model))       
         query_time = model.ticks
         
         query_paths = a.paths
@@ -243,8 +234,20 @@ function do_query!(msg::OFMessage,a::Agent,model)
             body = Dict(:query=>query,:trace=>trace,:ntw_edgel => ntw_edgel, :ntw_equiv=>ntw_equiv, :of_mid=>of_mid)
             msg_template = AGMessage(-1,model.ticks,a.id,-1,QUERY_PATH,body)
             send_to_nbs!(msg_template,a,model)
+            if !haskey(a.previous_queries,query)
+                a.previous_queries[query] = (model.ticks,[-1])
+            end
+        else
+            new_previous_queries = Dict()
+            for k in keys(a.previous_queries)
+                if k != query
+                    new_previous_queries[k] = a.previous_queries[k]
+                end
+            end
+            a.previous_queries = new_previous_queries
+            a.matched_queries[query] = model.ticks
         end
-        
+                
         new_state = get_state(a)
         new_state.q_queries += 1.0
         if !isempty(path) && msg.dpid != msg.data.dst #&&  msg.data.src in first(get_controlled_assets(a.id,model))
@@ -259,7 +262,7 @@ end
 """
     Query local calculated paths and local graph
 """
-function do_query(time::Int64,query::Tuple{Int64,Int64,Array{Int64}},lg::MetaGraph,paths::Dict{Tuple{Int64,Int64},Array{Tuple{Int64,Float64,Array{Int64}}}})
+function do_query(time::Int64,query::Tuple{Int64,Int64,Array{Int64}},lg::MetaGraph,paths::Dict{Tuple{Int64,Int64},Array{Tuple{Int64,Float64,Float64,Array{Int64}}}})
     path = []
     cp_paths = []
     lg_paths = []
@@ -285,7 +288,8 @@ function do_query(time::Int64,query::Tuple{Int64,Int64,Array{Int64}},lg::MetaGra
     for lg_path in path_state.paths
         # if path does not contain exclusions
         if length(intersect(lg_path,query[3])) == 0
-            push!(lg_paths,(time,last(path_state.dists),last(path_state.paths)))
+            # default confidence = 0.5
+            push!(lg_paths,(time,0.5,last(path_state.dists),last(path_state.paths)))
         end
     end
 
@@ -400,3 +404,27 @@ function port_delete_handler(a::Agent,msg::OFMessage,model)
 end
 
 
+function do_confidence_check!(a,model)
+    log_info(model.ticks,a.id,25," confindence: $(keys(a.
+    previous_queries)) - $(keys(a.matched_queries))")
+    ack_period = 10
+    for k in keys(a.previous_queries)
+        qt = first(a.previous_queries[k])
+        rq = last(a.previous_queries[k])
+        if !haskey(a.matched_queries,k)
+            if model.ticks - qt > ack_period
+                for rid in rq
+                    # send_msg!(rid,
+                    # AGMessage(
+                    #     next_amid!(model),model.ticks,a.id,rid,AG_Protocol(1),Dict())
+                    # )
+                    log_info(model.ticks,a.id,"send to $rid")
+                end
+            end
+        else
+
+        end
+    end
+
+
+end

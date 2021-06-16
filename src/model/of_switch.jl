@@ -5,6 +5,7 @@ end
     OFPR_ACTION = 1
     OFPPR_DELETE = 2
     OFPR_ADD_FLOW = 3
+    OFPR_NO_MATCH = 4
 end
 @enum OFS_Action begin
     OFS_Output = 1
@@ -155,12 +156,14 @@ mutable struct Agent <: SOAgent
     pending::Vector{Tuple{Int64,OFMessage}} # Timeout for this msg to be reprocessed & msg
     of_started::Vector{Tuple{Int64,Int64}} # msg.id,  Time when msg was started
     # state::SDNCtlAgState
-    paths::Dict{Tuple{Int64,Int64},Array{Tuple{Int64,Float64,Array{Int64}}}} # pre-calculated paths for operation
+    # key(src,dst): value(tick_found,confidence,score,path)
+    paths::Dict{Tuple{Int64,Int64},Array{Tuple{Int64,Float64,Float64,Array{Int64}}}} # pre-calculated paths for operation
     state_trj::Vector{ControlAgentState}
     msgs_links::Array{Vector{AGMessage},2}
     msgs_in::Vector{AGMessage}
     queue::Channel{OFMessage}
-    previous_queries::Dict{Tuple{Int64,Int64,Array{Int64}},Int64} # (src,dst):tick last queried
+    previous_queries::Dict{Tuple{Int64,Int64,Array{Int64}},Tuple{Int64,Array{Int64}}} # (src,dst):(tick last queried,[list pkt senders that originated query])
+    matched_queries::Dict{Tuple{Int64,Int64,Array{Int64}},Int64} 
     params::Dict{Symbol,Any}
 end
 
@@ -168,7 +171,7 @@ end
 function Agent(id,nid,params)
     # s0 = SDNCtlAgState(zeros((2,2)),Vector{Float64}())
     s0 = ControlAgentState(id,true,Dict(),0,0,0,0,0,[])
-    Agent(id,nid,:lightblue,0.1,Vector{OFMessage}(),Vector{Tuple{Int64,Int64}}(),Dict{Tuple{Int64,Int64},Array{Tuple{Int64,Float64,Array{Int64}}}}(),[s0],Array{Vector{AGMessage}}(undef,1,1),[],Channel{OFMessage}(500),Dict(),params)
+    Agent(id,nid,:lightblue,0.1,Vector{OFMessage}(),Vector{Tuple{Int64,Int64}}(),Dict{Tuple{Int64,Int64},Array{Tuple{Int64,Float64,Array{Int64}}}}(),[s0],Array{Vector{AGMessage}}(undef,1,1),[],Channel{OFMessage}(500),Dict(),Dict(),params)
 end
 
 
@@ -217,11 +220,11 @@ function forward!(msg::OFMessage,src::SimNE,model)
     set_out_pkt!(src,out_pkt_count)
 end
 
-function forward!(msg::OFMessage,src::SimNE,dst::SimNE,model)
+function forward!(msg::OFMessage,src::SimNE,dst::SimNE,reason::Ofp_Protocol,model)
     # log_info("[$(model.ticks)] ($(src.id)) forwarding $msg")
     in_ports = filter(p->p[2]=="s$(src.id)",get_port_edge_list(dst))
     in_port = in_ports[1][1]
-    push_msg!(src,dst,OFMessage(next_ofmid!(model),model.ticks,src.id,in_port,msg.data),model)
+    push_msg!(src,dst,OFMessage(next_ofmid!(model),model.ticks,src.id,in_port,reason,msg.data),model)
     #@show msg out_port
     # Next two lines are inside push_msg!
     # out_pkt_count = get_state(src).out_pkt + 1
@@ -229,53 +232,37 @@ function forward!(msg::OFMessage,src::SimNE,dst::SimNE,model)
 end
 
 function route_traffic!(a::SimNE,msg::OFMessage,model)
-    # log_info(model.ticks,a.id," Routing Msg $(msg)")
+    
     out_pkt_count = 0
-
-    # if a.id == 1 && model.ticks > 80 && model.ticks < 90
-    #     log_info("[$(model.ticks)]($(a.id)) Found this msg $(msg)")
-    #     log_info("[$(model.ticks)]($(a.id)) Found this ports $(get_state(a).port_edge_list)")
-    #     log_info("[$(model.ticks)]($(a.id)) Found this table $(get_state(a).flow_table)")
-    # end
-
     flow = filter(fw -> 
                             ( fw.match_rule.src == string(msg.data.src) || fw.match_rule.src == "*" )
                             && (fw.match_rule.in_port == string(msg.in_port) || fw.match_rule.in_port == "*" )
                             && (fw.match_rule.dst == string(msg.data.dst) || fw.match_rule.dst == "*")
                             , get_flow_table(a))
-    # if a.id == 1
-        #  log_info("[[$(model.ticks)]($(a.id)) flow==> $(flow)")
-    # end
+                            
     if !isempty(flow)
-
+        log_info(model.ticks,a.id,9," Routing Msg $(msg) --- $(msg.in_port)---- flout_out: $(flow[1].params[1][1]) --- all ports: $(get_port_edge_list(a))")
         if flow[1].params[1][1] != 0
             ports = get_port_edge_list(a)
             dst_id = parse(Int64,filter(x->x[1]==flow[1].params[1],ports)[1][2][2:end])
-            # if a.id == 10 && model.ticks in 80:1:90 
-            #     log_info("[$(model.ticks)]($(a.id)) New destinatio is $(dst_id) ")
-            # end
             dst = getindex(model,dst_id)
-            #flow[1].action(model.ticks,msg,a,dst)
-            forward!(msg,a,dst,model)
+
+            #OFPR_NO_MATCH: here used to tell other SNE that packet couldn't reach destination.
+            reason = flow[1].params[1] == msg.in_port ? OFPR_NO_MATCH : OFPR_ACTION
+            
+            forward!(msg,a,dst,reason,model)
 
             ftype = msg.data.src == a.id ? msg.data.dst == dst_id ? Flow_Type(-2) : Flow_Type(-1) : msg.data.dst == dst_id ? Flow_Type(1) : Flow_Type(0)
             record_active_flow!(model,a.id,dst_id,ftype)
-            
         else
-           # flow[1].action(model.ticks,msg,a)
            forward!(msg,a,model)
         #    record_active_flow!(model,a.id,a.id,Flow_Type(1))
         end
-        # flow[1].action == OFS_Output ? out_pkt_count += 1 : out_pkt_count
-        #@show flow
     else
-        # if a.id == 10 && model.ticks in 80:1:90 
-        #     log_info("[$(model.ticks)]($(a.id)) else New destinatio is $(get_state(a)) ")
-        # end
         similar_requests = filter(r->(r[2],r[3]) == (msg.data.src,msg.data.dst) && (model.ticks - r[1]) < model.ofmsg_reattempt+1,a.requested_ctl)
-        #log_info("[$(model.ticks)]($(a.id)) Similar requests $(similar_requests)")
+
         if isempty(similar_requests)
-            controller = getindex(model,a.controller_id)
+            # controller = getindex(model,a.controller_id)
             #ask_controller(a,controller,msg)
             of_qid = next_ofmid!(model)
             ctl_msg = OFMessage(of_qid,model.ticks,a.id,msg.in_port,msg.data)
@@ -286,6 +273,7 @@ function route_traffic!(a::SimNE,msg::OFMessage,model)
         end
         #return package to queue as it does not know what to do with it
         push!(a.pending,msg)
+
     end
 end
 
@@ -323,7 +311,7 @@ end
 
 function install_flow!(msg::OFMessage, sne::SimNE,model)
     #ports = get_port_edge_list(sne,model)
-    # log_info("[$(model.ticks)] Installing flow: $(sne.id) - $(msg)")
+    log_info(model.ticks,sne.id," Installing flow: $(sne.id) - $(msg)")
     nf = first(msg.data)
     ft = get_state(sne).flow_table
     
@@ -333,6 +321,7 @@ function install_flow!(msg::OFMessage, sne::SimNE,model)
     push!(nft,nf) #msg.data[1] = flow, msg.data[2] = query_id:qid
     set_flow_table!(sne,nft)
     pop_pending_query!(sne,last(msg.data))
+    log_info(model.ticks,sne.id," Installed flow: $(sne.id) - $(get_state(sne).flow_table)")
 end
 
 function in_packet_processing(a::AbstractAgent,model)
@@ -340,7 +329,6 @@ function in_packet_processing(a::AbstractAgent,model)
     out_pkt_count = 0
     processed_tick = 0
     actions_to_process = []
-    log_info(model.ticks,a.id,17,"in_packet_processing==>$(a.queue.data)")
     
     while is_ready(a)
         msg = take_msg!(a)
@@ -377,6 +365,11 @@ function process_msg!(sne::SimNE,msg::OFMessage,model)
                         begin
                             # log_info("[$(model.ticks)]($(sne.id)) -> processing $(msg.reason)")
                             install_flow!(msg,sne,model)       
+                        end
+        Ofp_Protocol(4) => 
+                        begin
+                            log_info(model.ticks,sne.id,"Received NO MATCH ==> $msg")
+                            delete_flow!(sne,msg.in_port,model)       
                         end
                             
         _ => begin
@@ -442,18 +435,8 @@ function link_down!(sne::SimNE,dpn_id::Int,model)
             dpn_port = p[1]
         end
     end
-    new_flow_table::Vector{Flow} = []
-    
-    for f in get_flow_table(sne)
-        log_info(model.ticks,sne.id,"Existing flow: $f --> $dpn_port ---> $(f.params) --> all ports: $ports")
-        if  ~(dpn_port in f.params)
-            push!(new_flow_table,f)
-        end    
-    end
-    set_flow_table!(sne,new_flow_table)
+    delete_flow!(sne,dpn_port,model)
     set_port_edge_list!(sne,new_port_edge_list)
-    log_info(model.ticks,sne.id,"New flow table: $new_flow_table ---> all ports: $(get_port_edge_list(sne))")
-
     controller = getindex(model,sne.controller_id)
     log_info(model.ticks,sne.id,"Triggering event to ag: $(sne.controller_id) for dpn_id: $dpn_id ")
     trigger_of_event!(model.ticks,controller,dpn_id,EventOFPPortStatus,model)
@@ -688,4 +671,22 @@ function record_active_flow!(m,src,dst,ftype)
                 push!(af,nf)
             # log_info(m.ticks,"aflows: $(get_state(m).active_flows)")
             end
+end
+
+
+function delete_flow!(sne::SimNE,out_port::Int64,model::ABM)
+
+    new_flow_table::Vector{Flow} = []
+    
+    for f in get_flow_table(sne)
+        log_info(model.ticks,sne.id,"Existing flow: $f --> $out_port ---> $(f.params) ---> all ports: $(get_port_edge_list(sne))")
+        if  ~(out_port in f.params)
+            push!(new_flow_table,f)
+        end    
+    end
+    set_flow_table!(sne,new_flow_table)
+    
+    log_info(model.ticks,sne.id,"New flow table AFTER DELETE: $new_flow_table ---> all ports: $(get_port_edge_list(sne))")
+
+
 end
