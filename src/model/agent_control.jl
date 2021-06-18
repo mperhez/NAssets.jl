@@ -29,7 +29,7 @@ function send_to_nbs!(msg_template::AGMessage,a::Agent,model)
     gid_nbs = [gid for gid in gid_nbs if ~(gid in msg_template.body[:trace]) ]
     random_nbs = rand(Binomial(1,model.prob_random_walks),length(gid_nbs))
     random_nbs = [rnb for rnb in random_nbs .* gid_nbs if rnb > 0]
-    log_info(model.ticks,a.id,"sending msg: $msg_template  to $(length(gid_nbs)) nbs: $(gid_nbs)")
+    # log_info(model.ticks,a.id,"sending msg: $msg_template  to $(length(gid_nbs)) nbs: $(gid_nbs)")
     # log_info("[$(model.ticks)]($(a.id)) sending to $(length(random_nbs)) random_nbs: $(random_nbs)")
     #log_info("[$(model.ticks)]($(a.id)) body: $(msg_template.body)")
     
@@ -50,12 +50,12 @@ end
     Processing for MATCH_PATH msg
 """
 function do_match!(msg::AGMessage,a::Agent,model)
-    # log_info(model.ticks,a.id,[20],"do_match! -> msg : $(msg), end ag => $(first(msg.body[:trace]))")
+    log_info(model.ticks,a.id,"do_match! -> msg : $(msg)")
     # if msg.mid == 4786
     #     log_info(model.ticks,a.id,"is_up? $(get_state(a).up) --> do_match! -> msg : $(msg), end ag => $(first(msg.body[:trace]))")
     # end
-    
-    new_path = msg.body[:path]
+    query = msg.body[:query]
+    new_path = msg.body[:path]# (tick,confidence,score,path)
     ces = get_controlled_assets(a.id,model)
 
 
@@ -71,17 +71,19 @@ function do_match!(msg::AGMessage,a::Agent,model)
 
             for ce in ces_in_path
                 spath = last(new_path)[first(indexin(ce,last(new_path))):end]
-        
+                
+                #only deals with the exact path, e.g. [7,3,1], not [3,1].
                 for i=1:1#length(spath)-1
                     epaths = []
-                    if haskey(a.paths,(spath[i],last(spath)))
-                        epaths = a.paths[(spath[i],last(spath))]
+                    if haskey(a.paths,(spath[i],last(spath),last(query)))
+                        epaths = a.paths[(spath[i],last(spath),last(query))]
         
                         push!(epaths,new_path)
                         
                         #sort by score, reverse = false
                         sort!(epaths,lt=isless_paths)
-        
+                        
+                        #Make sure only model.max_cache_paths are stored
                         if length(epaths) > model.max_cache_paths
                             pop!(epaths)
                         end
@@ -90,16 +92,10 @@ function do_match!(msg::AGMessage,a::Agent,model)
                     else
                         epaths = [new_path]
                     end
-                    a.paths[(spath[i],last(spath))] = epaths
-                
-                    # log_info("[$(model.ticks)]($(a.id)) do_match! -- path added: $(spath[i:end])")
+                    a.paths[(spath[i],last(spath),last(query))] = epaths
                 end
             end
-
-
-
-
-            #reprocess of msg right after
+            #reprocess of msg right after, to do local query with new path found
             new_pending = []
             for p in a.pending
                 if last(p).id == msg.body[:of_mid]
@@ -109,7 +105,7 @@ function do_match!(msg::AGMessage,a::Agent,model)
                 end
             end
             a.pending = new_pending
-            # log_info("[$(model.ticks)]($(a.id)) do_match! -- NEW_PENDING: $(a.pending)")
+            log_info(model.ticks,a.id,"new path ENDING do_match: => $(a.paths)")
         else # This agent is not the original requester of the path
             #continue back propagation of msg
             trace_bk = msg.body[:trace_bk]
@@ -171,7 +167,7 @@ end
     Query by neighbour control agent after receiving AGMessage
 """
 function do_query!(msg::AGMessage,a::Agent,model)
-    log_info(model.ticks,a.id,"query msg is: $msg")
+    # log_info(model.ticks,a.id,"query msg is: $msg")
     #define criteria for ignoring a msg from other agent
     ignore = false 
     if haskey(a.previous_queries,msg.body[:query]) 
@@ -324,7 +320,7 @@ end
 """
 function is_invalid_path(path,cnes,model)
     result = false
-    #log_info("invalidity check: $path")
+    
     for cne in cnes
         if last(last(path)) != cne
             sne = getindex(model,cne)
@@ -333,6 +329,6 @@ function is_invalid_path(path,cnes,model)
             result = isempty(ports_path) ? true : result
         end
     end
-
+    log_info("invalidity check: $path ==> $result")
     return result
 end

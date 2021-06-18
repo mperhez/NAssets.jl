@@ -76,10 +76,8 @@ function install_flow!(a::Agent,path::Array{Int64,1},model::ABM,msg::OFMessage=n
 end
 
 function process_msg!(a::Agent,msg::OFMessage,model)
+
     
-    # if !get_state(a).up
-    #     log_info(model.ticks,a.id,"--> is_up? $(get_state(a).up) -- > Processing msg: $msg ")
-    # end
   
     @match msg.reason begin
         Ofp_Protocol(1) =>  
@@ -89,8 +87,14 @@ function process_msg!(a::Agent,msg::OFMessage,model)
                         end
         Ofp_Protocol(2) => 
                             begin
-                                log_info(model.ticks,a.id,"port_delete -> $msg")
+                                # sneid_print = first(get_controlled_assets(a.id,model))
+                                # sne_print = getindex(model,sneid_print)
+
+                                # log_info(model.ticks,a.id,"BEFORE port_delete -> $msg ==>  $(get_state(sne_print).flow_table) ===> all ports: $(get_port_edge_list(sne_print))")
+
                                 port_delete_handler(a,msg,model)
+
+                                # log_info(model.ticks,a.id,"AFTER port_delete -> $msg ==>  $(get_state(sne_print).flow_table) ===> all ports: $(get_port_edge_list(sne_print))")
                             end
         _ => begin
             log_info("[$(model.ticks)]($(a.id)) -> match default")
@@ -185,6 +189,7 @@ function do_query!(msg::OFMessage,a::Agent,model)
     # If asset's network does not have any edge, there is no way to transport packets 
     ignore = ne(a.params[:ntw_graph]) > 0 ? false : true
     path = []
+    log_info(model.ticks, a.id, "querying local... $(msg)===> ignore: $ignore ====> paths: $(a.paths)")
     if !ignore
         #do query
         #query = (msg.dpid,msg.data.dst)
@@ -224,7 +229,7 @@ function do_query!(msg::OFMessage,a::Agent,model)
         path = do_query(query_time,query,query_graph,query_paths)
         # log_info(model.ticks,a.id,[20],"ending OF query")
         
-        # log_info(model.ticks,a.id,18,"path found: $path")
+        log_info(model.ticks,a.id,"query: $(query) ----path found: $path ----> in paths: $(query_paths)")
         if isempty(path) && model.ctrl_model != GraphModel(1)
             lg = a.params[:ntw_graph]
             ntw_edgel = [ e for e in edges(lg) if src(e) <  dst(e) ]
@@ -262,21 +267,21 @@ end
 """
     Query local calculated paths and local graph
 """
-function do_query(time::Int64,query::Tuple{Int64,Int64,Array{Int64}},lg::MetaGraph,paths::Dict{Tuple{Int64,Int64},Array{Tuple{Int64,Float64,Float64,Array{Int64}}}})
+function do_query(time::Int64,query::Tuple{Int64,Int64,Array{Int64}},lg::MetaGraph,paths::Dict{Tuple{Int64,Int64,Array{Int64}},Array{Tuple{Int64,Float64,Float64,Array{Int64}}}})
     path = []
     cp_paths = []
     lg_paths = []
     #short query, only src and dst
     squery = (query[1],query[2])
     #query pre-calculated (cache) paths
-    qry_paths = haskey(paths,squery) ? paths[squery] : []
+    qry_paths = haskey(paths,query) ? paths[query] : []
     
     # log_info(time,"Precalc Paths found: $paths")
     
     for cpp in qry_paths
         #assumes query_paths is sorted by tick,score
         # if path does not contain exclusions
-        if length(intersect(cpp,query[3])) == 0
+        if length(intersect(last(cpp),query[3])) == 0
             push!(cp_paths,cpp)
         end
     end
@@ -284,7 +289,7 @@ function do_query(time::Int64,query::Tuple{Int64,Int64,Array{Int64}},lg::MetaGra
     #query graph path regardless of cache, in case there is another
     # TODO: Do this only if cache path is too old
     path_state = query_paths(lg,squery)
-
+    log_info(time," paths in known graph: $(path_state.paths)")
     for lg_path in path_state.paths
         # if path does not contain exclusions
         if length(intersect(lg_path,query[3])) == 0
@@ -330,7 +335,7 @@ end
     network
 """
 function do_drop!(msg::OFMessage,a::Agent,model)
-    log_info(model.ticks,a.id,[22,26],"Msg to remove node: $msg")
+    log_info(model.ticks,a.id,"Msg to remove node: $msg")
     lg = a.params[:ctl_graph]
     lv = to_local_vertex(lg,a.id)
     nbs = [ lg[nb,:aid] for nb in neighbors(lg,lv) ]

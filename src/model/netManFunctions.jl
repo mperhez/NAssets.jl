@@ -595,9 +595,13 @@ function do_agent_step!(a::SimNE,model)
 end
 
 function do_agent_step!(a::Agent,model)
-    # @debug("[$(model.ticks)]($(a.id)) start step")
-    # Process asset-agent messages
-    
+   
+    if get_state(a).up 
+        sneid_print = first(get_controlled_assets(a.id,model))
+        sne_print = getindex(model,sneid_print)
+
+        log_info(model.ticks,a.id," step!: $(get_state(sne_print).flow_table) ===> all ports: $(get_port_edge_list(sne_print))")
+    end
     ## Process OF Messages (SimNE to (sdn) control messages)
     is_up(a) && is_ready(a) ? in_packet_processing(a,model) : nothing #log_info("queue of $(a.id) is empty")
 
@@ -606,7 +610,7 @@ function do_agent_step!(a::Agent,model)
     do_receive_messages(a,model)
 
 
-    do_confidence_check!(a,model)
+    # do_confidence_check!(a,model)
 
     if !isempty(get_state(a).active_paths)
         log_info(model.ticks,a.id,"-->$(get_state(a).active_paths)")
@@ -964,7 +968,7 @@ function get_dropping_times(seed,stabilisation_period,drop_proportion,q,N)
     event_times = Int.(round.(sort(stabilisation_period .+ next_event_time.(rand(k),[λ]))))
 
     #For testing
-    event_times = [30,40,60]
+    event_times = [30,50,70]
 
     log_info("Dropping times are: $event_times")
     return event_times
@@ -1161,9 +1165,9 @@ Clears cache of control agent
 """
 function clear_cache!(a::Agent,model::ABM)
     if model.ticks - a.params[:last_cache_graph] == model.clear_cache_graph_freq
-        log_info(model.ticks,a.id,20,"cc prev My graph-> vertices: $(nv(a.params[:ntw_graph])) -- edges: $(ne(a.params[:ntw_graph]))")
+        log_info(model.ticks,a.id,"cc prev My graph-> vertices: $(nv(a.params[:ntw_graph])) -- edges: $(ne(a.params[:ntw_graph]))")
         a.params[:ntw_graph] = a.params[:base_ntw_graph]
-        log_info(model.ticks,a.id,20,"cc after My graph-> vertices: $(nv(a.params[:ntw_graph])) -- edges: $(ne(a.params[:ntw_graph]))")
+        log_info(model.ticks,a.id,"cc after My graph-> vertices: $(nv(a.params[:ntw_graph])) -- edges: $(ne(a.params[:ntw_graph]))")
         a.params[:last_cache_graph] = model.ticks
     end
 
