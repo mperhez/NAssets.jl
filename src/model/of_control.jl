@@ -120,8 +120,6 @@ function in_packet_handler(a::Agent,msg::OFMessage,model)
         found = true
     end
    
-    
-   
     if found 
         #install_flows!(msg.dpid,msg.in_port,path,model) 
         install_flow!(a,path,model,msg)
@@ -132,19 +130,19 @@ function in_packet_handler(a::Agent,msg::OFMessage,model)
         if isempty(started)
             push!(a.pending,(model.ofmsg_reattempt,msg))
         end
-        query = (msg.dpid,msg.data.dst,get_exclusions(msg,model))
-        if haskey(a.previous_queries,query) 
+        # query = (msg.dpid,msg.data.dst,get_exclusions(msg,model))
+        # if haskey(a.previous_queries,query) 
 
-            if model.ticks - first(a.previous_queries[query]) > 2*model.ofmsg_reattempt
-                #return pkt
+        #     if model.ticks - first(a.previous_queries[query]) > 2*model.ofmsg_reattempt
+        #         #return pkt
 
-                ports = get_port_edge_list(getindex(model,msg.dpid))
+        #         ports = get_port_edge_list(getindex(model,msg.dpid))
 
-                in_sne = first([ parse(Int,p[2][2:end]) for p in ports if first(p) == msg.in_port])
-                #TODO install flow + change msg reason to RETURN
-                install_flow!(a,[msg.dpid,in_sne,msg.data.dst],model,msg)
-            end
-        end
+        #         in_sne = first([ parse(Int,p[2][2:end]) for p in ports if first(p) == msg.in_port])
+        #         #TODO install flow + change msg reason to RETURN
+        #         install_flow!(a,[msg.dpid,in_sne,msg.data.dst],model,msg)
+        #     end
+        # end
     end
     
     push!(a.of_started,(msg.id,model.ticks))
@@ -159,6 +157,7 @@ end
 
 """
     Get query exclusions for a given message
+    @Deprecated
 """
 function get_exclusions(msg::OFMessage,model)
     exc = Int64[]
@@ -191,72 +190,57 @@ function do_query!(msg::OFMessage,a::Agent,model)
     path = []
     log_info(model.ticks, a.id, "querying local... $(msg)===> ignore: $ignore ====> paths: $(a.paths)")
     if !ignore
-        #do query
-        #query = (msg.dpid,msg.data.dst)
-
-        # exc = Int64[]
-        
-        # # Avoid returning original source node
-        # if msg.dpid != msg.data.src
-        #     push!(exc,msg.data.src)
-        # end
-
-        # # If packet is not originated in a host connected to this sne
-        # if msg.in_port != 0
-        #     #find out previous sne node
-        #     ports = get_port_edge_list(getindex(model,msg.dpid))
-        #     prv_id = parse(Int64,filter(x->x[1]==msg.in_port,ports)[1][2][2:end])
-        #     # if previous node has not been already pushed to exc
-        #     if msg.data.src != prv_id
-        #         push!(exc,prv_id)
-        #     end
-        # end
-
-        #log_info(model.ticks,a.id,"do_query! - OF - $msg ")
-        # src (from this sne) to dst, avoiding exc
-        query = (msg.dpid,msg.data.dst,get_exclusions(msg,model))       
+        # src (from this sne) to dst
+        query = (msg.dpid,msg.data.dst)       
         query_time = model.ticks
-        
+        #existing precalc paths
         query_paths = a.paths
+        #local graph to query
         query_graph = a.params[:ntw_graph]
         
+        ####Start for benchmark#####
         sdir = data_dir 
-        
         if model.benchmark 
             record_benchmark!(sdir,model.run_label,a.id,query_time,query,query_graph,query_paths) 
         end
-        # log_info(model.ticks,a.id,[20],"starting OF query ==> $(a.paths)")
-        path = do_query(query_time,query,query_graph,query_paths)
-        # log_info(model.ticks,a.id,[20],"ending OF query")
+        ####End for benchmark#####
         
-        log_info(model.ticks,a.id,"query: $(query) ----path found: $path ----> in paths: $(query_paths)")
-        if isempty(path) && model.ctrl_model != GraphModel(1)
-            lg = a.params[:ntw_graph]
-            ntw_edgel = [ e for e in edges(lg) if src(e) <  dst(e) ]
-            ntw_equiv = [(v,lg[v,:eid]) for v in vertices(lg)]
-            trace = [a.id]
-            of_mid = msg.id 
-            body = Dict(:query=>query,:trace=>trace,:ntw_edgel => ntw_edgel, :ntw_equiv=>ntw_equiv, :of_mid=>of_mid)
-            msg_template = AGMessage(-1,model.ticks,a.id,-1,QUERY_PATH,body)
-            send_to_nbs!(msg_template,a,model)
-            if !haskey(a.previous_queries,query)
-                a.previous_queries[query] = (model.ticks,[-1])
-            end
-        else
-            new_previous_queries = Dict()
-            for k in keys(a.previous_queries)
-                if k != query
-                    new_previous_queries[k] = a.previous_queries[k]
+        path = do_query(query_time,query,query_graph,query_paths)
+        
+        log_info(model.ticks,a.id,"query: $(query) ----path found: $path ----> in precalc paths: $(query_paths)")
+        
+        # For no centralised control topo
+        if model.ctrl_model != GraphModel(1) # centralised
+            #path not found?, need to send queries to nbs
+            if isempty(path)
+                ntw_edgel = [ e for e in edges(query_graph) if src(e) <  dst(e) ]
+                ntw_equiv = [(v,query_graph[v,:eid]) for v in vertices(query_graph)]
+                trace = [a.id]
+                of_mid = msg.id 
+                body = Dict(:query=>query,:trace=>trace,:ntw_edgel => ntw_edgel, :ntw_equiv=>ntw_equiv, :of_mid=>of_mid)
+                msg_template = AGMessage(-1,model.ticks,a.id,-1,QUERY_PATH,body)
+                send_to_nbs!(msg_template,a,model)
+                #track query sent, if not previously tracked
+                if !haskey(a.previous_queries,query)
+                    a.previous_queries[query] = (model.ticks,[-1])
                 end
+            else #path found, need to remove potential pending queries
+                new_previous_queries = Dict()
+                for k in keys(a.previous_queries)
+                    if k != query #exclude current query as path has been found
+                        new_previous_queries[k] = a.previous_queries[k]
+                    end
+                end
+                a.previous_queries = new_previous_queries
+                #a.matched_queries[query] = model.ticks #TODO to remove
             end
-            a.previous_queries = new_previous_queries
-            a.matched_queries[query] = model.ticks
         end
-                
+        #save state                
         new_state = get_state(a)
+        ## +1 query
         new_state.q_queries += 1.0
-        if !isempty(path) && msg.dpid != msg.data.dst #&&  msg.data.src in first(get_controlled_assets(a.id,model))
-            #body: $(msg.body[:query])
+        ## +score path       
+        if !isempty(path) && msg.dpid != msg.data.dst 
             push!(new_state.path_scores,(msg.dpid,msg.data.dst,path[2]))
         end
         set_state!(a,new_state)
@@ -267,35 +251,26 @@ end
 """
     Query local calculated paths and local graph
 """
-function do_query(time::Int64,query::Tuple{Int64,Int64,Array{Int64}},lg::MetaGraph,paths::Dict{Tuple{Int64,Int64,Array{Int64}},Array{Tuple{Int64,Float64,Float64,Array{Int64}}}})
+function do_query(time::Int64,query::Tuple{Int64,Int64},lg::MetaGraph,paths::Dict{Tuple{Int64,Int64},Array{Tuple{Int64,Float64,Float64,Array{Int64}}}})
     path = []
     cp_paths = []
     lg_paths = []
-    #short query, only src and dst
-    squery = (query[1],query[2])
+        
     #query pre-calculated (cache) paths
-    qry_paths = haskey(paths,query) ? paths[query] : []
+    cp_paths = haskey(paths,query) ? paths[query] : []
     
-    # log_info(time,"Precalc Paths found: $paths")
-    
-    for cpp in qry_paths
-        #assumes query_paths is sorted by tick,score
-        # if path does not contain exclusions
-        if length(intersect(last(cpp),query[3])) == 0
-            push!(cp_paths,cpp)
-        end
-    end
+    log_info(time,"paths in precalc paths: $cp_paths")
 
     #query graph path regardless of cache, in case there is another
     # TODO: Do this only if cache path is too old
-    path_state = query_paths(lg,squery)
+    path_state = query_paths(lg,query)
+
     log_info(time," paths in known graph: $(path_state.paths)")
+    
+    #reshape paths found local graph
     for lg_path in path_state.paths
-        # if path does not contain exclusions
-        if length(intersect(lg_path,query[3])) == 0
-            # default confidence = 0.5
-            push!(lg_paths,(time,0.5,last(path_state.dists),last(path_state.paths)))
-        end
+        default_confidence = 0.5
+        push!(lg_paths,(time,default_confidence,last(path_state.dists),last(path_state.paths)))
     end
 
     if !isempty(lg_paths)
@@ -330,29 +305,31 @@ function pending_pkt_handler(a::Agent,model)
     end
 end
 
-"""
-    Handle control actions when a node(ne) has dropped from the
-    network
-"""
-function do_drop!(msg::OFMessage,a::Agent,model)
-    log_info(model.ticks,a.id,"Msg to remove node: $msg")
-    lg = a.params[:ctl_graph]
-    lv = to_local_vertex(lg,a.id)
-    nbs = [ lg[nb,:aid] for nb in neighbors(lg,lv) ]
+# """
+#     Handle control actions when a control agent is dropped
+# """
+# function do_drop!(a::Agent,model)
+    # TODO Check if this is useful. For time being, assuming
+    # Control agent remains up but just forward messages.
+#     lg = a.params[:ctl_graph]
+#     lv = to_local_vertex(lg,a.id)
+#     nbs = [ lg[nb,:aid] for nb in neighbors(lg,lv) ]
 
-    #Move connections to neighbors
-    for nb in nbs
-        nbs_nb = setdiff(nbs,[nb])
-        body = Dict(new_nbs=>nbs_nb,dpid=>msg.data)
-        nb_msg = AGMessage(next_amid!(model),model.ticks,a.id,nb,NEW_NB,body)
-        send_msg!(nb,nb_msg_model)
-    end
+#     #Move connections to neighbors
+#     for nb in nbs
+#         nbs_nb = setdiff(nbs,[nb])
+#         body = Dict(new_nbs=>nbs_nb,dp_aid=>a.id)
+#         nb_msg = AGMessage(next_amid!(model),model.ticks,a.id,nb,NEW_NB,body)
+#         send_msg!(nb,nb_msg_model)
+#     end
     
     
-    #remove edges from "actual" control graph
-    soft_remove_vertex!(model.ctl_graph,a.id)
-    set_down!(a) 
-end
+#     #remove edges from "actual" control graph
+#     soft_remove_vertex!(model.ctl_graph,a.id)
+    
+#     #TODO it can't set agent down, needs to check if any controlled asset is up.
+#     set_down!(a) 
+# end
 
 """
 Set controller agent down
@@ -365,50 +342,49 @@ end
 """
     It processes OF msg sent by controlled NE  to
     remove a given port from its graph
-    
+    This is done by the agent controlling the neighbour of a dropped node
 """
 function port_delete_handler(a::Agent,msg::OFMessage,model)
     # init_agent!(a,model)
-    new_paths_dict = Dict()
-    dpid = msg.data # id of dropped node
-    ces = get_controlled_assets(a.id,model)
-
-    if dpid in ces # it is agent controlling dropped node
-        do_drop!(msg,a,model)
-    else # It is agent controlling neighbor of dropped node
+new_paths_dict = Dict()
+dpid = msg.data # id of dropped node
         
-        #delete pre-computed paths containing dropping node
-        for path_k in keys(a.paths)
-            v_paths = a.paths[path_k]
-            new_paths = []
-            for path in v_paths
-                if !(dpid in last(path))
-                    push!(new_paths,path)
-                end
-            end
-            if !isempty(new_paths)
-                new_paths_dict[path_k] = new_paths 
-            end
+#delete pre-computed paths containing dropping node
+for path_k in keys(a.paths)
+    v_paths = a.paths[path_k]
+    new_paths = []
+    for path in v_paths
+        if !(dpid in last(path))
+             push!(new_paths,path)
         end
-        #update agent pre-computed paths
-        a.paths = new_paths_dict
-        if model.ctrl_model != GraphModel(1)
-            lvb = to_local_vertex(a.params[:base_ntw_graph],msg.data)
-            a.params[:base_ntw_graph] = soft_remove_vertex!(a.params[:base_ntw_graph],lvb)
-            a.params[:ntw_graph] = a.params[:base_ntw_graph]
-            a.params[:last_cache_graph] = model.ticks
-        else
-            lv = to_local_vertex(a.params[:ntw_graph],msg.data)
-            a.params[:ntw_graph] = soft_remove_vertex!(a.params[:ntw_graph],lv)
-        end
-
-        #flows involving this NE should have been deleted at NE 
-
     end
+    if !isempty(new_paths)
+        new_paths_dict[path_k] = new_paths 
+    end
+end
+#update agent pre-computed paths
+a.paths = new_paths_dict
+
+#update graphs used by the control agent accordingly
+lvb = to_local_vertex(a.params[:base_ntw_graph],msg.data)
+a.params[:base_ntw_graph] = soft_remove_vertex!(a.params[:base_ntw_graph],lvb)
+a.params[:ntw_graph] = a.params[:base_ntw_graph]
+a.params[:last_cache_graph] = model.ticks
+# if model.ctrl_model != GraphModel(1)
+    
+# else
+    # lv = to_local_vertex(a.params[:ntw_graph],msg.data)
+    # a.params[:ntw_graph] = soft_remove_vertex!(a.params[:ntw_graph],lv)
+# end
+
+#flows involving this NE should have been deleted at NE 
 
 end
 
-
+"""
+Check confindence of a path
+@Deprecated (for time being)
+"""
 function do_confidence_check!(a,model)
     log_info(model.ticks,a.id,25," confindence: $(keys(a.
     previous_queries)) - $(keys(a.matched_queries))")

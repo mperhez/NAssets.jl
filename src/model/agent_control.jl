@@ -51,9 +51,7 @@ end
 """
 function do_match!(msg::AGMessage,a::Agent,model)
     log_info(model.ticks,a.id,"do_match! -> msg : $(msg)")
-    # if msg.mid == 4786
-    #     log_info(model.ticks,a.id,"is_up? $(get_state(a).up) --> do_match! -> msg : $(msg), end ag => $(first(msg.body[:trace]))")
-    # end
+    
     query = msg.body[:query]
     new_path = msg.body[:path]# (tick,confidence,score,path)
     ces = get_controlled_assets(a.id,model)
@@ -68,17 +66,17 @@ function do_match!(msg::AGMessage,a::Agent,model)
     if !invalid_path
         # is this agent the original requester of path?
         if first(msg.body[:trace]) == a.id
-
             for ce in ces_in_path
-                spath = last(new_path)[first(indexin(ce,last(new_path))):end]
-                
+                spath = last(new_path)[first(indexin(ce,last(new_path))):end]              
                 #only deals with the exact path, e.g. [7,3,1], not [3,1].
                 for i=1:1#length(spath)-1
                     epaths = []
                     if haskey(a.paths,(spath[i],last(spath),last(query)))
                         epaths = a.paths[(spath[i],last(spath),last(query))]
-        
+
+                        log_info(model.ticks,a.id," BEFORE: epaths: $epaths")
                         push!(epaths,new_path)
+                        log_info(model.ticks,a.id," AFTER: epaths: $epaths")
                         
                         #sort by score, reverse = false
                         sort!(epaths,lt=isless_paths)
@@ -92,7 +90,7 @@ function do_match!(msg::AGMessage,a::Agent,model)
                     else
                         epaths = [new_path]
                     end
-                    a.paths[(spath[i],last(spath),last(query))] = epaths
+                    a.paths[(spath[i],last(spath))] = epaths
                 end
             end
             #reprocess of msg right after, to do local query with new path found
@@ -276,15 +274,18 @@ end
  from controlled NEs.
 """
 
-function link_down!(a::Agent,dpn_id::Int,model)
-    # ld_msg = AGMessage(next_amid!(model),model.ticks,a.id,a.id,NE_DOWN,Dict(:did => dpn_id))
-    # send_msg!(agent.id,ld_msg,model)
-
+function controlled_sne_down!(a::Agent,dpn_id::Int,model)
+    
     set_control_agent!(dpn_id,0,model)
     # init_agent!(a,model)
-    s = get_state(a)
-    s.up = false
-    set_state!(a,s)
+    if isempty(get_live_snes(a,model))
+        s = get_state(a)
+        s.up = false
+        set_state!(a,s)
+    end
+
+    #TODO implement when a control agent is down too
+    # do_drop!(msg,a,model)
 end
 
 function get_state(a::Agent)::State

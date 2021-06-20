@@ -158,12 +158,12 @@ mutable struct Agent <: SOAgent
     of_started::Vector{Tuple{Int64,Int64}} # msg.id,  Time when msg was started
     # state::SDNCtlAgState
     # key(src,dst): value(tick_found,confidence,score,path)
-    paths::Dict{Tuple{Int64,Int64,Array{Int64}},Array{Tuple{Int64,Float64,Float64,Array{Int64}}}} # pre-calculated paths for operation
+    paths::Dict{Tuple{Int64,Int64},Array{Tuple{Int64,Float64,Float64,Array{Int64}}}} # pre-calculated paths for operation
     state_trj::Vector{ControlAgentState}
     msgs_links::Array{Vector{AGMessage},2}
     msgs_in::Vector{AGMessage}
     queue::Channel{OFMessage}
-    previous_queries::Dict{Tuple{Int64,Int64,Array{Int64}},Tuple{Int64,Array{Int64}}} # (src,dst):(tick last queried,[list pkt senders that originated query])
+    previous_queries::Dict{Tuple{Int64,Int64},Tuple{Int64,Array{Int64}}} # (src,dst):(tick last queried,[list pkt senders that originated query])
     matched_queries::Dict{Tuple{Int64,Int64,Array{Int64}},Int64} 
     params::Dict{Symbol,Any}
 end
@@ -172,7 +172,7 @@ end
 function Agent(id,nid,params)
     # s0 = SDNCtlAgState(zeros((2,2)),Vector{Float64}())
     s0 = ControlAgentState(id,true,Dict(),0,0,0,0,0,[])
-    Agent(id,nid,:lightblue,0.1,Vector{OFMessage}(),Vector{Tuple{Int64,Int64}}(),Dict{Tuple{Int64,Int64,Array{Int64}},Array{Tuple{Int64,Float64,Array{Int64}}}}(),[s0],Array{Vector{AGMessage}}(undef,1,1),[],Channel{OFMessage}(500),Dict(),Dict(),params)
+    Agent(id,nid,:lightblue,0.1,Vector{OFMessage}(),Vector{Tuple{Int64,Int64}}(),Dict{Tuple{Int64,Int64},Array{Tuple{Int64,Float64,Array{Int64}}}}(),[s0],Array{Vector{AGMessage}}(undef,1,1),[],Channel{OFMessage}(500),Dict(),Dict(),params)
 end
 
 
@@ -443,10 +443,10 @@ end
 
 """
 It simulates operations happening in a network asset
-when the link corresponding to the given dpn_id goes down
+when the link corresponding to the given dpn_id goes down. sne is up and node went down is dpn_id.
 """
 function link_down!(sne::SimNE,dpn_id::Int,model)
-    # log_info("[$(model.ticks)]($(sne.id)) link down start")
+    log_info(model.ticks,sne.id,"BEFORE link down start $dpn_id - all ports: $(get_port_edge_list(sne))")
     #remove from list of ports
     new_port_edge_list::Vector{Tuple{Int64,String}} = []
     dpn_port = -1
@@ -463,6 +463,7 @@ function link_down!(sne::SimNE,dpn_id::Int,model)
     controller = getindex(model,sne.controller_id)
     log_info(model.ticks,sne.id,"Triggering event to ag: $(sne.controller_id) for dpn_id: $dpn_id ")
     trigger_of_event!(model.ticks,controller,dpn_id,EventOFPPortStatus,model)
+    log_info(model.ticks,sne.id,"AFTER link down start $dpn_id - all ports: $(get_port_edge_list(sne))")
 end
 
 """
@@ -528,7 +529,7 @@ function set_down!(sne::SimNE)
     state.in_pkt = 0
     state.out_pkt  = 0
     state.port_edge_list = []
-    set_state!(sne::SimNE,state)
+    set_state!(sne,state)
 end
 
 function is_ready(a::Agent)

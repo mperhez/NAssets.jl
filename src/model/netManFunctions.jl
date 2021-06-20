@@ -453,15 +453,16 @@ function soft_drop_node!(model)
         g = model.ntw_graph
         dpn_ag = getindex(model,dpn_id)
         set_down!(dpn_ag)
-
+        log_info(model.ticks," All neighbours of $dpn_id are: $(all_neighbors(model.ntw_graph,get_address(dpn_id,g))) ")
         for nb in all_neighbors(model.ntw_graph,get_address(dpn_id,g))
             sne = getindex(model,get_eid(nb,model))
             link_down!(sne,dpn_id,model)
         end
-            
+        
+        #it simulates control detects sne down:
         aid = get_control_agent(dpn_id,model)
         a = getindex(model,aid)
-        link_down!(a,dpn_id,model)
+        controlled_sne_down!(a,dpn_id,model)
 
         #soft remove 
         model.ntw_graph = soft_remove_vertex!(g,get_address(dpn_id,g))
@@ -597,10 +598,12 @@ end
 function do_agent_step!(a::Agent,model)
    
     if get_state(a).up 
-        sneid_print = first(get_controlled_assets(a.id,model))
-        sne_print = getindex(model,sneid_print)
+        sneid_print = get_controlled_assets(a.id,model)
+        sne_print = getindex.([model],sneid_print)
 
-        log_info(model.ticks,a.id," step!: $(get_state(sne_print).flow_table) ===> all ports: $(get_port_edge_list(sne_print))")
+        for sprt in sne_print
+            log_info(model.ticks,a.id," step!: {$(sprt.id)} $(get_state(sprt).flow_table) ===> all ports: $(get_port_edge_list(sprt))")
+        end        
     end
     ## Process OF Messages (SimNE to (sdn) control messages)
     is_up(a) && is_ready(a) ? in_packet_processing(a,model) : nothing #log_info("queue of $(a.id) is empty")
@@ -976,7 +979,7 @@ end
 
 function load_run_configs() 
     configs = []
-    for ctl_model in [GraphModel(6)]#, ControlModel(4) ] #instances(ControlModel)
+    for ctl_model in [GraphModel(1)]#, ControlModel(4) ] #instances(ControlModel)
         for ntw_topo in [GraphModel(4)]
             for size in [16]#, 50, 100]
                 for drop_proportion in [10]
@@ -1188,9 +1191,13 @@ end
 function get_live_snes(model)
     return [ sne.id for sne in allagents(model) if typeof(sne) == SimNE && get_state(sne).up  ]
 end
-# function get_logger(log_name)
-#     return haskey(loggers,log_name) ? loggers[log_name] : init_logger(log_name)
-# end
+"""
+    Return SNEs controlled by Agent a that are up
+"""
+function get_live_snes(a::Agent,model)
+    controlled_snes = [ getindex(model,sid) for sid in get_controlled_assets(a.id,model)]
+    return [ sne.id for sne in controlled_snes if get_state(sne).up  ]
+end
 
 # function init_logger(log_name)
 #     loggers[log_name] = getlogger(log_name)
