@@ -443,8 +443,7 @@ function soft_drop_node!(model)
         active_ids =  unique(vcat([ af[3]==f_S ? [af[2]] : af[3]==f_E ? [af[1]] : [af[1],af[2]] for af in get_state(model).active_flows if af[3]!=f_SE ]...)) 
 
         #pick one random node
-        #disabled while testing
-        # dpn_id = !isempty(active_ids) ? rand(active_ids) : rand(get_live_snes(model))
+        dpn_id = !isempty(active_ids) ? rand(active_ids) : rand(get_live_snes(model))
 
         #for testing only
         dpn_id = rand([ sid for sid in [3,13,10] if get_state(getindex(model,sid)).up  ])
@@ -591,7 +590,9 @@ function do_agent_step!(a::SimNE,model)
     #Process OF messages (packet data traffic)
     # log_info("[$(model.ticks)]($(a.id)) start step")
     #log_info(model.ticks,a.id, "start step")
-    is_up(a) && is_ready(a) ? in_packet_processing(a,model) : nothing #log_info("queue of $(a.id) is empty")
+    is_up(a) && is_ready(a) ? in_packet_processing(a,model) : nothing 
+    
+    log_info(model.ticks,a.id,"rqsted: $(a.requested_ctl)")
     # @debug("[$(model.ticks)]($(a.id)) end step")
 end
 
@@ -602,7 +603,7 @@ function do_agent_step!(a::Agent,model)
         sne_print = getindex.([model],sneid_print)
 
         for sprt in sne_print
-            log_info(model.ticks,a.id," step!: {$(sprt.id)} $(get_state(sprt).flow_table) ===> all ports: $(get_port_edge_list(sprt))")
+            log_info(model.ticks,a.id," step!: {$(sprt.id)} $(get_state(sprt).flow_table) ===> all ports: $(get_port_edge_list(sprt)) ===> paths: $(a.paths)")
         end        
     end
     ## Process OF Messages (SimNE to (sdn) control messages)
@@ -979,7 +980,7 @@ end
 
 function load_run_configs() 
     configs = []
-    for ctl_model in [GraphModel(1)]#, ControlModel(4) ] #instances(ControlModel)
+    for ctl_model in [GraphModel(4)]#, ControlModel(4) ] #instances(ControlModel)
         for ntw_topo in [GraphModel(4)]
             for size in [16]#, 50, 100]
                 for drop_proportion in [10]
@@ -997,7 +998,7 @@ function load_run_configs()
                             for Β in Βs
                                 for ctl_k in ctl_ks
                                     for ctl_Β in ctl_Βs
-                                        push!(configs,new_config(seed,ctl_model,ntw_topo,size,160,drop_proportion,1.0,false,true,k,Β,ctl_k,ctl_Β))
+                                        push!(configs,new_config(seed,ctl_model,ntw_topo,size,150,drop_proportion,1.0,false,true,k,Β,ctl_k,ctl_Β))
                                     end
                                 end
                             end
@@ -1172,6 +1173,7 @@ function clear_cache!(a::Agent,model::ABM)
         a.params[:ntw_graph] = a.params[:base_ntw_graph]
         log_info(model.ticks,a.id,"cc after My graph-> vertices: $(nv(a.params[:ntw_graph])) -- edges: $(ne(a.params[:ntw_graph]))")
         a.params[:last_cache_graph] = model.ticks
+        a.paths = Dict()
     end
 
 end

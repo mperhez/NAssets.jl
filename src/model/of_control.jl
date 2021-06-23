@@ -211,7 +211,14 @@ function do_query!(msg::OFMessage,a::Agent,model)
         
         # For no centralised control topo
         if model.ctrl_model != GraphModel(1) # centralised
-            #path not found?, need to send queries to nbs
+            
+            #check path validity
+            if !isempty(path)
+                path = is_invalid_path(path,get_controlled_assets(a.id,model),model) ? [] : path
+                clear_cache!(a,model)
+            end
+
+            #valid path not found?, need to send queries to nbs
             if isempty(path)
                 ntw_edgel = [ e for e in edges(query_graph) if src(e) <  dst(e) ]
                 ntw_equiv = [(v,query_graph[v,:eid]) for v in vertices(query_graph)]
@@ -225,6 +232,7 @@ function do_query!(msg::OFMessage,a::Agent,model)
                     a.previous_queries[query] = (model.ticks,[-1])
                 end
             else #path found, need to remove potential pending queries
+                
                 new_previous_queries = Dict()
                 for k in keys(a.previous_queries)
                     if k != query #exclude current query as path has been found
@@ -233,6 +241,9 @@ function do_query!(msg::OFMessage,a::Agent,model)
                 end
                 a.previous_queries = new_previous_queries
                 #a.matched_queries[query] = model.ticks #TODO to remove
+
+
+
             end
         end
         #save state                
@@ -264,7 +275,6 @@ function do_query(time::Int64,query::Tuple{Int64,Int64},lg::MetaGraph,paths::Dic
     #query graph path regardless of cache, in case there is another
     # TODO: Do this only if cache path is too old
     path_state = query_paths(lg,query)
-
     log_info(time," paths in known graph: $(path_state.paths)")
     
     #reshape paths found local graph
@@ -273,11 +283,21 @@ function do_query(time::Int64,query::Tuple{Int64,Int64},lg::MetaGraph,paths::Dic
         push!(lg_paths,(time,default_confidence,last(path_state.dists),last(path_state.paths)))
     end
 
-    if !isempty(lg_paths)
+    
+    
         #assumes query_paths is sorted by tick,score
-        path = first(lg_paths)
-    elseif !isempty(cp_paths)
-        path = first(cp_paths)
+    lg_ps = !isempty(lg_paths) ? first(lg_paths)[3] : -1.0
+    cp_ps = !isempty(cp_paths) ? first(cp_paths)[3] : -1.0
+    
+    path = @match (lg_ps,cp_ps) begin
+        #no path
+        (-1.0,-1.0)  => []
+        #path in local graph
+        (a::Float64,-1.0), if a > 0 end => first(lg_paths)
+        #path in cache
+        (-1.0,b::Float64), if b > 0 end => first(cp_paths)
+        #path in cache paths and local graph
+        (_::Float64,_::Float64) => first(cp_paths)[3] < first(lg_paths)[3] ? first(cp_paths) : first(lg_paths) ##lower is better
     end
     
     # log_info(time,"!do_query: $query -- graph nv: $(nv(lg))-- Path found: $path")
@@ -346,39 +366,19 @@ end
 """
 function port_delete_handler(a::Agent,msg::OFMessage,model)
     # init_agent!(a,model)
-new_paths_dict = Dict()
-dpid = msg.data # id of dropped node
-        
-#delete pre-computed paths containing dropping node
-for path_k in keys(a.paths)
-    v_paths = a.paths[path_k]
-    new_paths = []
-    for path in v_paths
-        if !(dpid in last(path))
-             push!(new_paths,path)
+    remove_drop_sne!(a,msg.data,model.ticks)        
+    if model.ctrl_model != GraphModel(1)
+
+        for ctl_p in a.ctl_paths
+            propagate_drop_sne!(a,msg.data,ctl_p,model)
         end
-    end
-    if !isempty(new_paths)
-        new_paths_dict[path_k] = new_paths 
-    end
-end
-#update agent pre-computed paths
-a.paths = new_paths_dict
+        
+    # else
+        # lv = to_local_vertex(a.params[:ntw_graph],msg.data)
+        # a.params[:ntw_graph] = soft_remove_vertex!(a.params[:ntw_graph],lv)
 
-#update graphs used by the control agent accordingly
-lvb = to_local_vertex(a.params[:base_ntw_graph],msg.data)
-a.params[:base_ntw_graph] = soft_remove_vertex!(a.params[:base_ntw_graph],lvb)
-a.params[:ntw_graph] = a.params[:base_ntw_graph]
-a.params[:last_cache_graph] = model.ticks
-# if model.ctrl_model != GraphModel(1)
-    
-# else
-    # lv = to_local_vertex(a.params[:ntw_graph],msg.data)
-    # a.params[:ntw_graph] = soft_remove_vertex!(a.params[:ntw_graph],lv)
-# end
-
+    end
 #flows involving this NE should have been deleted at NE 
-
 end
 
 """

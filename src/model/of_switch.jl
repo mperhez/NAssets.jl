@@ -109,11 +109,11 @@ mutable struct NetworkAssetState <: State
     flow_table::Vector{Flow}
     # throughput_in::Float64
     # throughput_out::Float64
-    pending_queries::Vector{Int64}
+    pending_queries::Set{Int64}
 end
 
 function NetworkAssetState(ne_id::Int)
-    NetworkAssetState(ne_id,true,Vector{Tuple{Int64,String}}(),0,0,0,Vector{Flow}(),[])
+    NetworkAssetState(ne_id,true,Vector{Tuple{Int64,String}}(),0,0,0,Vector{Flow}(),Set([]))
 end
 
 mutable struct ControlAgentState <: State
@@ -165,6 +165,7 @@ mutable struct Agent <: SOAgent
     queue::Channel{OFMessage}
     previous_queries::Dict{Tuple{Int64,Int64},Tuple{Int64,Array{Int64}}} # (src,dst):(tick last queried,[list pkt senders that originated query])
     matched_queries::Dict{Tuple{Int64,Int64,Array{Int64}},Int64} 
+    ctl_paths::Vector{Array{Int64}}
     params::Dict{Symbol,Any}
 end
 
@@ -172,7 +173,7 @@ end
 function Agent(id,nid,params)
     # s0 = SDNCtlAgState(zeros((2,2)),Vector{Float64}())
     s0 = ControlAgentState(id,true,Dict(),0,0,0,0,0,[])
-    Agent(id,nid,:lightblue,0.1,Vector{OFMessage}(),Vector{Tuple{Int64,Int64}}(),Dict{Tuple{Int64,Int64},Array{Tuple{Int64,Float64,Array{Int64}}}}(),[s0],Array{Vector{AGMessage}}(undef,1,1),[],Channel{OFMessage}(500),Dict(),Dict(),params)
+    Agent(id,nid,:lightblue,0.1,Vector{OFMessage}(),Vector{Tuple{Int64,Int64}}(),Dict{Tuple{Int64,Int64},Array{Tuple{Int64,Float64,Array{Int64}}}}(),[s0],Array{Vector{AGMessage}}(undef,1,1),[],Channel{OFMessage}(500),Dict(),Dict(),[],params)
 end
 
 
@@ -185,7 +186,7 @@ mutable struct SimNE <: SimAsset
     size::Float16
     queue::Channel{OFMessage} # 
     pending::Vector{OFMessage}
-    requested_ctl::Vector{Tuple{Int64,Int64,Int64}} # flows requested to controller
+    requested_ctl::Dict{Tuple{Int64,Int64},Int64} # flows requested to controller: key{src,dst}:value{tick}
     state_trj::Vector{NetworkAssetState}
     condition_ts::Array{Float64,2} # Pre-calculated time series of the condition of asset
     rul::Array{Float64,1}
@@ -193,7 +194,7 @@ mutable struct SimNE <: SimAsset
     params::Dict{Symbol,Any}
 end
 function SimNE(id,nid,params,max_q)
-    SimNE(id,nid,0.3,Channel{OFMessage}(max_q),Vector{OFMessage}(),Vector{Tuple{Int64,Int64,Int64}}(),[NetworkAssetState(id)],zeros(Float64,2,1),[],-1,params) #initialise SimNE with a placeholder in the controller
+    SimNE(id,nid,0.3,Channel{OFMessage}(max_q),Vector{OFMessage}(),Dict{Tuple{Int64,Int64},Int64}(),[NetworkAssetState(id)],zeros(Float64,2,1),[],-1,params) #initialise SimNE with a placeholder in the controller
 end
 
 function init_switch(a,model)
@@ -280,18 +281,14 @@ function route_traffic!(a::SimNE,msg::OFMessage,model)
             drop_packet!(a)
         end
     else
-        similar_requests = filter(r->(r[2],r[3]) == (msg.data.src,msg.data.dst) && (model.ticks - r[1]) < model.ofmsg_reattempt+1,a.requested_ctl)
-
-        if isempty(similar_requests)
-            # controller = getindex(model,a.controller_id)
-            #ask_controller(a,controller,msg)
+        query = (a.id,msg.data.dst)
+        if !haskey(a.requested_ctl,query)
             of_qid = next_ofmid!(model)
             ctl_msg = OFMessage(of_qid,model.ticks,a.id,msg.in_port,msg.data)
             send_msg!(a.controller_id,ctl_msg,model)
-            push!(a.requested_ctl,(model.ticks,msg.data.src,msg.data.dst))
-            # log_info("pending query: $of_qid -> $(msg.data.src) - $(msg.data.dst)")
-            push_pending_query!(a,of_qid)
+            track_pending_query!(a,of_qid,model.ticks,query...)
         end
+                
         #return package to queue as it does not know what to do with it
         push!(a.pending,msg)
 
@@ -331,10 +328,9 @@ function push_msg!(dst::SimNE,msg::OFMessage)
 end
 
 function install_flow!(msg::OFMessage, sne::SimNE,model)
-    #ports = get_port_edge_list(sne,model)
     nf = first(msg.data)
     install_flow!(nf,sne,model)
-    pop_pending_query!(sne,last(msg.data))
+    clear_pending_query!(sne,nf,last(msg.data))
 end
 
 function install_flow!(flow::Flow, sne::SimNE,model)
@@ -589,22 +585,28 @@ function get_flow_table(sne::SimNE)
     return get_state(sne).flow_table
 end
 
-function push_pending_query!(sne::SimNE,new_pending_query::Int64)
+function track_pending_query!(sne::SimNE,new_pending_query::Int64,request_time::Int64,src::Int64,dst::Int64)
+    sne.requested_ctl[(src,dst)] = request_time
     state = get_state(sne)
     push!(state.pending_queries,new_pending_query)
-    #log_info("sending query $new_pending_query")
     set_state!(sne,state)
 end
 
-function pop_pending_query!(sne::SimNE,pending_query::Int64)
-    state = get_state(sne)
-    new_pq = []
-    for pq in state.pending_queries
-        if pq != pending_query
-            push!(new_pq,pq)
+function clear_pending_query!(sne::SimNE,flow::Flow,qid::Int64)
+    #clear requested queries
+    query = (flow.dpid,parse(Int64,flow.match_rule.dst))
+    new_rq_ctl = Dict()
+    log_info(sne.id," BEFORE Cleared: $(sne.requested_ctl)")
+    for k in keys(sne.requested_ctl)
+        if k != query
+            new_rq_ctl[k] = sne.requested_ctl[k]
         end
     end
-    state.pending_queries = new_pq
+    sne.requested_ctl = new_rq_ctl
+    log_info(sne.id," AFTER Cleared: $(sne.requested_ctl)")
+    #clear state pending queries
+    state = get_state(sne)
+    state.pending_queries = setdiff(state.pending_queries,[qid])
     set_state!(sne,state)
 end
 

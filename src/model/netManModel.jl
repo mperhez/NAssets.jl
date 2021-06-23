@@ -41,10 +41,10 @@ function initialize(args,user_props;grid_dims=(3,3),seed=0)
         # I am setting this to 2000 as the expectations is nes
         # are able to process. Check references e.g. Nokia SR 7750.
         :max_queue_ne => 300,#700 #This indicates how many pkts/msgs can be stored in tick to be processed the next tick
-        :max_cache_paths => 1,
-        :clear_cache_graph_freq => 30, # How often the ntw graph is cleared to initial state, 0: no cache. A value of 10, is not enough in a 16 mesh network to find paths when queries are not repeated, prob_eq_query. Carefully, this should be higher than query cycle when prob_eq_queries_cycle = 0.
-        :query_cycle => 10,#30, # how long the max_eq_queries_cycle applies for
-        :prob_eq_queries_cycle => 0,#0.1,#1,#0.7, #base probability of processing equal queries within the same :query_cycle. 0 means won't process the same query within the query_cycle, 1: means will process always repeated queries regardless of query_cycle
+        :max_cache_paths => 2,
+        :clear_cache_graph_freq => 25, # How often the ntw graph is cleared to initial state, 0: no cache. A value of 10, is not enough in a 16 mesh network to find paths when queries are not repeated, prob_eq_query. Carefully, this should be higher than query cycle when prob_eq_queries_cycle = 0.
+        :query_cycle => 20,#10,# # how long the max_eq_queries_cycle applies for
+        :prob_eq_queries_cycle => 0.2,#0.7,#0.1,#1,#0.7, #base probability of processing equal queries within the same :query_cycle. 0 means won't process the same query within the query_cycle, 1: means will process always repeated queries regardless of query_cycle
         :prob_random_walks =>  args[:prob_random_walks]# prob. of neighbour nodes to propagate query msgs.
     )
 
@@ -168,6 +168,13 @@ function model_step!(model)
     for a in allagents(model) 
         if typeof(a) == Agent
             log_info(model.ticks,a.id,"---------")
+            # log_info(model.ticks,a.id,"links: $(a.msgs_links)")
+            log_info(model.ticks,a.id," known graph: $(collect(edges(a.params[:ntw_graph])))")
+            kn = [ a.params[:ntw_graph][i,:eid] for i=1:nv(a.params[:ntw_graph]) ]
+
+            log_info(model.ticks,a.id," known nodes: $(kn)")
+            
+            log_info(model.ticks,a.id,"ctl_paths: $(a.ctl_paths)")
             do_agent_step!(a,model)
         end
     end

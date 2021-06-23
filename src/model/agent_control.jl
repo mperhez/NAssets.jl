@@ -29,7 +29,7 @@ function send_to_nbs!(msg_template::AGMessage,a::Agent,model)
     gid_nbs = [gid for gid in gid_nbs if ~(gid in msg_template.body[:trace]) ]
     random_nbs = rand(Binomial(1,model.prob_random_walks),length(gid_nbs))
     random_nbs = [rnb for rnb in random_nbs .* gid_nbs if rnb > 0]
-    # log_info(model.ticks,a.id,"sending msg: $msg_template  to $(length(gid_nbs)) nbs: $(gid_nbs)")
+    log_info(model.ticks,a.id,"sending msg: $msg_template  to $(length(gid_nbs)) nbs: $(gid_nbs)")
     # log_info("[$(model.ticks)]($(a.id)) sending to $(length(random_nbs)) random_nbs: $(random_nbs)")
     #log_info("[$(model.ticks)]($(a.id)) body: $(msg_template.body)")
     
@@ -60,11 +60,18 @@ function do_match!(msg::AGMessage,a::Agent,model)
     #elements this agent controls that are in path
     ces_in_path  = intersect(ces,last(new_path))
     
-    #due diligence: check if path is invalid according to local Knowledge to avoid using/propagating rubbish. 
+    #due diligence: check if path is invalid according to local Knowledge to avoid using/propagating rubbish.
+    #however new check required when path query is done locally, as nodes
+    # might have dropped since the time the path is received here. 
     invalid_path = is_invalid_path(new_path,ces_in_path,model)
 
     if !invalid_path
         # is this agent the original requester of path?
+        trace_bk = msg.body[:trace_bk]
+        if length(trace_bk) > 1
+            save_ctl_path!(a,reverse(trace_bk[1:end-1]))
+        end
+
         if first(msg.body[:trace]) == a.id
             for ce in ces_in_path
                 spath = last(new_path)[first(indexin(ce,last(new_path))):end]              
@@ -106,12 +113,14 @@ function do_match!(msg::AGMessage,a::Agent,model)
             log_info(model.ticks,a.id,"new path ENDING do_match: => $(a.paths)")
         else # This agent is not the original requester of the path
             #continue back propagation of msg
-            trace_bk = msg.body[:trace_bk]
+            
             msg.body[:trace_bk] = trace_bk[1:end-1]
             msg.rid = trace_bk[end-1]
             msg.sid = a.id
             send_msg!(trace_bk[end-1],msg,model)
         end
+    else # the path is invalid
+        #TODO  
     end
 end
 
@@ -123,6 +132,7 @@ function do_match!(found_path::Tuple{Int64,Float64,Float64,Array{Int64}},msg::AG
     query = msg.body[:query]
     trace = msg.body[:trace]
     trace_bk = deepcopy(msg.body[:trace])
+    save_ctl_path!(a,reverse(trace_bk[1:end-1]))
     of_mid = msg.body[:of_mid]
 
     nbody = Dict(:of_mid=>of_mid,:query=>query,:trace=>trace,:trace_bk=>trace_bk[1:end-1],:path=>found_path)
@@ -165,7 +175,7 @@ end
     Query by neighbour control agent after receiving AGMessage
 """
 function do_query!(msg::AGMessage,a::Agent,model)
-    # log_info(model.ticks,a.id,"query msg is: $msg")
+    log_info(model.ticks,a.id,"query msg is: $msg")
     #define criteria for ignoring a msg from other agent
     ignore = false 
     if haskey(a.previous_queries,msg.body[:query]) 
@@ -256,17 +266,15 @@ function do_new_nb!(msg::AGMessage,a::Agent,model)
 
 end
 
-# """
-#     It processes the simulated AG msg sent by itself to 
-#     indicate that one of its controlled NEs is down.
-#     In a real setting this could come from a process where
-#     the NE sends periodic heartbeats and when this is not received
-#     the control agent send itself this msg.
-
-# """
-# function do_ne_down(a::Agent,msg::AGMessage,model)
-    
-# end
+ """
+    It process a msg from a neighbor controller notifying a sne is down
+ """
+function do_ne_down(a::Agent,msg::AGMessage,model)
+    remove_drop_sne!(a,msg.body[:dpid],model.ticks)
+    if !isempty(msg.body[:ctl_trace])
+        propagate_drop_sne!(a,msg.body[:dpid],msg.body[:ctl_trace],model)
+    end
+end 
 
 """
  It simulates a NE-controller link down
@@ -332,4 +340,72 @@ function is_invalid_path(path,cnes,model)
     end
     log_info("invalidity check: $path ==> $result")
     return result
+end
+
+
+function save_ctl_path!(a::Agent,path::Array{Int64})
+    already_in = false
+    for p in a.ctl_paths
+        if isless(path,p) || p == path#is path a strict subset or equal to p ?
+            already_in = true
+        end
+    end
+    if !already_in
+        push!(a.ctl_paths,path)
+    end
+end
+
+function propagate_drop_sne!(a::Agent,dpid::Int64,ctl_trace::Array{Int64},model)
+    sid = a.id
+    rid = first(ctl_trace)
+    rem_path = length(ctl_trace) > 1 ? ctl_trace[2:end] : []
+    dmsg = AGMessage(next_amid!(model),model.ticks,sid,rid,NE_DOWN,Dict(:dpid=>dpid,:ctl_trace=>rem_path))
+    send_msg!(rid,dmsg,model)
+end
+
+"""
+    It removes a dropped sne node from local paths and graph
+"""
+function remove_drop_sne!(a::Agent,dpid::Int64,drop_time::Int64)
+    new_paths_dict = Dict()
+    #delete pre-computed paths containing dropping node
+    for path_k in keys(a.paths)
+        v_paths = a.paths[path_k]
+        new_paths = []
+        for path in v_paths
+            if !(dpid in last(path))
+                push!(new_paths,path)
+            end
+        end
+        if !isempty(new_paths)
+            new_paths_dict[path_k] = new_paths 
+        end
+    end
+    #update agent pre-computed paths
+    a.paths = new_paths_dict
+
+
+    #update graphs used by the control agent accordingly
+
+   #is dpid in base ntw graph?
+   lvb = to_local_vertex(a.params[:base_ntw_graph],dpid)
+   lvc = to_local_vertex(a.params[:ntw_graph],dpid)
+
+   log_info(drop_time,a.id," Removing dpid: $dpid from local base: $lvb --- local curr: $lvc")
+
+   if lvb != 0
+    a.params[:base_ntw_graph] = soft_remove_vertex!(a.params[:base_ntw_graph],lvb)
+   end
+   if lvc != 0
+        a.params[:ntw_graph] = soft_remove_vertex!(a.params[:ntw_graph],lvc)
+   end
+
+
+
+   
+    # if lvb != 0 # node is not in local graph
+        
+
+    #     a.params[:last_cache_graph] = drop_time
+    # end
 end
