@@ -119,7 +119,7 @@ end
 mutable struct ControlAgentState <: State
     a_id::Int64
     up::Bool
-    active_paths::Dict{Tuple{Int64,Int64},Array{Tuple{Int64,Float64,Array{Int64}}}}
+    active_paths::Dict{Tuple{Int64,Int64},Array{Int64}}
     in_ag_msg::Float64
     out_ag_msg::Float64
     in_of_msg::Float64

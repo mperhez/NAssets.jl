@@ -455,6 +455,7 @@ function generate_traffic!(model)
         if is_up(sne_src) && is_up(sne_dst)
             for i =1:q_pkts
                 pkt = create_pkt(src,dst,model)
+                # log_info(model.ticks, "Sending src: $src - dst: $dst -> q_pkts: $q_pkts ==> $pkt packets ")
                 push_msg!(sne_src,OFMessage(next_ofmid!(model), model.ticks,src,0,pkt)) # always from port 0
             end
         end

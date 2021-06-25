@@ -73,6 +73,7 @@ function install_flow!(a::Agent,path::Array{Int64,1},model::ABM,msg::OFMessage=n
          next_sne = out_port > 0 ? lpath[i+1] : lpath[i]
         #  log_info(model.ticks,a.id,"--> ($(sne.id),$(next_sne))")
     end
+   
 end
 
 function process_msg!(a::Agent,msg::OFMessage,model)
@@ -123,6 +124,7 @@ function in_packet_handler(a::Agent,msg::OFMessage,model)
     if found 
         #install_flows!(msg.dpid,msg.in_port,path,model) 
         install_flow!(a,path,model,msg)
+        get_state(a).active_paths[(first(path),last(path))] = path
     else
         #add to pending list only if has not been
         #started already (no reprocessing)

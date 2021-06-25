@@ -980,7 +980,7 @@ end
 
 function load_run_configs() 
     configs = []
-    for ctl_model in [GraphModel(4)]#, ControlModel(4) ] #instances(ControlModel)
+    for ctl_model in [GraphModel(7)]#, ControlModel(4) ] #instances(ControlModel)
         for ntw_topo in [GraphModel(4)]
             for size in [16]#, 50, 100]
                 for drop_proportion in [10]
@@ -1070,10 +1070,13 @@ function single_run(config)
     
     ctl_ags = last(result_agents[result_agents[!,:id] .> nv(ntw_graph) ,:],q_ctl_agents)[!,"get_state_trj"]
     nes = last(result_agents[result_agents[!,:id] .<= nv(ntw_graph) ,:],nv(ntw_graph))[!,"get_state_trj"]
-    
+    modbin = last(result_model)["get_state_trj"]
+
     nes_1 = vcat([ [ split(string(j-1)*";"*replace(to_string(nes[i][j]),"NetworkAssetState(" => ""),";") for j=1:length(nes[i])] for i=1:length(nes) ]...)
 
     ctl_ags_1 = vcat([ [ split(string(j-1)*";"*replace(to_string(ctl_ags[i][j]),"ControlAgentState(" => ""),";") for j=1:length(ctl_ags[i])] for i=1:length(ctl_ags) ]...)
+
+    # print(last(result_model)["get_state_trj"])
     
     #sdir = data_dir*"runs2/$(config.ctl_model)/"
     sdir = data_dir*"runs3/"
@@ -1083,6 +1086,8 @@ function single_run(config)
      end
     serialize( sdir * run_label * "_steps_ctl_agents.bin",ctl_ags)
     serialize( sdir * run_label * "_steps_nelements.bin",nes)
+    serialize( sdir * run_label * "_steps_model.bin",modbin)
+
     # nwords = Dict(1=>"one",2=>"two",3=>"three",4=>"four",5=>"five",6=>"six",7=>"seven",8=>"eight",9=>"nine",0=>"zero", 10=>"ten")
 
     # for i in 1:length(ctl_ags)
