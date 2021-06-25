@@ -15,4 +15,9 @@ include("model/tte_functions.jl")
 #Agents.jl function implementation for this model
 include("model/netManModel.jl")
 
+#Basic queries
+include("model/queries_basic.jl")
+#Multiple queries
+#include("model/queries_multiple.jl")
+
 #end # module

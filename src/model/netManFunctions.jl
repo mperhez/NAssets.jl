@@ -901,6 +901,10 @@ function isless_paths(a,b)
     end
 end
 
+"""
+    Records benchmark for a query
+"""
+
 function record_benchmark!(bdir,run_label,aid,query_time,query,query_graph,query_paths)
     
     if !isdir(bdir)
