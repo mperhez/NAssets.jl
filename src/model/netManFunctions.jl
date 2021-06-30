@@ -32,15 +32,19 @@ end
     logs an info msg for tick and agent_id passed
 """
 function log_info(t,aid,msg)
-    @info "[$(t)]($(aid)) $msg"
+    if t > 50
+        @info "[$(t)]($(aid)) $msg"
+    end
 end
 
 """
 logs only for a given agent
 """
 function log_info(t,aid,only_id,msg)
-    if aid in only_id
-        @info "[$(t)]($(aid)) $msg"
+    if t > 50
+        if aid in only_id
+            @info "[$(t)]($(aid)) $msg"
+        end
     end
 end
 
@@ -48,7 +52,9 @@ end
     logs an info msg for tick passed
 """
 function log_info(t,msg)
-    @info "[$(t)] $msg"
+    if t > 50
+        @info "[$(t)] $msg"
+    end
 end
 
 function log_debug(t,aid,msg)
@@ -446,7 +452,7 @@ function soft_drop_node!(model)
         dpn_id = !isempty(active_ids) ? rand(active_ids) : rand(get_live_snes(model))
 
         #for testing only
-        dpn_id = rand([ sid for sid in [3,13,10] if get_state(getindex(model,sid)).up  ])
+        dpn_id = rand([ sid for sid in [3,10,13] if get_state(getindex(model,sid)).up  ])
 
         log_info(model.ticks,"Removing ntw node: $dpn_id...")
         g = model.ntw_graph
@@ -606,6 +612,11 @@ function do_agent_step!(a::Agent,model)
             log_info(model.ticks,a.id," step!: {$(sprt.id)} $(get_state(sprt).flow_table) ===> all ports: $(get_port_edge_list(sprt)) ===> paths: $(a.paths)")
         end        
     end
+
+    log_info(model.ticks,a.id,25,"pending msgs: $(length(a.
+    pending)) --> $(a.pending)")
+    log_info(model.ticks,a.id,25,"QUEUE --> $(a.queue.data)")
+
     ## Process OF Messages (SimNE to (sdn) control messages)
     is_up(a) && is_ready(a) ? in_packet_processing(a,model) : nothing #log_info("queue of $(a.id) is empty")
 
@@ -905,17 +916,17 @@ end
     Records benchmark for a query
 """
 
-function record_benchmark!(bdir,run_label,aid,query_time,query,query_graph,query_paths)
-    
-    if !isdir(bdir)
-       mkdir(bdir) 
-    end
-    #benchmark block start
-    b = @benchmark begin 
-        do_query($query_time,$query,$query_graph,$query_paths)
-    end
-    serialize( bdir * run_label *"_$(first(query))_$(last(query))_$(query_time)_$(aid)_bchmk.bin",b)
-    #benchmark block end
+function record_benchmark!(bdir,run_label,aid,query_time,query,query_graph,query_paths,benchmark)
+    if benchmark 
+        if !isdir(bdir)
+        mkdir(bdir) 
+        end
+        #benchmark block start
+        b = @benchmark begin 
+            do_query($query_time,$query,$query_graph,$query_paths)
+        end
+        serialize( bdir * run_label *"_$(first(query))_$(last(query))_$(query_time)_$(aid)_bchmk.bin",b)
+    end        
 end
 
 ## main functions

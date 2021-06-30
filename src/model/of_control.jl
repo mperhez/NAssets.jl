@@ -122,39 +122,9 @@ function in_packet_handler(a::Agent,msg::OFMessage,model)
     end
    
     if found 
-        #install_flows!(msg.dpid,msg.in_port,path,model) 
         install_flow!(a,path,model,msg)
         get_state(a).active_paths[(first(path),last(path))] = path
-    else
-        #add to pending list only if has not been
-        #started already (no reprocessing)
-        started = filter(m->first(m) == msg.id,a.of_started)
-        if isempty(started)
-            push!(a.pending,(model.ofmsg_reattempt,msg))
-        end
-        # query = (msg.dpid,msg.data.dst,get_exclusions(msg,model))
-        # if haskey(a.previous_queries,query) 
-
-        #     if model.ticks - first(a.previous_queries[query]) > 2*model.ofmsg_reattempt
-        #         #return pkt
-
-        #         ports = get_port_edge_list(getindex(model,msg.dpid))
-
-        #         in_sne = first([ parse(Int,p[2][2:end]) for p in ports if first(p) == msg.in_port])
-        #         #TODO install flow + change msg reason to RETURN
-        #         install_flow!(a,[msg.dpid,in_sne,msg.data.dst],model,msg)
-        #     end
-        # end
     end
-    
-    push!(a.of_started,(msg.id,model.ticks))
-    
-    # TODO
-    # Need to implement asynchronous msgs
-    # Need to control when msgs come and come because of being pushed to pending
-    # If path is not found, it has to keep track of pending OFMessage if Any
-    # and once any path is received it should install the flows for the path
-    
 end
 
 """
@@ -188,18 +158,17 @@ function pending_pkt_handler(a::Agent,model)
     # end
     new_pending = []
     if !isempty(a.pending)
-        # log_info("[$(model.ticks)]($(a.id)) pending: $(length(a.pending))")
+        log_info(model.ticks,a.id,25,"BEFORE pending: $(length(a.pending))")
         for msgt in a.pending
-            # log_info("[$(model.ticks)]($(a.id)) pending_msgt: $msgt")
-            remaining = first(msgt) - 1  #msgt[1]: timeout
-            if remaining <= 0 
-                put!(a.queue,last(msgt)) #msgt[2]: msg
+            log_info("[$(model.ticks)]($(a.id)) pending_msgt: $msgt")
+            if msgt[3]
+                put!(a.queue,msgt[2]) #msgt[2]: msg
             else
                 push!(new_pending,msgt)
             end
          end
          a.pending = new_pending
-         
+         log_info(model.ticks,a.id,25,"AFTER pending: $(length(a.pending))")
     end
 end
 
@@ -245,17 +214,18 @@ end
 function port_delete_handler(a::Agent,msg::OFMessage,model)
     # init_agent!(a,model)
     remove_drop_sne!(a,msg.data,model.ticks)        
-    if model.ctrl_model != GraphModel(1)
+    # if model.ctrl_model != GraphModel(1)
 
-        for ctl_p in a.ctl_paths
-            propagate_drop_sne!(a,msg.data,ctl_p,model)
-        end
+    #     for ctl_p in a.ctl_paths
+    #         log_info(model.ticks,a.id," ctl_p: $ctl_p")
+    #         propagate_drop_sne!(a,msg.data,ctl_p,model)
+    #     end
         
-    # else
-        # lv = to_local_vertex(a.params[:ntw_graph],msg.data)
-        # a.params[:ntw_graph] = soft_remove_vertex!(a.params[:ntw_graph],lv)
+    # # else
+    #     # lv = to_local_vertex(a.params[:ntw_graph],msg.data)
+    #     # a.params[:ntw_graph] = soft_remove_vertex!(a.params[:ntw_graph],lv)
 
-    end
+    # end
 #flows involving this NE should have been deleted at NE 
 end
 
@@ -264,26 +234,5 @@ Check confindence of a path
 @Deprecated (for time being)
 """
 function do_confidence_check!(a,model)
-    log_info(model.ticks,a.id,25," confindence: $(keys(a.
-    previous_queries)) - $(keys(a.matched_queries))")
-    ack_period = 10
-    for k in keys(a.previous_queries)
-        qt = first(a.previous_queries[k])
-        rq = last(a.previous_queries[k])
-        if !haskey(a.matched_queries,k)
-            if model.ticks - qt > ack_period
-                for rid in rq
-                    # send_msg!(rid,
-                    # AGMessage(
-                    #     next_amid!(model),model.ticks,a.id,rid,AG_Protocol(1),Dict())
-                    # )
-                    log_info(model.ticks,a.id,"send to $rid")
-                end
-            end
-        else
-
-        end
-    end
-
-
+#TODO
 end

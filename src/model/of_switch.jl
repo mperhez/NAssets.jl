@@ -51,7 +51,7 @@ mutable struct OFMessage <: CTLMessage
 end
 
 mutable struct AGMessage <: CTLMessage
-    mid::Int
+    id::Int
     ticks::Int
     sid::Int # sender id
     rid::Int # receiver id
@@ -109,11 +109,10 @@ mutable struct NetworkAssetState <: State
     flow_table::Vector{Flow}
     # throughput_in::Float64
     # throughput_out::Float64
-    pending_queries::Set{Int64}
 end
 
 function NetworkAssetState(ne_id::Int)
-    NetworkAssetState(ne_id,true,Vector{Tuple{Int64,String}}(),0,0,0,Vector{Flow}(),Set([]))
+    NetworkAssetState(ne_id,true,Vector{Tuple{Int64,String}}(),0,0,0,Vector{Flow}())
 end
 
 mutable struct ControlAgentState <: State
@@ -154,16 +153,14 @@ mutable struct Agent <: SOAgent
     pos::Int64
     color::Symbol
     size::Float16
-    pending::Vector{Tuple{Int64,OFMessage}} # Timeout for this msg to be reprocessed & msg
-    of_started::Vector{Tuple{Int64,Int64}} # msg.id,  Time when msg was started
-    # state::SDNCtlAgState
+    pending::Vector{Tuple{Int64,OFMessage,Bool}} # <-time initially processed, ofmsg, reprocess in next tick?) reprocess only if a match is done
     # key(src,dst): value(tick_found,confidence,score,path)
     paths::Dict{Tuple{Int64,Int64},Array{Tuple{Int64,Float64,Float64,Array{Int64}}}} # pre-calculated paths for operation
     state_trj::Vector{ControlAgentState}
     msgs_links::Array{Vector{AGMessage},2}
     msgs_in::Vector{AGMessage}
     queue::Channel{OFMessage}
-    previous_queries::Dict{Tuple{Int64,Int64},Tuple{Int64,Array{Int64}}} # (src,dst):(tick last queried,[list pkt senders that originated query])
+    previous_queries::Dict{Tuple{Int64,Int64},Tuple{Int64,Array{Int64}}} # (src,dst):(tick last queried,[nb ag queried])
     matched_queries::Dict{Tuple{Int64,Int64,Array{Int64}},Int64} 
     ctl_paths::Vector{Array{Int64}}
     params::Dict{Symbol,Any}
@@ -173,7 +170,7 @@ end
 function Agent(id,nid,params)
     # s0 = SDNCtlAgState(zeros((2,2)),Vector{Float64}())
     s0 = ControlAgentState(id,true,Dict(),0,0,0,0,0,[])
-    Agent(id,nid,:lightblue,0.1,Vector{OFMessage}(),Vector{Tuple{Int64,Int64}}(),Dict{Tuple{Int64,Int64},Array{Tuple{Int64,Float64,Array{Int64}}}}(),[s0],Array{Vector{AGMessage}}(undef,1,1),[],Channel{OFMessage}(500),Dict(),Dict(),[],params)
+    Agent(id,nid,:lightblue,0.1,Vector{Tuple{Int64,OFMessage,Bool}}(),Dict{Tuple{Int64,Int64},Array{Tuple{Int64,Float64,Array{Int64}}}}(),[s0],Array{Vector{AGMessage}}(undef,1,1),[],Channel{OFMessage}(500),Dict(),Dict(),[],params)
 end
 
 
@@ -253,11 +250,12 @@ function route_traffic!(a::SimNE,msg::OFMessage,model)
 
                 #OFPR_NO_MATCH: here used to tell other SNE that packet couldn't reach destination.
                 if flow[1].params[1] == msg.in_port 
+                    log_info(model.ticks,a.id,"Forward NO MATCH to ($dst) ")
                     forward!(msg,a,dst,OFPR_NO_MATCH,model)
                     ftype = msg.data.src == a.id ? msg.data.dst == dst_id ? Flow_Type(-2) : Flow_Type(-1) : msg.data.dst == dst_id ? Flow_Type(1) : Flow_Type(0)
                     record_active_flow!(model,a.id,dst_id,ftype)
 
-
+                    #drop following packets
                     delete_flow!(a,flow[1].params[1],model)
                     nfw = deepcopy(flow[1])
                     nfw.action = OFS_Drop
@@ -282,11 +280,12 @@ function route_traffic!(a::SimNE,msg::OFMessage,model)
         end
     else
         query = (a.id,msg.data.dst)
-        if !haskey(a.requested_ctl,query)
+        
+        if !haskey(a.requested_ctl,query) 
             of_qid = next_ofmid!(model)
             ctl_msg = OFMessage(of_qid,model.ticks,a.id,msg.in_port,msg.data)
             send_msg!(a.controller_id,ctl_msg,model)
-            track_pending_query!(a,of_qid,model.ticks,query...)
+            track_pending_query!(a,model.ticks,query...)
         end
                 
         #return package to queue as it does not know what to do with it
@@ -370,7 +369,6 @@ function in_packet_processing(a::AbstractAgent,model)
     for msg in actions_to_process
         process_msg!(a,msg,model)
     end
-    log_info(model.ticks,a.id,"pending msgs: $(length(a.pending))")
 end
 
 """
@@ -585,11 +583,9 @@ function get_flow_table(sne::SimNE)
     return get_state(sne).flow_table
 end
 
-function track_pending_query!(sne::SimNE,new_pending_query::Int64,request_time::Int64,src::Int64,dst::Int64)
+function track_pending_query!(sne::SimNE,request_time::Int64,src::Int64,dst::Int64)
+    #only one query is sent, then control ag will decide if reattempt
     sne.requested_ctl[(src,dst)] = request_time
-    state = get_state(sne)
-    push!(state.pending_queries,new_pending_query)
-    set_state!(sne,state)
 end
 
 function clear_pending_query!(sne::SimNE,flow::Flow,qid::Int64)
@@ -604,15 +600,9 @@ function clear_pending_query!(sne::SimNE,flow::Flow,qid::Int64)
     end
     sne.requested_ctl = new_rq_ctl
     log_info(sne.id," AFTER Cleared: $(sne.requested_ctl)")
-    #clear state pending queries
-    state = get_state(sne)
-    state.pending_queries = setdiff(state.pending_queries,[qid])
-    set_state!(sne,state)
 end
 
-function get_pending_queries(sne::SimNE)
-    return get_state(sne).pending_queries
-end
+
 
 function take_msg!(sne::SimNE)
     return take!(sne.queue)

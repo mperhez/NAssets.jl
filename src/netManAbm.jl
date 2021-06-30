@@ -16,8 +16,8 @@ include("model/tte_functions.jl")
 include("model/netManModel.jl")
 
 #Basic queries
-include("model/queries_basic.jl")
+#include("model/queries_basic.jl")
 #Multiple queries
-#include("model/queries_multiple.jl")
+include("model/queries_multiple.jl")
 
 #end # module
