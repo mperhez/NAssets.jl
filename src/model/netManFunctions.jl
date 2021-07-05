@@ -342,6 +342,7 @@ function plot_asset_networks(
         ,edgecolor= edge_color_dict
         ,edgewidth= edge_width_dict
         ,edgestyle = edge_style_dict
+        ,arrow = arrow(:closed, :tail)
         ,markerstrokewidth = 1.1
         ,node_size=nsize
         ,palette = [:lightgray, :red]
@@ -367,8 +368,9 @@ function plot_throughput(
     tpt_p = Plots.plot(title="tpt",titlefontcolor=:white,ylims=[0,max_y])
     for i=1:nv(model.ntw_graph)
         sne = getindex(model,get_eid(i,model))
-        # v_pkt_in = [ s.in_pkt * model.:pkt_size for s in sne.state_trj ]
-        tpt_v = get_throughput_up(sne,model)#isempty(v_pkt_in) ? [0] : get_throughput(v_pkt_in,10)
+        #tpt_v = get_throughput_up(sne,model)
+        tpt_v = get_throughput_trj(sne)
+        log_info(model.ticks,sne.id,"==> tpt_trj: $tpt_v")
         tpt_p = Plots.plot!(tpt_p,tpt_v
         ,xlims=[0,model.N]
         , linealpha=0.5
@@ -382,6 +384,31 @@ function plot_throughput(
     annotate!((3*(model.N/4),max_y+1,Plots.text("Throughput ($(model.interval_tpt) steps)", 11, :black, :center)))
 
     return tpt_p
+end
+
+
+function plot_packet_loss(
+    model;
+    kwargs...
+)
+    max_y = model.pkt_per_tick
+    pktl_p = Plots.plot(title="Packet Loss",titlefontcolor=:white,ylims=[0,max_y])
+    for i=1:nv(model.ntw_graph)
+        sne = getindex(model,get_eid(i,model))
+        pktl_v = get_packet_loss_trj(sne)
+        log_info(model.ticks,sne.id,"==> pktl_trj: $pktl_v")
+        pktl_p = Plots.plot!(pktl_p,pktl_v
+        ,xlims=[0,model.N]
+        , linealpha=0.5
+        ,label = "$i"
+        ,ylabel = "Q"
+        ,legend = :outerright
+        )
+    end
+    #TODO: This annotation breaks the multithreading as it does not receive the plot object, it seems to take the last one, which might clash among threads.
+    annotate!((3*(model.N/4),max_y+1,Plots.text("Packet Loss", 11, :black, :center)))
+
+    return pktl_p
 end
 
 
@@ -403,9 +430,9 @@ function plotabm_networks(
 
     ntw_p = plot_asset_networks(model; kwargs)
     
-    tpt_p = plot_throughput(model; kwargs)
+    bottom_right_p = plot_packet_loss(model; kwargs) # plot_throughput(model; kwargs)
 
-    p = Plots.plot(title,ctl_p,ctl_r,ntw_p,tpt_p, layout=l, size=(800,600))
+    p = Plots.plot(title,ctl_p,ctl_r,ntw_p,bottom_right_p, layout=l, size=(800,600))
     
     return p
 end
@@ -598,7 +625,7 @@ function do_agent_step!(a::SimNE,model)
     #log_info(model.ticks,a.id, "start step")
     is_up(a) && is_ready(a) ? in_packet_processing(a,model) : nothing 
     
-    log_info(model.ticks,a.id,"rqsted: $(a.requested_ctl)")
+    # log_info(model.ticks,a.id,"rqsted: $(a.requested_ctl)")
     # @debug("[$(model.ticks)]($(a.id)) end step")
 end
 
@@ -608,14 +635,14 @@ function do_agent_step!(a::Agent,model)
         sneid_print = get_controlled_assets(a.id,model)
         sne_print = getindex.([model],sneid_print)
 
-        for sprt in sne_print
-            log_info(model.ticks,a.id," step!: {$(sprt.id)} $(get_state(sprt).flow_table) ===> all ports: $(get_port_edge_list(sprt)) ===> paths: $(a.paths)")
-        end        
+        # for sprt in sne_print
+        #     log_info(model.ticks,a.id," step!: {$(sprt.id)} $(get_state(sprt).flow_table) ===> all ports: $(get_port_edge_list(sprt)) ===> paths: $(a.paths)")
+        # end        
     end
 
-    log_info(model.ticks,a.id,25,"pending msgs: $(length(a.
-    pending)) --> $(a.pending)")
-    log_info(model.ticks,a.id,25,"QUEUE --> $(a.queue.data)")
+    # log_info(model.ticks,a.id,25,"pending msgs: $(length(a.
+    # pending)) --> $(a.pending)")
+    # log_info(model.ticks,a.id,25,"QUEUE --> $(a.queue.data)")
 
     ## Process OF Messages (SimNE to (sdn) control messages)
     is_up(a) && is_ready(a) ? in_packet_processing(a,model) : nothing #log_info("queue of $(a.id) is empty")
@@ -627,9 +654,9 @@ function do_agent_step!(a::Agent,model)
 
     # do_confidence_check!(a,model)
 
-    if !isempty(get_state(a).active_paths)
-        log_info(model.ticks,a.id,"-->$(get_state(a).active_paths)")
-    end
+    # if !isempty(get_state(a).active_paths)
+    #     log_info(model.ticks,a.id,"ap-->$(get_state(a).active_paths)")
+    # end
 
 end
 
@@ -734,7 +761,7 @@ function join_subgraphs(g1,g2)
     return gt
 end
 
-
+#function (lg, predictions_traffic, predictions_rul)
 
 """
 Search for a path between nodes s and d in the local graph lg
@@ -995,7 +1022,7 @@ end
 
 function load_run_configs() 
     configs = []
-    for ctl_model in [GraphModel(7)]#, ControlModel(4) ] #instances(ControlModel)
+    for ctl_model in [GraphModel(4)]#, ControlModel(4) ] #instances(ControlModel)
         for ntw_topo in [GraphModel(4)]
             for size in [16]#, 50, 100]
                 for drop_proportion in [10]
@@ -1013,7 +1040,7 @@ function load_run_configs()
                             for Β in Βs
                                 for ctl_k in ctl_ks
                                     for ctl_Β in ctl_Βs
-                                        push!(configs,new_config(seed,ctl_model,ntw_topo,size,150,drop_proportion,1.0,false,true,k,Β,ctl_k,ctl_Β))
+                                        push!(configs,new_config(seed,ctl_model,ntw_topo,size,50,drop_proportion,1.0,false,true,k,Β,ctl_k,ctl_Β))
                                     end
                                 end
                             end
@@ -1189,9 +1216,9 @@ Clears cache of control agent
 """
 function clear_cache!(a::Agent,model::ABM)
     if model.ticks - a.params[:last_cache_graph] == model.clear_cache_graph_freq
-        log_info(model.ticks,a.id,"cc prev My graph-> vertices: $(nv(a.params[:ntw_graph])) -- edges: $(ne(a.params[:ntw_graph]))")
+        # log_info(model.ticks,a.id,"cc prev My graph-> vertices: $(nv(a.params[:ntw_graph])) -- edges: $(ne(a.params[:ntw_graph]))")
         a.params[:ntw_graph] = a.params[:base_ntw_graph]
-        log_info(model.ticks,a.id,"cc after My graph-> vertices: $(nv(a.params[:ntw_graph])) -- edges: $(ne(a.params[:ntw_graph]))")
+        # log_info(model.ticks,a.id,"cc after My graph-> vertices: $(nv(a.params[:ntw_graph])) -- edges: $(ne(a.params[:ntw_graph]))")
         a.params[:last_cache_graph] = model.ticks
         a.paths = Dict()
     end

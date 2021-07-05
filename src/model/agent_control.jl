@@ -75,16 +75,16 @@ function do_match!(msg::AGMessage,a::Agent,model)
         if first(msg.body[:trace]) == a.id
             for ce in ces_in_path
                 spath = last(new_path)[first(indexin(ce,last(new_path))):end]
-                log_info(model.ticks,a.id," procs match for $ce ===> spath: $(spath)")              
+                # log_info(model.ticks,a.id," procs match for $ce ===> spath: $(spath)")              
                 #only deals with the exact path, e.g. [7,3,1], not [3,1].
                 for i=1:1#length(spath)-1
                     epaths = []
                     if haskey(a.paths,(spath[i],last(spath)))
                         epaths = a.paths[(spath[i],last(spath))]
 
-                        log_info(model.ticks,a.id," BEFORE: epaths: $epaths")
+                        # log_info(model.ticks,a.id," BEFORE: epaths: $epaths")
                         push!(epaths,new_path)
-                        log_info(model.ticks,a.id," AFTER: epaths: $epaths")
+                        # log_info(model.ticks,a.id," AFTER: epaths: $epaths")
                         
                         #sort by score, reverse = false
                         sort!(epaths,lt=isless_paths)
@@ -320,7 +320,7 @@ function remove_drop_sne!(a::Agent,dpid::Int64,drop_time::Int64)
         if !(dpid in last(p))
           new_ap[first(p)] = last(p)
         end
-    # log_info(drop_time,a.id,"active paths: $(first(p)) --- $(last(p)) --==> $(!(dpid in last(p)))")
+    #log_info(drop_time,a.id,"active paths: $(first(p)) --- $(last(p)) --==> $(!(dpid in last(p)))")
    end
 
    state.active_paths = new_ap

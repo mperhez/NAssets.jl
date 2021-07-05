@@ -107,12 +107,12 @@ mutable struct NetworkAssetState <: State
     out_pkt::Int64
     drop_pkt::Int64
     flow_table::Vector{Flow}
+    throughput_out::Dict{Int64,Float64}
     # throughput_in::Float64
-    # throughput_out::Float64
 end
 
 function NetworkAssetState(ne_id::Int)
-    NetworkAssetState(ne_id,true,Vector{Tuple{Int64,String}}(),0,0,0,Vector{Flow}())
+    NetworkAssetState(ne_id,true,Vector{Tuple{Int64,String}}(),0,0,0,Vector{Flow}(),Dict())
 end
 
 mutable struct ControlAgentState <: State
@@ -185,38 +185,29 @@ mutable struct SimNE <: SimAsset
     pending::Vector{OFMessage}
     requested_ctl::Dict{Tuple{Int64,Int64},Int64} # flows requested to controller: key{src,dst}:value{tick}
     state_trj::Vector{NetworkAssetState}
+    one_way_time_pkt::Dict{Int64,Array{Int64}}
     condition_ts::Array{Float64,2} # Pre-calculated time series of the condition of asset
     rul::Array{Float64,1}
     controller_id::Int64
     params::Dict{Symbol,Any}
 end
 function SimNE(id,nid,params,max_q)
-    SimNE(id,nid,0.3,Channel{OFMessage}(max_q),Vector{OFMessage}(),Dict{Tuple{Int64,Int64},Int64}(),[NetworkAssetState(id)],zeros(Float64,2,1),[],-1,params) #initialise SimNE with a placeholder in the controller
+    SimNE(id,nid,0.3,Channel{OFMessage}(max_q),Vector{OFMessage}(),Dict{Tuple{Int64,Int64},Int64}(),[NetworkAssetState(id)],Dict(),zeros(Float64,2,1),[],-1,params) #initialise SimNE with a placeholder in the controller
 end
 
 function init_switch(a,model)
     
 end
 
-#in_port, src, dst -> action
-#pkt
-
-# function evaluate(rule::MRule)(pkt::DPacket)
-#     @match pkt begin
-#         ()
-#     end
-# end
-
-
-
-# function ask_controller(sne::SimNE,a::Agent,msg::OFMessage)
-#     #TODO in_processing msgs of controller to install flow for unknown dst
-# end
-
 function forward!(msg::OFMessage,src::SimNE,model)
     # log_info("[$(model.ticks)]($(src.id)) Packet $(msg.id) delivered")
     out_pkt_count = get_state(src).out_pkt + 1
     set_out_pkt!(src,out_pkt_count)
+
+    if !haskey(src.one_way_time_pkt,msg.data.src)
+        src.one_way_time_pkt[msg.data.src] = Array{Int64,1}()
+    end
+    push!(src.one_way_time_pkt[msg.data.src],model.ticks - msg.data.time_sent)
 end
 
 function forward!(msg::OFMessage,src::SimNE,dst::SimNE,reason::Ofp_Protocol,model)
@@ -486,7 +477,9 @@ function init_state!(sme::SimNE)
     new_state.in_pkt = 0
     new_state.out_pkt = 0
     new_state.drop_pkt = 0
+    new_state.throughput_out = Dict()
     push!(sme.state_trj,new_state)
+    sme.one_way_time_pkt = Dict()
 end
 function init_state!(a::Agent)
     new_state = deepcopy(get_state(a)) #!isnothing(get_state(sme)) ? deepcopy(get_state(sme)) : NetworkAssetState(sme.id)
@@ -650,14 +643,14 @@ function get_throughput_up(sne::SimNE,model)
     return [ v_up[i] ? v_tpt[i] : 0.0   for i=1:length(v_tpt)]
 end
 
+function get_throughput_trj(sne::SimNE)
+     [ isempty(st.throughput_out) ? 0 : mean([st.throughput_out[k] for k in keys(st.throughput_out)])  for st in sne.state_trj]
+end
 
-# function get_throughput(e_tpt::Float64,s_tpt::Float64,interval::Int)::Float64
-#     return (e_tpt - s_tpt) > 0 && interval > 0 ? (e_tpt - s_tpt) / interval : 0.0
-# end
+function get_packet_loss_trj(sne::SimNE)
+    [ st.drop_pkt  for st in sne.state_trj ]
+end
 
-# function get_throughput(a::Agent)::Int
-#     return 0
-# end
 
 function get_condition_ts(a::Agent)
     #return a.id
@@ -685,7 +678,7 @@ function record_active_flow!(m,src,dst,ftype)
             if isempty(filter(af->af==nf,m_state.active_flows))
                 af = m_state.active_flows
                 push!(af,nf)
-            # log_info(m.ticks,"aflows: $(get_state(m).active_flows)")
+            log_info(m.ticks,"aflows: $(get_state(m).active_flows)")
             end
 end
 
@@ -709,4 +702,18 @@ function drop_packet!(sne::SimNE)
     s = get_state(sne)
     s.drop_pkt += 1
     set_state!(sne,s)
+end
+
+
+function calculate_metrics_step!(sne::SimNE,model::ABM)
+    state = get_state(sne)
+
+    for k in keys(sne.one_way_time_pkt)
+        # state.throughput_out[k] = mean(model.pkt_size .* sne.one_way_time_pkt[k])
+        state.throughput_out[k] = ( model.pkt_size * length(sne.one_way_time_pkt[k])) / mean(sne.one_way_time_pkt[k])
+        # pkt_size * No. pkts / mean time it took each pkt
+
+    end
+    set_state!(sne,state)
+    # log_info(model.ticks,sne.id," tpt_trj: $([ st.throughput_out for st in sne.state_trj])")
 end

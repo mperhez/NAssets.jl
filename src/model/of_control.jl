@@ -38,7 +38,7 @@ function install_flow!(a::Agent,path::Array{Int64,1},model::ABM,msg::OFMessage=n
          
         ports = get_port_edge_list(sne)
  
-        log_info("[$(model.ticks)]{$(a.id)}($(sne.id)) - ports: $(ports) - i: $i - i_prev: $i_prev - e: $e -- lpath : $lpath")
+        # log_info("[$(model.ticks)]{$(a.id)}($(sne.id)) - ports: $(ports) - i: $i - i_prev: $i_prev - e: $e -- lpath : $lpath")
          #Regardless of where the traffic comes
          r_src = "*" #string("h",first(lpath)) 
          r_dst = last(lpath)
@@ -158,9 +158,9 @@ function pending_pkt_handler(a::Agent,model)
     # end
     new_pending = []
     if !isempty(a.pending)
-        log_info(model.ticks,a.id,25,"BEFORE pending: $(length(a.pending))")
+        # log_info(model.ticks,a.id,25,"BEFORE pending: $(length(a.pending))")
         for msgt in a.pending
-            log_info("[$(model.ticks)]($(a.id)) pending_msgt: $msgt")
+            # log_info("[$(model.ticks)]($(a.id)) pending_msgt: $msgt")
             if msgt[3]
                 put!(a.queue,msgt[2]) #msgt[2]: msg
             else
@@ -168,7 +168,7 @@ function pending_pkt_handler(a::Agent,model)
             end
          end
          a.pending = new_pending
-         log_info(model.ticks,a.id,25,"AFTER pending: $(length(a.pending))")
+        #  log_info(model.ticks,a.id,25,"AFTER pending: $(length(a.pending))")
     end
 end
 
@@ -235,4 +235,7 @@ Check confindence of a path
 """
 function do_confidence_check!(a,model)
 #TODO
+end
+
+function calculate_metrics_step!(a::Agent,model::ABM)
 end
