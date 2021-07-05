@@ -390,45 +390,14 @@ function init_agent!(sne::SimNE,model)
         push_ep_entry!(sne,(i,"s$(nbs[i])"))
     end
 
-    #initialise condition: we generate entire time series to failure
-    # TODO: Review
-    #simulated sensor functions
-    funs = [
-        (exp_f,(1.0,0.05),exp_ts,(),exp_c), 
-        (weibull_f,(1.0,1.0),wb_ts,(6.0),wb_c),
-        (log_f,(50,0.1),log_ts,(),log_c)
-        ]
-    
-    ttf = 100
-    Δᵩ = 0.05
-    downtime = 2 #time steps
-    sne.condition_ts = generate_sensor_series(ttf,model.N,Δᵩ,0.05,downtime,funs)
-    vrul = generate_rul_series(ttf,Δᵩ,model.N,downtime)
-    sne.rul = vrul#reshape(vrul,length(vrul),1)
    
-    init_switch(sne,model)
+    init_condition!(sne,model)
 
-    # log_info("Initialised $(sne.id) => $(size(sne.condition_ts))")
 end
 
-
-
-
-# function install_flows(a::SimNE,paths,model)
-#     (2, 1, [2, 10, 1])
-
-
-# end
-
-
-
-   
-
-
-   # for each one, get proceed as the other algo 
-
-
-
+"""
+    Create a packet using arguments
+"""
 function create_pkt(src::Int64,dst::Int64,model)
     model.pkt_id += 1
     return DPacket(model.pkt_id,src,dst,model.:pkt_size,model.:ticks,100)

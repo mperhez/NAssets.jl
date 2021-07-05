@@ -32,29 +32,29 @@ end
     logs an info msg for tick and agent_id passed
 """
 function log_info(t,aid,msg)
-    if t > 50
+    # if t > 50
         @info "[$(t)]($(aid)) $msg"
-    end
+    # end
 end
 
 """
 logs only for a given agent
 """
 function log_info(t,aid,only_id,msg)
-    if t > 50
+    # if t > 50
         if aid in only_id
             @info "[$(t)]($(aid)) $msg"
         end
-    end
+    # end
 end
 
 """
     logs an info msg for tick passed
 """
 function log_info(t,msg)
-    if t > 50
+    # if t > 50
         @info "[$(t)] $msg"
-    end
+    # end
 end
 
 function log_debug(t,aid,msg)
@@ -303,7 +303,7 @@ function plot_asset_networks(
     
     nsize = 0.4
     lwidth = 0.5
-
+    condition_color = cgrad([:red, :yellow, :green],collect(0.01:0.01:1))
     method = model.ntw_model == GraphModel(4) ? :stress : :circular
     Random.seed!(model.seed)
 
@@ -329,7 +329,9 @@ function plot_asset_networks(
         end
         
     end
-
+    #[ condition_color[get_state(getindex(model,i)).rul] for i in 1:nv(model.ntw_graph)]
+    ruls = [ Int(round(get_state(getindex(model,i)).rul)) for i in 1:nv(model.ntw_graph)]
+    log_info(model.ticks," RULs: $(ruls)")
     ntw_p = graphplot(
         model.ntw_graph_anim
         ,names = [get_eid(i,model) for i=1:nv(model.ntw_graph)]
@@ -337,6 +339,7 @@ function plot_asset_networks(
        # ,size=(300,200)
         ,node_weights = [ get_eid(i,model) > 9 ? 1 : 10 for i in 1:nv(model.ntw_graph)]  #[ i > 9 ? 1 : 10 for i in 1:nv(model.ntw_graph)]
         ,nodeshape = :hexagon
+        ,nodecolor = [ condition_color[i] for i in ruls ]
         # ,nodecolor = [ is_up(getindex(model,get_eid(i,model))) ? :lightgray : :red for i in 1:nv(model.ntw_graph) ]
         # ,markerstrokecolor = :dimgray
         ,edgecolor= edge_color_dict
@@ -621,12 +624,12 @@ end
 
 function do_agent_step!(a::SimNE,model)
     #Process OF messages (packet data traffic)
-    # log_info("[$(model.ticks)]($(a.id)) start step")
-    #log_info(model.ticks,a.id, "start step")
+    log_info(model.ticks,a.id, "start step! $(get_state(a).up) ==> $(get_state(a).rul)")
     is_up(a) && is_ready(a) ? in_packet_processing(a,model) : nothing 
     
     # log_info(model.ticks,a.id,"rqsted: $(a.requested_ctl)")
     # @debug("[$(model.ticks)]($(a.id)) end step")
+    deteriorate!(a)
 end
 
 function do_agent_step!(a::Agent,model)
@@ -1106,7 +1109,7 @@ function single_run(config)
     args[:q]=q_agents
     # seed, stabilisation_time,proportion_dropping,q,N
     args[:dropping_times] = get_dropping_times(config.seed,30,0.2,nv(ntw_graph),config.n_steps)
-    adata = [get_state_trj,get_condition_ts, get_rul_ts]
+    adata = [get_state_trj]
     mdata = [:mapping_ctl_ntw,get_state_trj]
     result_agents,result_model = run_model(config.n_steps,args,params; agent_data = adata, model_data = mdata)
     
@@ -1156,31 +1159,6 @@ function single_run(config)
     ctl_ags_1 = [ replace.(ctl_ags_1[i]," Dict{Tuple{Int64,Int64},Array{Tuple{Int64,Float64,Array{Int64,N} where N},N} where N}" => "") for i=1:1]#length(ctl_ags_1) ]
 
     # ctl_ags_1 = [filter(x -> x .!= " ", ctl_ags_1[i]) for i=1:length(ctl_ags_1) ]
-
-    
-    nes_condition = last(result_agents,q_agents)[!,"get_condition_ts"]
-    nes_rul = last(result_agents,q_agents)[!,"get_rul_ts"]
-
-    # log_info(ags_condition)
-
-        # for i=1:size(ags_condition,1)#nv(ntw_graph)
-        #     log_info("testing $i ...")
-        #     log_info(ags_condition[i])
-        #     #log_info(hcat([i 1; i 2 ; i 3] , ags_condition[i]),';')
-        # end
-
-    open(sdir * run_label * "_condition_nelements.csv", "w") do io
-        for i=1:nv(ntw_graph)
-            writedlm(io,hcat([i 1; i 2 ; i 3] , nes_condition[i]),';')
-        end
-    end;
-
-
-    open(sdir * run_label * "_rul_neselements.csv", "w") do io
-    #     #for i=1:nv(ntw_graph)
-            writedlm(io,nes_rul[1:10],';')
-    #     #end
-    end;
 
     model_data = last(result_model)["get_state_trj"]
     model_data = [ (m.tick,m.links_load) for m in model_data ]

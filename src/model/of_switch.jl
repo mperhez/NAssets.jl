@@ -109,10 +109,12 @@ mutable struct NetworkAssetState <: State
     flow_table::Vector{Flow}
     throughput_out::Dict{Int64,Float64}
     # throughput_in::Float64
+    condition_ts::Array{Float64,1} # sensor data related to the condition of the asset
+    rul::Float64
 end
 
 function NetworkAssetState(ne_id::Int)
-    NetworkAssetState(ne_id,true,Vector{Tuple{Int64,String}}(),0,0,0,Vector{Flow}(),Dict())
+    NetworkAssetState(ne_id,true,Vector{Tuple{Int64,String}}(),0,0,0,Vector{Flow}(),Dict(),Array{Float64,1}(),0.0)
 end
 
 mutable struct ControlAgentState <: State
@@ -127,22 +129,7 @@ mutable struct ControlAgentState <: State
     path_scores::Array{Tuple{Int64,Int64,Float64}}
 end
 
-mutable struct SDNCtlAgState <: State
-    up::Bool
-    color::Symbol
-    condition_trj::Array{Float64,2}
-    health_trj::Vector{Float64}
-    #paths::Vector{Tuple{Int64,Int64,Array{Array{Int64}}}} # src,dst,path
-    #paths: Dict key: (src,dst) => value: [(tick-updated,score,path)]
-    active_paths::Dict{Tuple{Int64,Int64},Array{Tuple{Int64,Float64,Array{Int64}}}}
-    in_pkt_trj::Vector{Int64}
-    out_pkt_trj::Vector{Int64}
-    queue::Channel{OFMessage}
-end
 
-function SDNCtlAgState(condition_trj::Array{Float64,2}, health_trj::Vector{Float64})
-    SDNCtlAgState(true,:lightblue,condition_trj,health_trj,Dict{Tuple{Int64,Int64},Array{Tuple{Int64,Float64,Array{Int64}}}}(),Vector{Int64}(),Vector{Int64}(),Channel{OFMessage}(500))
-end
 
 
 """
@@ -168,7 +155,6 @@ end
 
 
 function Agent(id,nid,params)
-    # s0 = SDNCtlAgState(zeros((2,2)),Vector{Float64}())
     s0 = ControlAgentState(id,true,Dict(),0,0,0,0,0,[])
     Agent(id,nid,:lightblue,0.1,Vector{Tuple{Int64,OFMessage,Bool}}(),Dict{Tuple{Int64,Int64},Array{Tuple{Int64,Float64,Array{Int64}}}}(),[s0],Array{Vector{AGMessage}}(undef,1,1),[],Channel{OFMessage}(500),Dict(),Dict(),[],params)
 end
@@ -186,18 +172,13 @@ mutable struct SimNE <: SimAsset
     requested_ctl::Dict{Tuple{Int64,Int64},Int64} # flows requested to controller: key{src,dst}:value{tick}
     state_trj::Vector{NetworkAssetState}
     one_way_time_pkt::Dict{Int64,Array{Int64}}
-    condition_ts::Array{Float64,2} # Pre-calculated time series of the condition of asset
-    rul::Array{Float64,1}
     controller_id::Int64
     params::Dict{Symbol,Any}
 end
 function SimNE(id,nid,params,max_q)
-    SimNE(id,nid,0.3,Channel{OFMessage}(max_q),Vector{OFMessage}(),Dict{Tuple{Int64,Int64},Int64}(),[NetworkAssetState(id)],Dict(),zeros(Float64,2,1),[],-1,params) #initialise SimNE with a placeholder in the controller
+    SimNE(id,nid,0.3,Channel{OFMessage}(max_q),Vector{OFMessage}(),Dict{Tuple{Int64,Int64},Int64}(),[NetworkAssetState(id)],Dict(),-1,params) #initialise SimNE with a placeholder in the controller
 end
 
-function init_switch(a,model)
-    
-end
 
 function forward!(msg::OFMessage,src::SimNE,model)
     # log_info("[$(model.ticks)]($(src.id)) Packet $(msg.id) delivered")
@@ -658,15 +639,14 @@ function get_condition_ts(a::Agent)
 end
 
 function get_condition_ts(sne::SimNE)
-    return sne.condition_ts
-    #return sne.id
+    return get_state(sne).condition_ts
 end
 
-function get_rul_ts(a::Agent)
-    return [0]
+function get_rul(a::Agent)
+    return 0.0
 end
-function get_rul_ts(sne::SimNE)
-    return sne.rul
+function get_rul(sne::SimNE)
+    return get_state(sne).rul
 end
 
 """
