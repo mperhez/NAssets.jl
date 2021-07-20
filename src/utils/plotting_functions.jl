@@ -235,3 +235,75 @@ function plotabm_networks(model;kwargs...)
     
     return p
 end
+
+"""
+  Plots the bare base map using the shp file passed
+"""
+function plot_base_map(shp_file)
+    shp_map_uk_regions = load_map(shp_file)
+    #df_shp_map_uk_regions = DataFrame(shp_map_uk_regions)
+    points = []
+    
+    dpi = 300
+    size = (400,500)
+
+    p = plot(shp_map_uk_regions,alpha=0.07,palette=:cork,dpi = dpi,xlims=[0,8e5],size=size,showaxis=false,grid=false,ticks=false,label="")
+    
+    return p
+end
+
+"""
+    Plot network on top of the given geo plot passed
+"""
+function plot_geo_network(base_geo_plot,df_net)
+    dpi = 300
+    size = (400,500)
+	p = @df df_net scatter!(base_geo_plot,:bng_lon,:bng_lat,markersize=1,alpha=0.5,dpi=dpi,markerstrokewidth=0,label="",color=:red,legend=:topright, markershape=:octagon) 
+    return p
+end
+
+"""
+    Plot network on top of the given geo plot passed
+"""
+function plot_geo_network(base_geo_plot,g::MetaGraph)
+    dpi = 300
+    size = (400,500)
+    lons = [ get_prop(g,i,:bng_lon) for i=1:nv(g)]
+    lats = [ get_prop(g,i,:bng_lat) for i=1:nv(g)]
+    p = graphplot!(base_geo_plot,g,x=lons,y=lats,alpha=0.3,dpi=dpi,size=size,nodesize=2,aspect_ratio=1,curvature_scalar=0.5,nodecolor=:red)
+    return p 
+end
+
+"""
+It plots one step at a time, receiving all steps in a vector of vector of NetworkAssetState
+"""
+function plot_geo_network_step(base_geo_plot,g::MetaGraph,sne_steps::Vector{Vector{NetworkAssetState}},step)
+    dpi = 300
+    size = (400,500)
+    
+    condition_color = cgrad([:red, :yellow, :green],collect(0.01:0.01:1))
+
+    lons = [ get_prop(g,i,:bng_lon) for i=1:nv(g)]
+    lats = [ get_prop(g,i,:bng_lat) for i=1:nv(g)]
+    ruls = [sne_steps[i][step] for i=1:nv(g) ]
+
+    p = graphplot!(base_geo_plot,g,x=lons,y=lats,alpha=0.3,dpi=dpi,size=size,nodesize=2,aspect_ratio=1,curvature_scalar=0.5,nodecolor=[ condition_color[i] for i in ruls ])
+    return p 
+end
+
+"""
+It plots one step at a time, receiving all steps in a DataFrame with data coming from NetworkAssetState
+"""
+function plot_geo_network_step(base_geo_plot,g::MetaGraph,sne_steps::DataFrame,step)
+    dpi = 300
+    size = (400,500)
+    
+    condition_color = cgrad([:red, :yellow, :green],collect(0.01:0.01:1))
+
+    lons = [ get_prop(g,i,:bng_lon) for i=1:nv(g)]
+    lats = [ get_prop(g,i,:bng_lat) for i=1:nv(g)]
+    ruls = [ r.rul for r in eachrow(sne_steps[sne_steps[!,:t] .== step,:])]./100
+
+    p = graphplot!(base_geo_plot,g,x=lons,y=lats,alpha=0.3,dpi=dpi,size=size,nodesize=2,aspect_ratio=1,curvature_scalar=0.5,nodecolor=[ condition_color[i] for i in ruls ])
+    return p 
+end
