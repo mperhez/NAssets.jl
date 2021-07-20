@@ -98,7 +98,6 @@ function create_sim_asset_agents!(model)
     set_indexing_prop!(model.ntw_graph, :eid)
 end
 
-
 """
     Create control agents
 """
@@ -136,12 +135,9 @@ function create_control_agents!(model)
     
 end
 
-
-
 """
 Simplest create agents
 """
-
 function create_agents!(model)
     create_sim_asset_agents!(model)
     
@@ -151,9 +147,6 @@ function create_agents!(model)
 
     init_agents!(model)
 end
-
-
-
 
 """
     It advance model one step. Agents are progressed here to ensure that one action is perform in
@@ -269,18 +262,6 @@ function run_model(n,args,properties; agent_data, model_data)
     df, df_m 
 end
 
-function agent_color(a)
-    #@show typeof(a)
-    return :blue#a.color
-end
-        
-    # agent_color(a::Agent) = :black#a.color
-# function agent_shape(a)
-#    #[log_info(c.shape) for c in a] 
-   
-#    return [c.shape for c in a] 
-# end
-
 function init_agents!(model)
     # for a in sort(allagents(model))
     #     init_agent(a,model)
@@ -294,44 +275,6 @@ function init_agents!(model)
         init_agent!(getindex(model,id),model)
     end
 end
-
-"""
-It generates subgraph for the vector of nodes passed. This is similar to egonet but it keeps custom indexes given in id_prop parameter.
-
-- g: graph
-- It receives vector of controlled assets (nodes)
-- id_prop: :eid (simNE) or :aid (agent)
-"""
-function get_subgraph(g,nodes,id_prop)
-    # calculate local subgraph for the underlying network
-    
-    nbs = []
-
-    for i=1:length(nodes)
-        # get vertex for node id (assumes only one)
-        v = first(filter(v->g[v,id_prop] == nodes[i],1:nv(g)))
-        
-        #subgraph
-        push!(nbs,[ g[j,id_prop] for j in neighbors(g,v)])
-        #push!(nbs,neighbors(g,nodes[i]))
-        push!(nbs,[nodes[i]])
-    end
-
-    nnbs = vcat(nbs...)
-    sub_g = deepcopy(g)
-    vs = [ sub_g[v,id_prop] for v in collect(vertices(sub_g))]
-    to_del = [v for v ∈ vs if v ∉ nnbs]
-   
-    for d in to_del
-        for v in collect(vertices(sub_g))
-            if !has_prop(sub_g,v,id_prop) || get_prop(sub_g,v,id_prop) == d
-                rem_vertex!(sub_g,v)
-            end
-        end
-    end
-    return sub_g
-end
-
 
 function init_agent!(a::Agent,model)
 
@@ -377,9 +320,6 @@ function label_path(path)
     return (first(path),last(path),path)
 end
 
-
-
-
 function init_agent!(sne::SimNE,model)
     #print("Initialisation of SimNE agent $(a.id)")
     nbs = all_neighbors(model.ntw_graph,get_address(sne.id,model.ntw_graph))
@@ -396,14 +336,6 @@ function init_agent!(sne::SimNE,model)
 end
 
 """
-    Create a packet using arguments
-"""
-function create_pkt(src::Int64,dst::Int64,model)
-    model.pkt_id += 1
-    return DPacket(model.pkt_id,src,dst,model.:pkt_size,model.:ticks,100)
-end
-
-"""
     Next agent message's id
 """
 function next_amid!(model)
@@ -417,31 +349,6 @@ end
 function next_ofmid!(model)
     model.ofmsg_id += 1
     return model.ofmsg_id
-end
-
-
-function generate_traffic!(model)
-    # log_info("[$(model.ticks)] - generating traffic")
-    # q_pkts = abs(round(model.:max_queue_ne*rand(Normal(1,0.15))))
-    q_pkts = 400 #abs(round(0.2*model.pkt_per_tick*rand(Normal(1,0)))) 
-    # q_pkts: A percentage of the model.pkt_per_tick so NEs are able to process traffic coming from different nodes (NEs)
-    #src,dst = samplepair(1:nv(model.ntw_graph)) # can be replaced for random pair
-    pairs =[(1,7),(4,1),(5,14)] #[(9,5)] #[(4,5)]#
-
-    for p in pairs
-        src,dst = p
-        sne_src = getindex(model,src)
-        sne_dst = getindex(model,dst)
-        if is_up(sne_src) && is_up(sne_dst)
-            for i =1:q_pkts
-                pkt = create_pkt(src,dst,model)
-                # log_info(model.ticks, "Sending src: $src - dst: $dst -> q_pkts: $q_pkts ==> $pkt packets ")
-                push_msg!(sne_src,OFMessage(next_ofmid!(model), model.ticks,src,0,pkt)) # always from port 0
-            end
-        end
-    end
-
-   # log_info("[$(model.ticks)] $(q_pkts) pkts generated")
 end
 
 """
@@ -538,8 +445,6 @@ function ntw_link_step!(l::Tuple{Int,Int},model)
     
 end
 
-
-
 """
     Initialize an array of dimensions d1 x d2 that contains vectors of type T
 """
@@ -578,7 +483,6 @@ function get_ag_msg(model)
     #log_info([ [ s.in_ag_msg for s in a.state_trj ] for a in allagents(model) if typeof(a) == Agent ])
     return cumsum(sum.(eachcol([ [ s.in_ag_msg for s in a.state_trj ] for a in allagents(model) if typeof(a) == Agent ]))...)    
 end
-
 
 function is_active_flow(f::Tuple{Int,Int},model)
     v = !isempty(filter(af->(af[1],af[2]) == f || (af[2],af[1]) == f  ,get_state(model).active_flows))
