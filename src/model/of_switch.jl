@@ -109,7 +109,7 @@ mutable struct NetworkAssetState <: State
     out_pkt::Int64
     drop_pkt::Int64
     flow_table::Vector{Flow}
-    throughput_out::Dict{Int64,Float64}
+    throughput_out::Dict{Int64,Float64} # link/port, value
     # throughput_in::Float64
     condition_ts::Array{Float64,1} # sensor data related to the condition of the asset
     rul::Float64
@@ -318,19 +318,22 @@ function install_flow!(flow::Flow, sne::SimNE,model)
     log_info(model.ticks,sne.id," Installed flow: $(sne.id) - $(get_state(sne).flow_table)")
 end
 
+
+"""
+    Packet processing per tick per agent
+"""
 function in_packet_processing(a::AbstractAgent,model)
     in_pkt_count = 0
     out_pkt_count = 0
     processed_tick = 0
     actions_to_process = []
-    ppt = a.params[:pkt_per_tick]
-    ppt_u = Int(round(ppt/10))
-    ppt = rand((ppt-(4*ppt_u)):ppt_u:ppt)
+    
+    ppt = a.params[:pkt_per_tick]#get_random_packets_to_process(model.seed,model.ticks+a.id,a.params[:pkt_per_tick])
 
     while is_ready(a)
         msg = take_msg!(a)
 
-        if processed_tick <= ppt#rand(a.params[:pkt_per_tick])
+        if processed_tick <= ppt
             #process first non-action msgs which have greater priority e.g. node drop
             if msg.reason == OFPR_ACTION
                 push!(actions_to_process,msg)

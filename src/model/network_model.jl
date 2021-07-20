@@ -58,3 +58,89 @@ function load_custom_backbone(csv_file_v,csv_file_e)
     end
     return g
 end
+
+"""
+It generates subgraph for the vector of nodes passed. This is similar to egonet but it keeps custom indexes given in id_prop parameter.
+
+- g: graph
+- It receives vector of controlled assets (nodes)
+- id_prop: :eid (simNE) or :aid (agent)
+"""
+function get_subgraph(g,nodes,id_prop)
+    # calculate local subgraph for the underlying network
+    
+    nbs = []
+
+    for i=1:length(nodes)
+        # get vertex for node id (assumes only one)
+        v = first(filter(v->g[v,id_prop] == nodes[i],1:nv(g)))
+        
+        #subgraph
+        push!(nbs,[ g[j,id_prop] for j in neighbors(g,v)])
+        #push!(nbs,neighbors(g,nodes[i]))
+        push!(nbs,[nodes[i]])
+    end
+
+    nnbs = vcat(nbs...)
+    sub_g = deepcopy(g)
+    vs = [ sub_g[v,id_prop] for v in collect(vertices(sub_g))]
+    to_del = [v for v ∈ vs if v ∉ nnbs]
+   
+    for d in to_del
+        for v in collect(vertices(sub_g))
+            if !has_prop(sub_g,v,id_prop) || get_prop(sub_g,v,id_prop) == d
+                rem_vertex!(sub_g,v)
+            end
+        end
+    end
+    return sub_g
+end
+
+"""
+    Create a packet using arguments
+"""
+function create_pkt(src::Int64,dst::Int64,model)
+    model.pkt_id += 1
+    return DPacket(model.pkt_id,src,dst,model.:pkt_size,model.:ticks,100)
+end
+
+"""
+    Traffic generation per tick
+"""
+function generate_traffic!(model)
+    # log_info("[$(model.ticks)] - generating traffic")
+    #fixed pkts
+    q_pkts = 400 
+    #random pkts
+    #q_pkts = abs(round(0.1*model.pkt_per_tick*get_random(model.seed,model.ticks,Normal(1,0.05))))
+    # q_pkts: A percentage of the model.pkt_per_tick so NEs are able to process traffic coming from different nodes (NEs)
+    #src,dst = samplepair(1:nv(model.ntw_graph)) # can be replaced for random pair
+    #pairs =[(1,7),(4,1),(5,14)] #[(9,5)] #[(4,5)]#
+    pairs =[(1,7),(4,1),(5,14),(9,5),(12,8)]#
+
+    for p in pairs
+        src,dst = p
+        sne_src = getindex(model,src)
+        sne_dst = getindex(model,dst)
+        if is_up(sne_src) && is_up(sne_dst)
+            for i =1:q_pkts
+                pkt = create_pkt(src,dst,model)
+                # log_info(model.ticks, "Sending src: $src - dst: $dst -> q_pkts: $q_pkts ==> $pkt packets ")
+                push_msg!(sne_src,OFMessage(next_ofmid!(model), model.ticks,src,0,pkt)) # always from port 0
+            end
+        end
+    end
+
+   # log_info("[$(model.ticks)] $(q_pkts) pkts generated")
+end
+
+"""
+ Get a random number of packets to be processed by a sne on a given tick
+ defined by the sequence passed (tick + sne_id)
+"""
+function get_random_packets_to_process(seed,sequence,max_ppt)
+    #max pkts processed per tick
+    #1/10 of ppt
+    ppt_u = Int(round(max_ppt/10))   
+    return get_random(seed,sequence,((max_ppt-(4*ppt_u)):ppt_u:max_ppt))
+end

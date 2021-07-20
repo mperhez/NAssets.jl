@@ -197,7 +197,6 @@ end
 """
 
 function load_control_graph(graph::MetaGraph)
-    Random.seed!(seed)
     ntw = deepcopy(graph)
     #indexing can't be done here because aid has not been assigned
     #set_indexing_prop!(ntw,:aid)
@@ -865,7 +864,6 @@ function single_run(config)
         q_ctl_agents = 1
     else
         ctl_graph = get_graph(config.seed,config.size,config.ctl_model;k=config.ctl_k,Β=config.ctl_Β,custom_topo=config.ctl_custom_topo)
-        # ctl_graph = load_control_graph(config.ctl_model,nv(ntw_graph),config.seed)
         args[:ctl_graph]=ctl_graph
         q_ctl_agents = nv(ctl_graph)
     end

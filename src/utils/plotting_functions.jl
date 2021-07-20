@@ -174,7 +174,7 @@ function plot_throughput(model;kwargs...)
         # , line=:stem
         ,label = "$i"
         ,ylabel = "MB"
-        ,legend = false#:outerright
+        ,legend = :outerright#false#
         )
     end
     #TODO: This annotation breaks the multithreading as it does not receive the plot object, it seems to take the last one, which might clash among threads.
@@ -229,9 +229,9 @@ function plotabm_networks(model;kwargs...)
     bottom_right_p = plot_throughput(model; kwargs)#plot_packet_loss(model; kwargs) # 
 
     p = Plots.plot(title,ctl_p,ctl_r,ntw_p,bottom_right_p, layout=l
-    , size=(400,400),dpi=400)
+    , size=(600,400),dpi=400)
 
-    p = ntw_p
+    #p = ntw_p
     
     return p
 end
