@@ -1,8 +1,8 @@
 """
-It creates BT's backbone rich graph from given files
+It creates custom's backbone rich graph from given files
 
 """
-function load_bt_backbone(csv_file_v,csv_file_e)
+function load_custom_backbone(csv_file_v,csv_file_e)
     #load nodes/vertices
     df_net = CSV.File(csv_file_v,dateformat="YYYY-mm-dd"
     #,skipto=2

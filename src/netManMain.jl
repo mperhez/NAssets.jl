@@ -1,6 +1,8 @@
 using Agents, AgentsPlots, Plots, LightGraphs, MetaGraphs, SimpleWeightedGraphs, GraphPlot, GraphRecipes, NetworkLayout
 using Tables, DataFrames
 using CSV, JSON, Serialization, DelimitedFiles
+using BritishNationalGrid
+using ZipFile, Shapefile
 using Random
 using Match
 using LinearAlgebra
@@ -16,6 +18,9 @@ using Statistics
 using Logging,LoggingExtras, LoggingFacilities
 using Dates,TimeZones
 
+csv_custom_nodes = "data/custom/metro-access/"*"nodes.csv"
+csv_custom_links = "data/custom/metro-access/"*"links.csv"
+shp_geo_uk = "data/uk/geo/"*"NUTS_UK_2018.shp"
 
 include("netManAbm.jl")
 loggers = Dict()
