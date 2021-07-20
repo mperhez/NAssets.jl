@@ -1,3 +1,5 @@
+#export NetworkAssetState, ModelState, ControlAgentState
+
 @enum Ofp_Event begin
     EventOFPPortStatus
 end
@@ -321,11 +323,14 @@ function in_packet_processing(a::AbstractAgent,model)
     out_pkt_count = 0
     processed_tick = 0
     actions_to_process = []
-    
+    ppt = a.params[:pkt_per_tick]
+    ppt_u = Int(round(ppt/10))
+    ppt = rand((ppt-(4*ppt_u)):ppt_u:ppt)
+
     while is_ready(a)
         msg = take_msg!(a)
 
-        if processed_tick <= a.params[:pkt_per_tick]
+        if processed_tick <= ppt#rand(a.params[:pkt_per_tick])
             #process first non-action msgs which have greater priority e.g. node drop
             if msg.reason == OFPR_ACTION
                 push!(actions_to_process,msg)
