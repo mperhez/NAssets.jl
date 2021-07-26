@@ -20,7 +20,12 @@ end
     NEW_NB = 3
     NE_DOWN = 4
 end
-#@enum Ofp_Config_Flag EventOFPPortStatus=1 
+
+@enum MAINTENANCE_Action begin
+    MA_NONE = 0
+    MA_START = 1
+    MA_STOP = 2
+end
 
 
 
@@ -104,6 +109,7 @@ end
 mutable struct NetworkAssetState <: State
     ne_id::Int64
     up::Bool
+    on_maintenance::Bool
     port_edge_list::Vector{Tuple{Int64,String}}
     in_pkt::Int64
     out_pkt::Int64
@@ -112,11 +118,13 @@ mutable struct NetworkAssetState <: State
     throughput_out::Dict{Int64,Float64} # link/port, value
     # throughput_in::Float64
     condition_ts::Array{Float64,1} # sensor data related to the condition of the asset
-    rul::Float64
+    rul::Float64 # "real" rul
+    rul_e::Float64 # estimated rul
+    maintenance_due::Int64 #
 end
 
 function NetworkAssetState(ne_id::Int)
-    NetworkAssetState(ne_id,true,Vector{Tuple{Int64,String}}(),0,0,0,Vector{Flow}(),Dict(),Array{Float64,1}(),0.0)
+    NetworkAssetState(ne_id,true,false,Vector{Tuple{Int64,String}}(),0,0,0,Vector{Flow}(),Dict(),Array{Float64,1}(),0.0,0.0,0)
 end
 
 mutable struct ControlAgentState <: State
@@ -169,16 +177,18 @@ mutable struct SimNE <: SimAsset
     id::Int64
     pos::Int64
     size::Float16
+    maintenance_action::MAINTENANCE_Action
     queue::Channel{OFMessage} # 
     pending::Vector{OFMessage}
     requested_ctl::Dict{Tuple{Int64,Int64},Int64} # flows requested to controller: key{src,dst}:value{tick}
     state_trj::Vector{NetworkAssetState}
     one_way_time_pkt::Dict{Int64,Array{Int64}}
     controller_id::Int64
+    eul::Int64 # Expected useful life. Standard manufacturer time-to-failure
     params::Dict{Symbol,Any}
 end
 function SimNE(id,nid,params,max_q)
-    SimNE(id,nid,0.3,Channel{OFMessage}(max_q),Vector{OFMessage}(),Dict{Tuple{Int64,Int64},Int64}(),[NetworkAssetState(id)],Dict(),-1,params) #initialise SimNE with a placeholder in the controller
+    SimNE(id,nid,0.3,MAINTENANCE_Action(0),Channel{OFMessage}(max_q),Vector{OFMessage}(),Dict{Tuple{Int64,Int64},Int64}(),[NetworkAssetState(id)],Dict(),-1,0,params) #initialise SimNE with a placeholder in the controller
 end
 
 

@@ -332,7 +332,7 @@ function init_agent!(sne::SimNE,model)
 
    
     init_condition!(sne,model)
-
+    init_maintenance!(sne,model)
 end
 
 """
