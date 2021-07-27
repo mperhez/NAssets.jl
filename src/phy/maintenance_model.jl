@@ -1,13 +1,5 @@
-# function do_corrective_man()
-#     if trigger_maintenance
-        
-#     end
-# end
-# function do_preventive_man()
-#     if trigger_maintenance
-        
-#     end
-# end
+"""
+"""
 function get_next_maintenance_due(sne::SimNE,model::ABM)
     time_maintenance = 0
     state = get_state(sne)
@@ -24,21 +16,6 @@ function get_next_maintenance_due(sne::SimNE,model::ABM)
     return time_maintenance
 end
 
-
-function do_maintenance(sne::SimNE)
-    if MAINTENANCE_Action(1)
-        state = get_state(sne)
-        state.up = false
-        state.on_maintenance = true
-        set_state!(sne,state)
-    elseif MAINTENANCE_Action(2)
-        state = get_state(sne)
-        state.up = true
-        state.on_maintenance = false
-        state.maintenance_due = get_next_maintenance_due(sne)
-        set_state!(sne,state)
-    end
-end
 
 function trigger_maintenance(sne::SimNE)
     state = get_state(sne)
@@ -69,11 +46,6 @@ function do_preventive_man(sne::SimNE,model::ABM)
 end
 
 function init_maintenance!(sne::SimNE,model::ABM)
-
-    sne.maintenance.policy = model.mnt_policy
-    sne.maintenance.duration = sne.maintenance.policy == CorrectiveM ? model.mnt_wc_duration : model.mnt_bc_duration
-    sne.maintenance.threshold = model.mbt_threshold
-
     state = get_state(sne)
     #init with according to factory estimated parameters
     state.maintenance_due = state.rul_e - sne.maintenance.threshold
@@ -81,7 +53,8 @@ function init_maintenance!(sne::SimNE,model::ABM)
 end
 
 
-function start_mnt(sne::SimNE,time_start::Int64)
+function start_mnt!(sne::SimNE,time_start::Int64)
+    log_info(time_start,sne.id,"Starting maintenance...")
     sne.maintenance.job_start = time_start
     state = get_state(sne)
     state.up = false
@@ -89,12 +62,13 @@ function start_mnt(sne::SimNE,time_start::Int64)
     set_state!(sne,state)
 end
 
-function stop_mnt!(sne::SimNE)
-    sne.maintenance.job_start = -1
+function stop_mnt!(sne::SimNE,model::ABM)
+    log_info("Stopping maintenance for $(sne.id)...")
     state = get_state(sne)
     state.up = true
     state.on_maintenance = false
-    state.maintenance_due = 
+    state.maintenance_due = sne.maintenance.job_start + sne.maintenance.duration + sne.maintenance.eul - sne.maintenance.threshold
+    sne.maintenance.job_start = -1
     set_state!(sne,state)
 end
 
@@ -128,8 +102,8 @@ end
 
 
 
-function is_start_mnt(sne::SimNE,mnt_policy::CorrectiveM,model::ABM)
-    return !get_state(sne).up
+function is_start_mnt(sne::SimNE,mnt_policy::Type{CorrectiveM},model::ABM)
+    return !get_state(sne).up && !get_state(sne).on_maintenance
 end
 
 function is_start_mnt(sne::SimNE,mnt_policy::PredictiveM,model::ABM)
@@ -140,4 +114,13 @@ function is_start_mmnt(sne::SimNE,mnt_policy::PreventiveM,model::ABM)
     return get_state(sne).mnt_due == model.ticks
 end
 
-
+function MaintenanceInfoCorrective(model)
+    # TODO adjust to multiple eul. For time being, always 100. 
+    return MaintenanceInfo(CorrectiveM,100,-1,model.mnt_wc_duration,0,0)
+end
+function MaintenanceInfoPreventive(model)
+    return MaintenanceInfo(PreventiveM,100,-1,model.mnt_bc_duration,10,0)
+end
+function MaintenanceInfoPredictive(model)
+    return MaintenanceInfo(PredictiveM,100,-1,model.mnt_bc_duration,10,10)
+end

@@ -1,4 +1,13 @@
 """
+Plots a subgraph that is part of a greater one
+global ids in property :eid.
+"""
+function plot_subg(sg)
+    return graphplot(sg
+                    ,names = [ get_prop(sg,i,:eid) for i=1:nv(sg)]
+          )
+end
+"""
  Plots a multiagent control network
 """
 function plot_ctl_network_multi( model; kwargs...,)

@@ -1,165 +1,57 @@
-export ϕ
-
-@enum GraphModel begin
-    CUSTOM=0
-    CENTRALISED=1 # Only for control model
-    RING=2
-    COMPLETE=3
-    GRID=4
-    STAR=5
-    BA_RANDOM=6 # Barrabasi_Albert
-    WS_RANDOM=7 # watts_strogatz
-    #SM_RANDOM_TOPO=8 # Stochastic Block Model
-end
-
-
-"""
-    Log info msg
-"""
-function log_info(msg)
-    #st = string(stacktrace()[2])
-    #file_name = lstrip(st[last(findlast("at ",st)):end])
-    #file_name = split(file_name,":")
-    # file_name = lstrip(st[last(findlast("at ",st)):last(findlast(":",st))-1])
-    #method_name = lstrip(st[1:last(findfirst("(",st))-1])
-    # logger = get_logger(file_name * "|" * method_name)
-    # @info(file_name * "]" * msg)
-    #@info msg _module="" _file= replace(first(file_name),".jl"=>"") _line=parse(Int64,last(file_name))
-    @info msg
-end
-
-"""
-    logs an info msg for tick and agent_id passed
-"""
-function log_info(t,aid,msg)
-    # if t > 50
-        @info "[$(t)]($(aid)) $msg"
-    # end
-end
-
-"""
-logs only for a given agent
-"""
-function log_info(t,aid,only_id,msg)
-    # if t > 50
-        if aid in only_id
-            @info "[$(t)]($(aid)) $msg"
-        end
-    # end
-end
-
-"""
-    logs an info msg for tick passed
-"""
-function log_info(t,msg)
-    # if t > 50
-        @info "[$(t)] $msg"
-    # end
-end
-
-function log_debug(t,aid,msg)
-    @debug "[$(t)]($(aid)) $msg"
-end
-
-function log_debug(t,msg)
-    @debug "[$(t)] $msg"
-end
-
-function log_debug(msg)
-    @debug msg
-end
-
-
-function ϕ(t,T,pulse)
-    α = 0.5
-    Β = 0.5
-    if isnothing(pulse)
-        new_phase = t > 0 ? t - 1 : T  # phase function
-    else
-        new_phase = round(α * t + Β)
-    end
-end
-"""
-Agent emits pulse
-"""
-# function pulse(agent,model)
-#     if(agent.phase == agent.T)
-#         agent.color = :white
-#
-#         for n in agent.neighbors
-#             na = first(filter(a->a.id == n,Set(allagents(model))))
-#             push!(na.inbox,(agent.id, model.graph.weights[agent.id,na.id]))
-#         end
-#     else
-#         agent.color = :black
+# function update_neighbours(agent,model)
+#     neighbours = space_neighbors(agent,model,1)
+#     for n in neighbours
+#         ag_n = find_agent(n,model)
+#         push!(ag_n.inbox,agent.id)
 #     end
 # end
 
-function update_neighbours(agent,model)
-    neighbours = space_neighbors(agent,model,1)
-    for n in neighbours
-        ag_n = find_agent(n,model)
-        push!(ag_n.inbox,agent.id)
-    end
-end
+# """
+# Agent processes pulses "observed"/"received" from neighbors
+# """
+# function process_pulses(agent,model)
+#     if agent.phase < model.:Τ
+#         agent.phase = round(agent.phase + 0.1,digits=2)
+#     else
+#         agent.phase = round(agent.phase - model.:Τ,digits=2)
+#     end
 
-function pulse(agent,model)
-    if(round(agent.phase,digits=2) == model.:Τ)
-        agent.color = :white
-        update_neighbours(agent,model)
-        agent.phase = 0.0
-    else
-        agent.color = :blue
-    end
-end
-
-
-"""
-Agent processes pulses "observed"/"received" from neighbors
-"""
-function process_pulses(agent,model)
-    if agent.phase < model.:Τ
-        agent.phase = round(agent.phase + 0.1,digits=2)
-    else
-        agent.phase = round(agent.phase - model.:Τ,digits=2)
-    end
-
-    if !isempty(agent.inbox)
-        if length(agent.inbox) > agent.maxN
-            agent.phase = round(min(model.:Τ,agent.phase+model.:ΔΦ),digits=2)
-            agent.maxN = length(agent.inbox)
-        elseif length(agent.inbox) == agent.maxN &&
-                maximum(agent.inbox) > agent.maxId
-            agent.phase = round(min(model.:Τ,agent.phase+model.:ΔΦ),digits=2)
-            agent.maxId = maximum(agent.inbox)
-        end
-    end
-agent.inbox = []
-end
+#     if !isempty(agent.inbox)
+#         if length(agent.inbox) > agent.maxN
+#             agent.phase = round(min(model.:Τ,agent.phase+model.:ΔΦ),digits=2)
+#             agent.maxN = length(agent.inbox)
+#         elseif length(agent.inbox) == agent.maxN &&
+#                 maximum(agent.inbox) > agent.maxId
+#             agent.phase = round(min(model.:Τ,agent.phase+model.:ΔΦ),digits=2)
+#             agent.maxId = maximum(agent.inbox)
+#         end
+#     end
+# agent.inbox = []
+# end
 
 
-function pulse_received(pulses,strategy)
-    return if length(pulses) > 1
-        @match strategy begin
-        :NEAR  =>
-                # This seems the most sensible, as all are received simoultaneosuly
-                # intensity (greater distance less intensity)
-                last(sort(pulses,by=x->x[2]))
-        :MIXED =>
-                #intensity and fraction of time step (distance * index)
-                #TODO review: as intensity distance may need to be reversed and then multiplied
-                # by index, then get the first.
-                last(sort(pulses,by=x->findfirst(isequal(x),pulses)*x[2]))
-        _     =>
-                #FIFO
-                first(pulses)
-        end
-    elseif isempty(pulses)
-        Nothing
-    else
-        first(pulses)
-    end
-end
+# function pulse_received(pulses,strategy)
+#     return if length(pulses) > 1
+#         @match strategy begin
+#         :NEAR  =>
+#                 # This seems the most sensible, as all are received simoultaneosuly
+#                 # intensity (greater distance less intensity)
+#                 last(sort(pulses,by=x->x[2]))
+#         :MIXED =>
+#                 #intensity and fraction of time step (distance * index)
+#                 #TODO review: as intensity distance may need to be reversed and then multiplied
+#                 # by index, then get the first.
+#                 last(sort(pulses,by=x->findfirst(isequal(x),pulses)*x[2]))
+#         _     =>
+#                 #FIFO
+#                 first(pulses)
+#         end
+#     elseif isempty(pulses)
+#         Nothing
+#     else
+#         first(pulses)
+#     end
+# end
 
 """
 Find agent in the model given the id
@@ -167,42 +59,6 @@ Find agent in the model given the id
 function find_agent(id,model)
     first(filter(a->a.id == id,Set(allagents(model))))
 end
-
-function get_graph(seed,size,topo;k=0,Β=0,custom_topo=nothing)
-    Random.seed!(seed)
-    ntw = @match topo begin
-        GraphModel(0)=> load_custom_backbone(csv_custom_nodes,csv_custom_links)#custom_topo
-        GraphModel(2) => MetaGraph( [Int(i) for i in ring_graph(size)])
-        GraphModel(3) => MetaGraph(LightGraphs.complete_graph(size))
-        GraphModel(4) => MetaGraph( [Int(i) for i in grid2(Int(sqrt(size)))])
-        GraphModel(5) => MetaGraph( [Int(i) for i in Laplacians.star_graph(size)] )
-        GraphModel(6) => MetaGraph(barabasi_albert(size,k))
-        GraphModel(7) => MetaGraph(watts_strogatz(size,k,Β))
-        #GraphModel(8) => MetaGraph(stochastic_block_model())
-    end
-end
-
-"""
-    load the graph of the network to control
-"""
-
-function load_network_graph(graph::MetaGraph)
-    ntw = deepcopy(graph)
-    set_indexing_prop!(ntw,:eid)
-    return ntw
-end
-
-"""
-    load the graph of the control system
-"""
-
-function load_control_graph(graph::MetaGraph)
-    ntw = deepcopy(graph)
-    #indexing can't be done here because aid has not been assigned
-    #set_indexing_prop!(ntw,:aid)
-    return ntw
-end
-
 
 function get_control_agent(asset_id::Int,model)
     return model.mapping_ctl_ntw[asset_id]
@@ -220,8 +76,6 @@ function has_active_controlled_assets(agent::Agent,model)
     sum_up = sum([ is_up(getindex(model,sne)) for sne in assets ])
     return sum_up > 0 ? true : false
 end
-
-
 
 function set_control_agent!(asset_id::Int, agent_id::Int, model)
     getindex(model,asset_id).controller_id = agent_id
@@ -270,8 +124,6 @@ function soft_drop_node!(model)
     
 end
 
-
-
 function hard_drop_node(model)
     #-1 pick node to remove
     #0 on_switch event
@@ -303,46 +155,6 @@ function hard_drop_node(model)
     
 end
 
-function soft_remove_vertex!(g::AbstractGraph,dpn_id::Int)
-    
-    new_g = deepcopy(g)
-    nbs₀ = deepcopy(all_neighbors(new_g,dpn_id))
-
-    for nb in nbs₀
-        rem_edge!(new_g,dpn_id,nb)
-        rem_edge!(new_g,nb,dpn_id)
-    end
-    return new_g#
-end
-
-function remove_vertex(g::AbstractGraph,dpn_id::Int)
-    sm_g = sparse(g)
-    sm_new_g = spzeros((nv(g)-1),(nv(g)-1))
-    for i=1:nv(g)
-        for j=1:nv(g)
-            #log_info(" $i,$j value: $(sparse(ntw)[i,j])")
-                x,y =   i < dpn_id && j < dpn_id ? (i,j) : 
-                        i < dpn_id && j > dpn_id ? (i,j-1) : 
-                        i > dpn_id && j < dpn_id ? (i-1,j) : 
-                        i > dpn_id && j > dpn_id ? (i-1,j-1) : (0,0)
-                
-                if x > 0 && y > 0
-                    sm_new_g[x,y] = sm_g[i,j]
-                    sm_new_g[y,x] = sm_g[j,i]
-                end
-        end
-    end
-    #[i >=dpn_id ? labels[i] = i+1 : labels[i] = i  for i in keys(labels)]
-    return MetaGraph(sm_new_g)
-end
-
-function remove_vertices(g::AbstractGraph,dpn_ids::Array{Int})
-    new_g = g
-    for dpn_id in dpn_ids
-        new_g = remove_vertex!(new_g,dpn_id)
-    end
-    return new_g
-end
 """
 Given a SimNE id it returns its ntw node address.
 """
@@ -394,6 +206,7 @@ function do_agent_step!(a::SimNE,model)
     # log_info(model.ticks,a.id,"rqsted: $(a.requested_ctl)")
     # @debug("[$(model.ticks)]($(a.id)) end step")
     deteriorate!(a)
+    do_maintenance_step!(a,model)
 end
 
 function do_agent_step!(a::Agent,model)
@@ -456,260 +269,9 @@ function do_send_messages(a::Agent,model)
     end
 
 end
-
-# """
-#     Search for a given ntw host using local information available
-# """
-# function local_search(g::MetaGraph,tids::Array{Int},model)
-    
-#     #looking for node 5, i am 1, 
-#     # is in my local graph? what is goodness of each option?
-#     # if is in local graph -> unicast to node
-#     # if not, -> use pheromone to decide where to send msg, if not available then broadcast
-
-
-
-#     #local graph
-#     target = (0,0)
-#     # looks in ntw_graph it knows
-#     for tid in tids
-#         for v in vertices(g)
-#             eid = get_prop(g,v,:eid)
-#             if eid == tid
-#                 target = (v,eid)
-#                 #install rule in sne?
-#                 break
-#             end
-#         end
-#     end
-    
-#     # I found the controller, but that it might not mean they are connected in ntw
-
-#     return target
-    
-# end
-
-
 """
-Join two subgraphs assuming they are both part of a global graph.
-The id in the global graph is given by property :eid.
+Records benchmark for a query
 """
-function join_subgraphs(g1,g2)
-    gt = deepcopy(g1)
-    eqv = []
-    for v in vertices(g2)
-        
-        gv = g2[v,:eid]
-        
-        lv = to_local_vertex(gt,gv)
-
-        if lv == 0
-            add_vertex!(gt,:eid,gv)
-            push!(eqv,(v,nv(gt)))
-        else
-            push!(eqv,(lv,gv))
-        end
-    end
-
-    for e in edges(g2)
-        
-        
-
-        src_t = to_local_vertex(gt,g2[src(e),:eid])
-        dst_t = to_local_vertex(gt,g2[dst(e),:eid])
-        add_edge!(gt,src_t,dst_t)
-
-        
-        # add_edge!(gt,
-        #     first([last(x) for x in eqv if first(x) == src(e) ]),
-        #     first([last(x) for x in eqv if first(x) == dst(e) ]),
-        # )
-    end
-    return gt
-end
-
-#function (lg, predictions_traffic, predictions_rul)
-
-"""
-Search for a path between nodes s and d in the local graph lg
-It assumes property :eid of each vertex is global id of vertex
-"""
-
-function query_paths(lg,s,d)
-    ls = to_local_vertex(lg,s)
-    ld = to_local_vertex(lg,d)
-    paths = []
-    scores = []
-    result =   LightGraphs.YenState{Float64,Int64}(scores,paths)
-    
-    if ls > 0 && ld > 0
-            #slg = SimpleGraph(lg)
-            #return yen_k_shortest_paths(slg,ls,ld, weights(slg),2,Inf)
-            result = yen_k_shortest_paths(lg,ls,ld)
-    end
-    
-    #gvs = [ lg[v,:eid] for v in vertices(lg)]
-    #log_info("network contains: gvs: $gvs")
-    # log_info("query_path:  g v: $(vertices(lg)), s: $(s) - ls: $(ls), d: $d - ld $ld result ==> $(result)")
-    
-    
-    for path in result.paths
-        # path = !isempty(path) && typeof(path) == Array{Array{Int64,1},1} ? first(path) : path
-        #convert paths to global graph (eids)
-        cpath = [ lg[v,:eid] for v in path]
-        push!(paths,cpath)
-        push!(scores,score_path(cpath))
-    end
-
-    result =   LightGraphs.YenState{Float64,Int}(scores,paths)
-
-    return result
-end
-
-"""
-    It gives a score to the given path, initially only based on length of path
-"""
-function score_path(path)
-    return length(path)
-end
-
-"""
-    Local search receiving source and destination in a tuple
-"""
-function query_paths(lg,t)
-    query_paths(lg,t...)
-end
-
-
-"""
-    obtains local id of a vertex given its global id in property :eid
-"""
-function to_local_vertex(lg,gv)
-    lv = [ x for x=1:nv(lg) if lg[x,:eid] == gv]
-    return isempty(lv) ? 0 : first(lv)
-end
-
-"""
-obtains local id of a vertex given its global id in property in gid
-"""
-function to_local_vertex(lg,gv,gid::Symbol)
-    lv = [ x for x=1:nv(lg) if lg[x,gid] == gv]
-    return isempty(lv) ? 0 : first(lv)
-end
-
-"""
-Creates a subgraph (MetaGraph) for the given 
-adjacency matrix (m) and vector of equivalences (eqv).
-In eqv, every pair has the form: (lv,gv) where lv is the
-local vertex id and gv is the global vertex id.
-"""
-function create_subgraph(m,eqv)
-    g = MetaGraph(m)
-    for eq in eqv
-        set_props!(g,first(eq),Dict(:eid=>last(eq)))
-    end
-    set_indexing_prop!(g, :eid)
-    return g
-end
-
-
-"""
-Creates a subgraph (MetaGraph) for the given 
-edge list and vector of equivalences (eqv).
-In eqv, every pair has the form: (lv,gv) where lv is the
-local vertex id and gv is the global vertex id.
-"""
-function create_subgraph(egs,eqv,gid_prop)
-    #log_info("Creating subgraph egs: $(egs) and eqv: $eqv")
-    g = MetaGraph()
-    set_indexing_prop!(g, gid_prop)
-
-    #create vertices
-    n_v = max([ src(e) > dst(e) ? src(e) : dst(e) for e in egs]...)
-
-    for v=1:n_v
-        gid = last(first([ x for x in eqv if first(x) == v]))
-        add_vertex!(g,gid_prop,gid)
-    end
-
-    #create edges 
-
-    for e in egs
-        add_edge!(g,src(e),dst(e))
-        add_edge!(g,dst(e),src(e))
-    end
-
-    return g
-end
-
-#TODO: delete
-# for e in egs
-
-#     s_gid = last(first([ x for x in eqv if first(x) == src(e)]))
-    
-#     if !has_vertex(g,src(e))
-#         add_vertex!(g,gid_prop,gs)
-#     end
-
-#     d_gid = last(first([ x for x in eqv if first(x) == dst(e)]))
-    
-#     if !has_vertex(g,dst(e))
-#         add_vertex!(g,gid_prop,gd)
-#     end
-#     ls = to_local_vertex(g,gs)
-#     ld = to_local_vertex(g,gd)
-#     add_edge!(g,ls,ld)
-#     add_edge!(g,ld,ls)
-# end
-
-
-
-
-
-
-
-
-
-
-
-
-"""
-    Plots a subgraph that is part of a greater one
-    global ids in property :eid.
-"""
-function plot_subg(sg)
-    return graphplot(sg
-                    ,names = [ get_prop(sg,i,:eid) for i=1:nv(sg)]
-          )
-end
-
-function has_prop_vertex(value,g,prop)
-    gvs = [ g[v,prop] for v in vertices(g) ]
-    return value in gvs
-end
-
-
-"""
-    Ordering tuples of paths 
-    1: tick
-    2: score
-"""
-function isless_paths(a,b)
-    # return @match a,b begin
-    #     a[2] < b[2] 
-    # end
-
-    if a[2] == b[2]
-        return a[1] > b[1]
-    else
-        return a[2] < b[2]
-    end
-end
-
-"""
-    Records benchmark for a query
-"""
-
 function record_benchmark!(bdir,run_label,aid,query_time,query,query_graph,query_paths,benchmark)
     if benchmark 
         if !isdir(bdir)
@@ -757,17 +319,16 @@ function get_dropping_nodes(drop_proportion)
 end
 
 """
-    It returns the next event time for a given random number and rate of events
+It returns the next event time for a given random number and rate of events
 """
 function next_event_time(rn,λ)
     return -log(1.0-rn)/λ
 end
 
-
 """
-    return the times when random assets will fail
-    according to total sim time (N), quantity (q) of
-    assets and proportion. It receives also random 
+return the times when random assets will fail
+according to total sim time (N), quantity (q) of
+assets and proportion. It receives also random 
 """
 function get_dropping_times(seed,stabilisation_period,drop_proportion,q,N)
     Random.seed!(seed)
@@ -789,7 +350,7 @@ end
 
 function load_run_configs() 
     configs = []
-    for ctl_model in [GraphModel(5)]#, ControlModel(4) ] #instances(ControlModel)
+    for ctl_model in [GraphModel(7)]#, ControlModel(4) ] #instances(ControlModel)
         for ntw_topo in [GraphModel(6)]
             for size in [16]#, 50, 100]
                 for drop_proportion in [10]
@@ -807,7 +368,7 @@ function load_run_configs()
                             for Β in Βs
                                 for ctl_k in ctl_ks
                                     for ctl_Β in ctl_Βs
-                                        push!(configs,new_config(seed,ctl_model,ntw_topo,size,100,drop_proportion,1.0,false,true,k,Β,ctl_k,ctl_Β))
+                                        push!(configs,new_config(seed,ctl_model,ntw_topo,size,200,drop_proportion,1.0,false,true,k,Β,ctl_k,ctl_Β))
                                     end
                                 end
                             end
@@ -982,13 +543,13 @@ function to_string(s)
 end
 
 """
-    Return SNEs that are up
+Return SNEs that are up
 """
 function get_live_snes(model)
     return [ sne.id for sne in allagents(model) if typeof(sne) == SimNE && get_state(sne).up  ]
 end
 """
-    Return SNEs controlled by Agent a that are up
+Return SNEs controlled by Agent a that are up
 """
 function get_live_snes(a::Agent,model)
     controlled_snes = [ getindex(model,sid) for sid in get_controlled_assets(a.id,model)]

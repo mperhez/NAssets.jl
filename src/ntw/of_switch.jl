@@ -1,71 +1,5 @@
 #export NetworkAssetState, ModelState, ControlAgentState
 
-@enum Ofp_Event begin
-    EventOFPPortStatus
-end
-@enum Ofp_Protocol begin
-    OFPR_ACTION = 1
-    OFPPR_DELETE = 2
-    OFPR_ADD_FLOW = 3
-    OFPR_NO_MATCH = 4
-end
-@enum OFS_Action begin
-    OFS_Output = 1
-    OFS_Drop = 2
-end
-
-@enum AG_Protocol begin
-    QUERY_PATH = 1
-    MATCH_PATH = 2
-    NEW_NB = 3
-    NE_DOWN = 4
-end
-
-@enum MAINTENANCE_Action begin
-    MA_NONE = 0
-    MA_START = 1
-    MA_STOP = 2
-end
-
-
-
-#if has come from in_port and src, going to dst
-mutable struct MRule 
-    in_port::String
-    src::String
-    dst::String
-end
-
-mutable struct DPacket <: Packet
-    id::Int64
-    src::Int64
-    dst::Int64
-    size::Float64 # in bytes
-    time_sent::Int64
-    hop_limit::Int64
-end
-
-
-abstract type CTLMessage end
-
-mutable struct OFMessage <: CTLMessage
-    id::Int64
-    ticks::Int
-    dpid::Int # sender of msg,  aka SimNE.id aka switch.id
-    in_port::Int # (Optional) sender's input port, in SimNE to ControlAg comm, this is the port where the packet was received
-    reason::Ofp_Protocol
-    data::Any
-end
-
-mutable struct AGMessage <: CTLMessage
-    id::Int
-    ticks::Int
-    sid::Int # sender id
-    rid::Int # receiver id
-    reason::AG_Protocol # Type of msg as per enum
-    body::Dict{Symbol,Any}
-end
-
 
 function OFMessage(id::Int64,ticks::Int,dpid::Int,reason::Ofp_Protocol)
     return OFMessage(id,ticks,dpid,-1,reason,nothing)
@@ -85,83 +19,12 @@ function OFMessage(id::Int64,ticks::Int,dpid::Int,ofp::Ofp_Protocol,data::Int)
     return OFMessage(id,ticks,dpid,-1,ofp,data)
 end
 
-mutable struct OFEvent
-    msg::OFMessage    
-end
 
-
-mutable struct Flow 
-    dpid::Int64 # datapath id
-    match_rule::MRule
-    params::Vector{Any}
-    action::OFS_Action # out_port, TODO: Check if other actions are needed
-end
-
-
-# mutable struct NEStatistics 
-#     tick::Int64
-#     ne_id::Int64
-#     throughput_in::Float64
-#     throughput_out::Float64
-# end
-
-#State for which we need to save trajectory
-mutable struct NetworkAssetState <: State
-    ne_id::Int64
-    up::Bool
-    on_maintenance::Bool
-    port_edge_list::Vector{Tuple{Int64,String}}
-    in_pkt::Int64
-    out_pkt::Int64
-    drop_pkt::Int64
-    flow_table::Vector{Flow}
-    throughput_out::Dict{Int64,Float64} # link/port, value
-    # throughput_in::Float64
-    condition_ts::Array{Float64,1} # sensor data related to the condition of the asset
-    rul::Float64 # "real" rul
-    rul_e::Float64 # estimated rul
-    maintenance_due::Int64 #
-end
 
 function NetworkAssetState(ne_id::Int)
     NetworkAssetState(ne_id,true,false,Vector{Tuple{Int64,String}}(),0,0,0,Vector{Flow}(),Dict(),Array{Float64,1}(),0.0,0.0,0)
 end
 
-mutable struct ControlAgentState <: State
-    a_id::Int64
-    up::Bool
-    active_paths::Dict{Tuple{Int64,Int64},Array{Int64}}
-    in_ag_msg::Float64
-    out_ag_msg::Float64
-    in_of_msg::Float64
-    out_of_msg::Float64
-    q_queries::Float64
-    path_scores::Array{Tuple{Int64,Int64,Float64}}
-end
-
-
-
-
-"""
-    Control Agent
-"""
-mutable struct Agent <: SOAgent
-    id::Int64
-    pos::Int64
-    color::Symbol
-    size::Float16
-    pending::Vector{Tuple{Int64,OFMessage,Bool}} # <-time initially processed, ofmsg, reprocess in next tick?) reprocess only if a match is done
-    # key(src,dst): value(tick_found,confidence,score,path)
-    paths::Dict{Tuple{Int64,Int64},Array{Tuple{Int64,Float64,Float64,Array{Int64}}}} # pre-calculated paths for operation
-    state_trj::Vector{ControlAgentState}
-    msgs_links::Array{Vector{AGMessage},2}
-    msgs_in::Vector{AGMessage}
-    queue::Channel{OFMessage}
-    previous_queries::Dict{Tuple{Int64,Int64},Tuple{Int64,Array{Int64}}} # (src,dst):(tick last queried,[nb ag queried])
-    matched_queries::Dict{Tuple{Int64,Int64,Array{Int64}},Int64} 
-    ctl_paths::Vector{Array{Int64}}
-    params::Dict{Symbol,Any}
-end
 
 
 function Agent(id,nid,params)
@@ -170,25 +33,8 @@ function Agent(id,nid,params)
 end
 
 
-"""
-    Simulated Physical Network Element
-"""
-mutable struct SimNE <: SimAsset
-    id::Int64
-    pos::Int64
-    size::Float16
-    maintenance_action::MAINTENANCE_Action
-    queue::Channel{OFMessage} # 
-    pending::Vector{OFMessage}
-    requested_ctl::Dict{Tuple{Int64,Int64},Int64} # flows requested to controller: key{src,dst}:value{tick}
-    state_trj::Vector{NetworkAssetState}
-    one_way_time_pkt::Dict{Int64,Array{Int64}}
-    controller_id::Int64
-    eul::Int64 # Expected useful life. Standard manufacturer time-to-failure
-    params::Dict{Symbol,Any}
-end
-function SimNE(id,nid,params,max_q)
-    SimNE(id,nid,0.3,MAINTENANCE_Action(0),Channel{OFMessage}(max_q),Vector{OFMessage}(),Dict{Tuple{Int64,Int64},Int64}(),[NetworkAssetState(id)],Dict(),-1,0,params) #initialise SimNE with a placeholder in the controller
+function SimNE(id,nid,params,max_q,maintenance)
+    SimNE(id,nid,0.3,Channel{OFMessage}(max_q),Vector{OFMessage}(),Dict{Tuple{Int64,Int64},Int64}(),[NetworkAssetState(id)],Dict(),-1,maintenance,params) #initialise SimNE with a placeholder in the controller
 end
 
 

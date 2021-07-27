@@ -60,43 +60,6 @@ function load_custom_backbone(csv_file_v,csv_file_e)
 end
 
 """
-It generates subgraph for the vector of nodes passed. This is similar to egonet but it keeps custom indexes given in id_prop parameter.
-
-- g: graph
-- It receives vector of controlled assets (nodes)
-- id_prop: :eid (simNE) or :aid (agent)
-"""
-function get_subgraph(g,nodes,id_prop)
-    # calculate local subgraph for the underlying network
-    
-    nbs = []
-
-    for i=1:length(nodes)
-        # get vertex for node id (assumes only one)
-        v = first(filter(v->g[v,id_prop] == nodes[i],1:nv(g)))
-        
-        #subgraph
-        push!(nbs,[ g[j,id_prop] for j in neighbors(g,v)])
-        #push!(nbs,neighbors(g,nodes[i]))
-        push!(nbs,[nodes[i]])
-    end
-
-    nnbs = vcat(nbs...)
-    sub_g = deepcopy(g)
-    vs = [ sub_g[v,id_prop] for v in collect(vertices(sub_g))]
-    to_del = [v for v ∈ vs if v ∉ nnbs]
-   
-    for d in to_del
-        for v in collect(vertices(sub_g))
-            if !has_prop(sub_g,v,id_prop) || get_prop(sub_g,v,id_prop) == d
-                rem_vertex!(sub_g,v)
-            end
-        end
-    end
-    return sub_g
-end
-
-"""
     Create a packet using arguments
 """
 function create_pkt(src::Int64,dst::Int64,model)

@@ -18,9 +18,9 @@ using Statistics
 using Logging,LoggingExtras, LoggingFacilities
 using Dates,TimeZones
 
-csv_custom_nodes = "data/custom/metro-access/"*"nodes.csv"
-csv_custom_links = "data/custom/metro-access/"*"links.csv"
-shp_geo_uk = "data/uk/geo/"*"NUTS_UK_2018.shp"
+csv_custom_nodes = "/home/mep53/workspace/data/bt/metro-access/"*"nodes_t2_t3_150618_CutA.csv"
+csv_custom_links = "/home/mep53/workspace/data/bt/metro-access/"*"New21CNCoreTopology.csv"
+shp_geo_uk = "/home/mep53/workspace/uk/geo/"*"NUTS_UK_2018.shp"
 
 include("netManAbm.jl")
 loggers = Dict()

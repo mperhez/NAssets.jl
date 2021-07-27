@@ -36,10 +36,9 @@ function init_condition!(sne::SimNE,model::ABM)
     Random.seed!(model.seed)
     #get_random(model.seed,1)
     # TODO check heterogenous assets with different expected rul
-    sne.eul = 100 # For time being, always 100. 
     state = get_state(sne)
     #randomly initialize condition of sne
-    state.rul = rand((sne.eul-30):sne.eul,nv(model.ntw_graph))[sne.id]
+    state.rul = rand((sne.maintenance.eul-30):sne.maintenance.eul,nv(model.ntw_graph))[sne.id]
     #set maitenance due time
     state.maintenance_due = model.ticks + state.rul
     set_state!(sne,state)

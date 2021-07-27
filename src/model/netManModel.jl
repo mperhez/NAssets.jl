@@ -45,7 +45,10 @@ function initialize(args,user_props;grid_dims=(3,3),seed=0)
         :clear_cache_graph_freq => 25,#25, # How often the ntw graph is cleared to initial state, 0: no cache. A value of 10, is not enough in a 16 mesh network to find paths when queries are not repeated, prob_eq_query. Carefully, this should be higher than query cycle when prob_eq_queries_cycle = 0.
         :query_cycle => 10,#10,# # how long the max_eq_queries_cycle applies for
         :prob_eq_queries_cycle => 1,#0.7,#0.1,#1,#0.7, #base probability of processing equal queries within the same :query_cycle. 0 means won't process the same query within the query_cycle, 1: means will process always repeated queries regardless of query_cycle
-        :prob_random_walks =>  args[:prob_random_walks]# prob. of neighbour nodes to propagate query msgs.
+        :prob_random_walks =>  args[:prob_random_walks],# prob. of neighbour nodes to propagate query msgs.
+        :mnt_policy => 0,
+        :mnt_wc_duration => 10, #worst case duration
+        :mnt_bc_duration => 5  #best case duration
     )
     #For G6: 
     #prob_eq_queries_cycle: 0.2
@@ -86,8 +89,14 @@ function create_sim_asset_agents!(model)
         #next_fire = rand(0:0.2:model.:Τ)
         id = nextid(model)
         # @show i
+        
+        mnt = @match model.mnt_policy begin
+            1 => MaintenanceInfoPreventive(model)
+            2 => MaintenanceInfoPredictive(model)
+            _ => MaintenanceInfoCorrective(model)
+        end
         a = add_agent_pos!(
-                SimNE(id,i,a_params,10*model.pkt_per_tick),model
+                SimNE(id,i,a_params,10*model.pkt_per_tick,mnt),model
             )
         
         set_prop!(model.ntw_graph, id, :eid, id )
