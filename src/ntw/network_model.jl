@@ -107,3 +107,46 @@ function get_random_packets_to_process(seed,sequence,max_ppt)
     ppt_u = Int(round(max_ppt/10))   
     return get_random(seed,sequence,((max_ppt-(4*ppt_u)):ppt_u:max_ppt))
 end
+
+
+"""
+Rejoin node to network according to 
+- base_network
+- current_network
+- rejoining node id
+"""
+function rejoin_node!(model,rjn_id::Int64)
+    
+   base_g = model.base_ntw_graph 
+   g = model.ntw_graph
+   
+   nbs = neighbors(base_g,rjn_id)
+   lsnes = get_live_snes(model)
+   #those neighbour nodes that are up
+   sne_ids = intersect(nbs,lsnes)
+   
+   for sne_id in sne_ids
+       add_edge!(g,sne_id,rjn_id)
+       add_edge!(g,rjn_id,sne_id)
+       sne = getindex(model,sne_id)     
+       link_up!(sne,rjn_id,model)
+   end
+
+   rjn_ag = getindex(model,rjn_id)
+   set_up!(rjn_ag)
+   
+   #re init ports
+   nbs = all_neighbors(model.ntw_graph,get_address(rjn_ag.id,model.ntw_graph))
+    
+   push_ep_entry!(rjn_ag,(0,"h$(rjn_ag.id)")) # link to a host of the same id
+   
+   for i in 1:size(nbs,1)
+       push_ep_entry!(rjn_ag,(i,"s$(nbs[i])"))
+   end
+
+   #it simulates control detects sne up:
+   # when down, controller id is multiplied by -1, so we do the opposite now
+   aid = abs(get_control_agent(rjn_id,model))
+   a = getindex(model,aid)
+   controlled_sne_up!(a,rjn_id,sne_ids,model)
+end

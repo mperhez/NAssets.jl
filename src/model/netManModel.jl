@@ -21,6 +21,7 @@ function initialize(args,user_props;grid_dims=(3,3),seed=0)
         :pulses=>pulses,
         :Τ => args[:Τ], # Max time steps to fire
         :ΔΦ => args[:ΔΦ],
+        :base_ntw_graph => args[:ntw_graph], # initial graph for reference
         :ntw_graph => args[:ntw_graph],
         :ctl_graph => args[:ctl_graph],
         # :dropping_nodes=>args[:dropping_nodes],
@@ -59,13 +60,6 @@ function initialize(args,user_props;grid_dims=(3,3),seed=0)
     #prob_eq_queries_cycle: 0.82
     #clear_cache_graph_freq: 10
     #query_cycle: 10
-
-
-
-    #required for animation layout to be stable regardless of changes in nodes
-    if args[:animation]
-        default_props[:ntw_graph_anim] = args[:ntw_graph]
-    end
 
     Random.seed!(seed)
     props = merge(default_props,user_props)
@@ -196,7 +190,7 @@ function model_step!(model)
             do_agent_step!(a,model)
         end
     end
-    soft_drop_node!(model)
+    #trigger_random_node_drops(model)
     for a in allagents(model)
         pending_pkt_handler(a,model)
         clear_cache!(a,model)
@@ -285,6 +279,9 @@ function init_agents!(model)
     end
 end
 
+"""
+Initialise control agents
+"""
 function init_agent!(a::Agent,model)
 
     # log_info("Starting Agent $(a.id)")
@@ -329,6 +326,9 @@ function label_path(path)
     return (first(path),last(path),path)
 end
 
+"""
+Initialise sne agents
+"""
 function init_agent!(sne::SimNE,model)
     #print("Initialisation of SimNE agent $(a.id)")
     nbs = all_neighbors(model.ntw_graph,get_address(sne.id,model.ntw_graph))

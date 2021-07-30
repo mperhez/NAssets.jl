@@ -173,7 +173,7 @@ function create_subgraph(egs,eqv,gid_prop)
     return g
 end
 
-function soft_remove_vertex!(g::AbstractGraph,dpn_id::Int)
+function soft_remove_vertex(g::AbstractGraph,dpn_id::Int)
     
     new_g = deepcopy(g)
     nbs₀ = deepcopy(all_neighbors(new_g,dpn_id))
@@ -213,6 +213,26 @@ function remove_vertices(g::AbstractGraph,dpn_ids::Array{Int})
     end
     return new_g
 end
+
+"""
+Add edges between the local vertex lv and the list of gids (global ids passed) using property gid
+"""
+function add_edges_gids(g,lv,nbs_gids,gid)
+    nb_lvs = []
+    for v in vertices(g)
+        if g[v,gid] in nbs_gids
+            push!(nb_lvs,v)
+        end
+    end
+
+    for nb in nb_lvs
+        add_edge!(g,lv,nb)
+    end
+    
+    return g
+end
+
+
 """
 Get underlying graph
 """

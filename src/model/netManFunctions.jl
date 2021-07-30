@@ -1,58 +1,3 @@
-# function update_neighbours(agent,model)
-#     neighbours = space_neighbors(agent,model,1)
-#     for n in neighbours
-#         ag_n = find_agent(n,model)
-#         push!(ag_n.inbox,agent.id)
-#     end
-# end
-
-# """
-# Agent processes pulses "observed"/"received" from neighbors
-# """
-# function process_pulses(agent,model)
-#     if agent.phase < model.:Τ
-#         agent.phase = round(agent.phase + 0.1,digits=2)
-#     else
-#         agent.phase = round(agent.phase - model.:Τ,digits=2)
-#     end
-
-#     if !isempty(agent.inbox)
-#         if length(agent.inbox) > agent.maxN
-#             agent.phase = round(min(model.:Τ,agent.phase+model.:ΔΦ),digits=2)
-#             agent.maxN = length(agent.inbox)
-#         elseif length(agent.inbox) == agent.maxN &&
-#                 maximum(agent.inbox) > agent.maxId
-#             agent.phase = round(min(model.:Τ,agent.phase+model.:ΔΦ),digits=2)
-#             agent.maxId = maximum(agent.inbox)
-#         end
-#     end
-# agent.inbox = []
-# end
-
-
-# function pulse_received(pulses,strategy)
-#     return if length(pulses) > 1
-#         @match strategy begin
-#         :NEAR  =>
-#                 # This seems the most sensible, as all are received simoultaneosuly
-#                 # intensity (greater distance less intensity)
-#                 last(sort(pulses,by=x->x[2]))
-#         :MIXED =>
-#                 #intensity and fraction of time step (distance * index)
-#                 #TODO review: as intensity distance may need to be reversed and then multiplied
-#                 # by index, then get the first.
-#                 last(sort(pulses,by=x->findfirst(isequal(x),pulses)*x[2]))
-#         _     =>
-#                 #FIFO
-#                 first(pulses)
-#         end
-#     elseif isempty(pulses)
-#         Nothing
-#     else
-#         first(pulses)
-#     end
-# end
-
 """
 Find agent in the model given the id
 """
@@ -82,77 +27,6 @@ function set_control_agent!(asset_id::Int, agent_id::Int, model)
     #TODO Consider removing this line below
     #To avoid putting info in model
     model.mapping_ctl_ntw[asset_id] = agent_id
-end
-
-function soft_drop_node!(model)
-    #-1 pick node to remove
-    #0 on_switch event
-    #1remove from network
-    #2in controller: update topology and paths
-    #in switch detect path/port not available and ask controller
-    
-    if model.ticks in model.dropping_times
-        #get ids of nodes that are part of active flows
-        active_ids =  unique(vcat([ af[3]==f_S ? [af[2]] : af[3]==f_E ? [af[1]] : [af[1],af[2]] for af in get_state(model).active_flows if af[3]!=f_SE ]...)) 
-
-        #pick one random node
-        dpn_id = !isempty(active_ids) ? rand(active_ids) : rand(get_live_snes(model))
-
-        #for testing only
-        dpns_test = [5,9]#[3,10,13]
-        dpn_id = rand([ sid for sid in dpns_test if get_state(getindex(model,sid)).up  ])
-
-        log_info(model.ticks,"Removing ntw node: $dpn_id...")
-        g = model.ntw_graph
-        dpn_ag = getindex(model,dpn_id)
-        set_down!(dpn_ag)
-        log_info(model.ticks," All neighbours of $dpn_id are: $(all_neighbors(model.ntw_graph,get_address(dpn_id,g))) ")
-        for nb in all_neighbors(model.ntw_graph,get_address(dpn_id,g))
-            sne = getindex(model,get_eid(nb,model))
-            link_down!(sne,dpn_id,model)
-        end
-        
-        #it simulates control detects sne down:
-        aid = get_control_agent(dpn_id,model)
-        a = getindex(model,aid)
-        controlled_sne_down!(a,dpn_id,model)
-
-        #soft remove 
-        model.ntw_graph = soft_remove_vertex!(g,get_address(dpn_id,g))
-        
-    end
-    
-end
-
-function hard_drop_node(model)
-    #-1 pick node to remove
-    #0 on_switch event
-    #1remove from network
-    #2in controller: update topology and paths
-    #in switch detect path/port not available and ask controller
-
-    dpn_ids = [3] # dropping node id
-    dpt = 80 # dropping time
-
-    if model.ticks == dpt
-
-        for dpn_id in dpn_ids
-            for nb in all_neighbors(model.ntw_graph,get_address(dpn_id,model.ntw_graph))
-                link_down!(get_eid(nb,model),dpn_id,model)
-            end
-            #remove 
-            dpn_ag = getindex(model,dpn_id)
-            #kill_agent!(dpn_ag,model)
-            set_down!(dpn_ag)
-            delete!(model.mapping_ctl_ntw,dpn_id)
-            #remove_vertices!(model.ntw_graph,[get_address(i,model) for i in dpn_ids])
-            model.ntw_graph = remove_vertex(model.ntw_graph,get_address(dpn_id,model.ntw_graph))
-            update_addresses_removal!(dpn_id,model)
-        end
-        
-        
-    end
-    
 end
 
 """
@@ -205,7 +79,7 @@ function do_agent_step!(a::SimNE,model)
     
     # log_info(model.ticks,a.id,"rqsted: $(a.requested_ctl)")
     # @debug("[$(model.ticks)]($(a.id)) end step")
-    deteriorate!(a)
+    deteriorate!(a,model)
     do_maintenance_step!(a,model)
 end
 
@@ -350,8 +224,8 @@ end
 
 function load_run_configs() 
     configs = []
-    for ctl_model in [GraphModel(7)]#, ControlModel(4) ] #instances(ControlModel)
-        for ntw_topo in [GraphModel(6)]
+    for ctl_model in [GraphModel(1)]#, ControlModel(4) ] #instances(ControlModel)
+        for ntw_topo in [GraphModel(4)] #6
             for size in [16]#, 50, 100]
                 for drop_proportion in [10]
                     for seed in [123]

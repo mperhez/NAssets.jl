@@ -111,7 +111,7 @@ function plot_asset_networks(model;kwargs...)
     edge_width_dict = Dict()
     edge_style_dict = Dict()
 
-    for e in edges(model.ntw_graph_anim)
+    for e in edges(model.base_ntw_graph)
         if model.ticks > 0
             if is_active_flow((e.src,e.dst),model)
                 edge_color_dict[(e.src,e.dst)] = :green
@@ -134,7 +134,7 @@ function plot_asset_networks(model;kwargs...)
     ruls = [80,90,75,95,62,85,75,90,68,80,70,82,68,72,64,80]
     log_info(model.ticks," RULs: $(ruls)")
     ntw_p = graphplot(
-        model.ntw_graph_anim
+        model.base_ntw_graph
         ,names = [get_eid(i,model) for i=1:nv(model.ntw_graph)]
         , method = method
         ,size=(300,200)
@@ -176,7 +176,7 @@ function plot_throughput(model;kwargs...)
         sne = getindex(model,get_eid(i,model))
         #tpt_v = get_throughput_up(sne,model)
         tpt_v = get_throughput_trj(sne)
-        log_info(model.ticks,sne.id,"==> tpt_trj: $tpt_v")
+        # log_info(model.ticks,sne.id,"==> tpt_trj: $tpt_v")
         tpt_p = Plots.plot!(tpt_p,tpt_v
         ,xlims=[0,model.N]
         , linealpha=0.5

@@ -1,7 +1,28 @@
 """
+Removes asset node (sne) from the network
+"""
+function drop_node!(sne::SimNE,model::ABM)
+    set_down!(sne)
+    g = model.ntw_graph
+    log_info(model.ticks," All neighbours of $(sne.id) are: $(all_neighbors(model.ntw_graph,get_address(sne.id,g))) ")
+    for nb in all_neighbors(model.ntw_graph,get_address(sne.id,g))
+       sne_nb = getindex(model,get_eid(nb,model))
+       link_down!(sne_nb,sne.id,model)
+    end
+       
+    #it simulates control detects sne down:
+    aid = get_control_agent(sne.id,model)
+    a = getindex(model,aid)
+    controlled_sne_down!(a,sne.id,model)
+
+    #soft remove 
+    model.ntw_graph = soft_remove_vertex(g,get_address(sne.id,g))
+end
+
+"""
    Function to deteriorate a network element
 """
-function deteriorate!(sne::SimNE)
+function deteriorate!(sne::SimNE,model::ABM)
     state = get_state(sne)
     if state.up
         # if sne.id == 5
@@ -10,9 +31,8 @@ function deteriorate!(sne::SimNE)
             state.rul = state.rul - 1
         # end
 
-        if state.rul <= 0
-            state.up = false
-            #state.rul = 100
+        if state.rul == 0
+            drop_node!(sne,model)
         end
     end
 end
@@ -38,7 +58,8 @@ function init_condition!(sne::SimNE,model::ABM)
     # TODO check heterogenous assets with different expected rul
     state = get_state(sne)
     #randomly initialize condition of sne
-    state.rul = rand((sne.maintenance.eul-30):sne.maintenance.eul,nv(model.ntw_graph))[sne.id]
+    # state.rul = rand((sne.maintenance.eul-30):sne.maintenance.eul,nv(model.ntw_graph))[sne.id]
+    state.rul = rand(50:100,nv(model.ntw_graph))[sne.id]
     #set maitenance due time
     state.maintenance_due = model.ticks + state.rul
     set_state!(sne,state)

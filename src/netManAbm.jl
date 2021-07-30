@@ -2,7 +2,8 @@
 include("core/core_structs.jl")
 #graph-related
 include("core/graph_functions.jl")
-
+#events
+include("eve/artificial_events.jl")
 #various util functions
 include("utils/util_functions.jl")
 #logging

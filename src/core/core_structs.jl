@@ -85,13 +85,15 @@ end
 
 
 @enum Ofp_Event begin
-    EventOFPPortStatus
+    EventOFPPortStatusDown=1
+    EventOFPPortStatusUp=2
 end
 @enum Ofp_Protocol begin
     OFPR_ACTION = 1
     OFPPR_DELETE = 2
     OFPR_ADD_FLOW = 3
     OFPR_NO_MATCH = 4
+    OFPPR_JOIN = 5
 end
 @enum OFS_Action begin
     OFS_Output = 1

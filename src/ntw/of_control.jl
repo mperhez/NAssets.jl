@@ -78,7 +78,7 @@ end
 
 function process_msg!(a::Agent,msg::OFMessage,model)
 
-    
+    log_info(model.ticks,a.id,"===>Message from sne: $(msg)")
   
     @match msg.reason begin
         Ofp_Protocol(1) =>  
@@ -97,8 +97,12 @@ function process_msg!(a::Agent,msg::OFMessage,model)
 
                                 # log_info(model.ticks,a.id,"AFTER port_delete -> $msg ==>  $(get_state(sne_print).flow_table) ===> all ports: $(get_port_edge_list(sne_print))")
                             end
+        Ofp_Protocol(5) => begin
+                                node_rejoin_handler(a,msg,model)
+                           end
+
         _ => begin
-            log_info("[$(model.ticks)]($(a.id)) -> match default")
+            log_info("[$(model.ticks)]($(a.id)) -> match default!")
             end
     end
 
@@ -206,6 +210,16 @@ function set_down!(a::Agent)
     state.up = false
     set_state!(a,state)
 end
+
+"""
+Set controller agent up
+"""
+function set_up!(a::Agent)
+    state = get_state(a)
+    state.up = true
+    set_state!(a,state)
+end
+
 """
     It processes OF msg sent by controlled NE  to
     remove a given port from its graph
@@ -228,6 +242,38 @@ function port_delete_handler(a::Agent,msg::OFMessage,model)
     # end
 #flows involving this NE should have been deleted at NE 
 end
+
+function node_rejoin_handler(a,msg,model)
+   #update local graph
+    src = first(msg.data)
+    dst = last(msg.data)
+    lvc_s = to_local_vertex(a.params[:ntw_graph],src)
+    lvc_d = to_local_vertex(a.params[:ntw_graph],dst)
+    lvb_s = to_local_vertex(a.params[:base_ntw_graph],src)
+    lvb_d = to_local_vertex(a.params[:base_ntw_graph],dst)
+
+    if lvb_s > 0 && lvb_d > 0
+        if !has_edge(a.params[:base_ntw_graph],lvb_s,lvb_d)
+            add_edge!(a.params[:base_ntw_graph],lvb_s,lvb_d)
+        end
+        if !has_edge(a.params[:base_ntw_graph],lvb_d,lvb_s)
+            add_edge!(a.params[:base_ntw_graph],lvb_d,lvb_s)
+        end
+    end
+    if lvc_s > 0 && lvc_d > 0
+        if !has_edge(a.params[:ntw_graph],lvc_s,lvc_d)
+            add_edge!(a.params[:ntw_graph],lvc_s,lvc_d)
+        end
+        if !has_edge(a.params[:ntw_graph],lvc_d,lvc_s)
+            add_edge!(a.params[:ntw_graph],lvc_d,lvc_s)
+        end
+    end
+
+    #trigger update paths
+log_info(model.ticks,a.id,"Existing paths: $(a.paths)")
+log_info(model.ticks,a.id,"rejoin msg received: $(msg)")
+end
+
 
 """
 Check confindence of a path

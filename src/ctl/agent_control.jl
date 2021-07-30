@@ -137,9 +137,10 @@ end
 function process_msg!(a::Agent,msg::AGMessage,model)
     #log_info(model.ticks,a.id,18,"->processing $(msg)")
     
-    # if model.ticks == 83
-    #     log_info(model.ticks,a.id,"--> is_up? $(get_state(a).up) -- > Processing AG msg: $msg ")
-    # end
+    if model.ticks >= 41
+         log_info(model.ticks,a.id,"--> is_up? $(get_state(a).up) -- > Processing AG msg: $msg ")
+    end
+
     @match msg.reason begin
         AG_Protocol(1) => 
                         #Query coming from other agent
@@ -154,7 +155,7 @@ function process_msg!(a::Agent,msg::AGMessage,model)
                         do_ne_down(a,msg,model)
                      
         _ => begin
-                log_info("[$(model.ticks)]($(a.id)) -> match default")
+                log_info("[$(model.ticks)]($(a.id)) -> match default!!")
             end
     end
 
@@ -199,16 +200,63 @@ end
 
 function controlled_sne_down!(a::Agent,dpn_id::Int,model)
     
-    set_control_agent!(dpn_id,0,model)
+    set_control_agent!(dpn_id,a.id*-1,model)
     # init_agent!(a,model)
     if isempty(get_live_snes(a,model))
         s = get_state(a)
         s.up = false
         set_state!(a,s)
     end
+    
+    log_info(model.ticks,a.id,"Removing node $dpn_id ...")
+    log_info(model.ticks,a.id,"Local base graph: $(sparse(a.params[:base_ntw_graph]))")
+    log_info(model.ticks,a.id,"Local ntw graph: $(sparse(a.params[:ntw_graph]))")
 
+    lvb = to_local_vertex(a.params[:base_ntw_graph],dpn_id)
+    lvc = to_local_vertex(a.params[:ntw_graph],dpn_id)
+    a.params[:base_ntw_graph] = soft_remove_vertex(a.params[:base_ntw_graph],lvb)
+    a.params[:ntw_graph] = soft_remove_vertex(a.params[:ntw_graph],lvc)
+
+    log_info(model.ticks,a.id,"Removed node $dpn_id ...")
+    log_info(model.ticks,a.id,"Local base graph: $(sparse(a.params[:base_ntw_graph]))")
+    log_info(model.ticks,a.id,"Local ntw graph: $(sparse(a.params[:ntw_graph]))")
     #TODO implement when a control agent is down too
     # do_drop!(msg,a,model)
+end
+
+"""
+ It simulates a NE-controller link up
+ In reality this is the routine that checks heartbeats 
+ from controlled NEs.
+"""
+
+function controlled_sne_up!(a::Agent,rjn_id::Int,live_nbs::Array{Int64},model::ABM)
+    
+    set_control_agent!(rjn_id,a.id,model)
+
+    if !is_up(a)
+        set_up!(a)
+    end
+
+    lvb = to_local_vertex(a.params[:base_ntw_graph],rjn_id)
+    lvc = to_local_vertex(a.params[:ntw_graph],rjn_id)
+    # add_vertex!(a.params[:base_ntw_graph])
+    # add_vertex!(a.params[:ntw_graph])
+    
+    # set_prop!(a.params[:base_ntw_graph],nv(a.params[:base_ntw_graph]),:eid,rjn_id)
+    # set_prop!(a.params[:ntw_graph],nv(a.params[:ntw_graph]),:eid,rjn_id)
+
+    #just added vertices, last id
+    # lvb = nv(a.params[:base_ntw_graph])
+    # lvc = nv(a.params[:ntw_graph])
+
+    a.params[:base_ntw_graph] = add_edges_gids(a.params[:base_ntw_graph],lvb,live_nbs,:eid)
+    a.params[:ntw_graph] = add_edges_gids(a.params[:ntw_graph],lvc,live_nbs,:eid)
+
+
+    # log_info(model.ticks,a.id,"Detecting node rejoining $rjn_id")
+    # log_info(model.ticks,a.id,"Local base graph: $(sparse(a.params[:base_ntw_graph]))")
+    # log_info(model.ticks,a.id,"Local ntw graph: $(sparse(a.params[:ntw_graph]))")
 end
 
 function get_state(a::Agent)::State
@@ -281,6 +329,7 @@ end
     It removes a dropped sne node from local paths and graph
 """
 function remove_drop_sne!(a::Agent,dpid::Int64,drop_time::Int64)
+    log_info(drop_time,a.id,"Existing paths: $(a.paths)")
     new_paths_dict = Dict()
     #delete pre-computed paths containing dropping node
     for path_k in keys(a.paths)
@@ -308,10 +357,10 @@ function remove_drop_sne!(a::Agent,dpid::Int64,drop_time::Int64)
    log_info(drop_time,a.id," Removing dpid: $dpid from local base: $lvb --- local curr: $lvc")
 
    if lvb != 0
-    a.params[:base_ntw_graph] = soft_remove_vertex!(a.params[:base_ntw_graph],lvb)
+    a.params[:base_ntw_graph] = soft_remove_vertex(a.params[:base_ntw_graph],lvb)
    end
    if lvc != 0
-        a.params[:ntw_graph] = soft_remove_vertex!(a.params[:ntw_graph],lvc)
+        a.params[:ntw_graph] = soft_remove_vertex(a.params[:ntw_graph],lvc)
    end
 
    state = get_state(a)

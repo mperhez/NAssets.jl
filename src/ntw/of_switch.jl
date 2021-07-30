@@ -19,6 +19,13 @@ function OFMessage(id::Int64,ticks::Int,dpid::Int,ofp::Ofp_Protocol,data::Int)
     return OFMessage(id,ticks,dpid,-1,ofp,data)
 end
 
+"""
+    Message with pair in data
+"""
+function OFMessage(id::Int64,ticks::Int,dpid::Int,ofp::Ofp_Protocol,data::Tuple{Int64,Int64})
+    return OFMessage(id,ticks,dpid,-1,ofp,data)
+end
+
 
 
 function NetworkAssetState(ne_id::Int)
@@ -292,18 +299,39 @@ function link_down!(sne::SimNE,dpn_id::Int,model)
     set_port_edge_list!(sne,new_port_edge_list)
     controller = getindex(model,sne.controller_id)
     log_info(model.ticks,sne.id,"Triggering event to ag: $(sne.controller_id) for dpn_id: $dpn_id ")
-    trigger_of_event!(model.ticks,controller,dpn_id,EventOFPPortStatus,model)
+    trigger_of_event!(model.ticks,controller,dpn_id,Ofp_Event(1),model)
     log_info(model.ticks,sne.id,"AFTER link down start $dpn_id - all ports: $(get_port_edge_list(sne))")
 end
 
 """
-A controller agent is notified of an event happening in the controlled element
+It simulates operations happening in a network asset
+when the link corresponding to the given rjn_id rejoins. sne is up and node re-joining is rjn_id.
 """
-function trigger_of_event!(ticks::Int,a::Agent,eid::Int,ev_type::Ofp_Event,model)
-    msg = @match ev_type begin
-        EventOFPPortStatus =>
-                            OFMessage(next_ofmid!(model),ticks,a.id,OFPPR_DELETE,eid)
+function link_up!(sne::SimNE,rjn_id::Int,model)
+    #add to the list of ports
+    nbs = all_neighbors(model.ntw_graph,get_address(sne.id,model.ntw_graph))
+    #save original port number
+    for i in 1:size(nbs,1)
+        if nbs[i] == rjn_id
+            push_ep_entry!(sne,(i,"s$(nbs[i])"))
+        end
     end
+    controller = getindex(model,sne.controller_id)
+    #simulates controller detects port up
+    trigger_of_event!(model.ticks,controller,(sne.id,rjn_id),Ofp_Event(2),model)   
+end
+
+"""
+A controller agent is notified of an event happening in the controlled element
+
+"""
+function trigger_of_event!(ticks::Int,a::Agent,ev_data,ev_type::Ofp_Event,model)
+    msg = @match ev_type begin
+        Ofp_Event(1) =>
+                            OFMessage(next_ofmid!(model),ticks,a.id,OFPPR_DELETE,ev_data)
+        Ofp_Event(2) => OFMessage(next_ofmid!(model),ticks,a.id,OFPPR_JOIN,ev_data)
+    end
+    log_info(model.ticks,a.id,"Triggering event: $(msg)")
     push_msg!(a,msg)
 end
 
@@ -361,6 +389,12 @@ function set_down!(sne::SimNE)
     state.in_pkt = 0
     state.out_pkt  = 0
     state.port_edge_list = []
+    set_state!(sne,state)
+end
+
+function set_up!(sne::SimNE)
+    state = get_state(sne)
+    state.up = true
     set_state!(sne,state)
 end
 

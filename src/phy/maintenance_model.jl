@@ -36,7 +36,7 @@ function do_corrective_man(sne::SimNE)
 end
 
 """
-It triggers maitenance on due date assuming is before the asset breakdown
+It triggers maintenance on due date assuming is before the asset breakdown
 """
 function do_preventive_man(sne::SimNE,model::ABM)
     state = get_state(sne)
@@ -63,13 +63,15 @@ function start_mnt!(sne::SimNE,time_start::Int64)
 end
 
 function stop_mnt!(sne::SimNE,model::ABM)
-    log_info("Stopping maintenance for $(sne.id)...")
+    log_info(model.ticks,sne.id,"Stopping maintenance for $(nv(model.ntw_graph))...")
+    rejoin_node!(model,sne.id)
     state = get_state(sne)
-    state.up = true
     state.on_maintenance = false
+    state.rul = sne.maintenance.eul
     state.maintenance_due = sne.maintenance.job_start + sne.maintenance.duration + sne.maintenance.eul - sne.maintenance.threshold
     sne.maintenance.job_start = -1
     set_state!(sne,state)
+    log_info(model.ticks,sne.id,"Stopped maintenance for $(nv(model.ntw_graph))...")
 end
 
 
@@ -96,7 +98,7 @@ function do_maintenance_step!(sne::SimNE,model::ABM)
       start_mnt!(sne,model.ticks)
    end
    if sne.maintenance.job_start > 0 && sne.maintenance.job_start + sne.maintenance.duration == model.ticks
-      stop_mnt!(sne)
+      stop_mnt!(sne,model)
    end
 end
 
