@@ -424,3 +424,13 @@ $RECYCLE.BIN/
 #### token
 
 *.git_token
+
+## vscode
+
+.vscode
+.devcontainer
+*.code-workspace
+
+##temporary animations
+
+*.gif

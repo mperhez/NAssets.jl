@@ -74,7 +74,7 @@ function single_run_with_file_logging(config)
 end
 
 data_dir = "data/"
-plots_dir = "plots"
+plots_dir = "plots/"
 BenchmarkTools.DEFAULT_PARAMETERS.samples = 100
 configs = load_run_configs()
 #Logging.disable_logging(Logging.Info)
