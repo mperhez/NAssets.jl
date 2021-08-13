@@ -66,7 +66,9 @@ function initialize(args,user_props;grid_dims=(3,3),seed=0)
     #space = GridSpace(grid_dims, moore=true)
     space = GraphSpace(props[:ntw_graph])
     agent_types = Union{SimNE,Agent}
-    model = ABM(agent_types, space; scheduler = random_activation, properties = props)
+    model = ABM(agent_types, space; 
+    scheduler = Schedulers.randomly #random_activation
+    , properties = props)
     init_model!(model)
     #create 
     create_agents!(model)
