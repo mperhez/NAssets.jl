@@ -110,6 +110,7 @@ function plot_asset_networks(model;kwargs...)
     edge_color_dict = Dict()
     edge_width_dict = Dict()
     edge_style_dict = Dict()
+    node_color_dict = Dict()
 
     for e in edges(model.base_ntw_graph)
         if model.ticks > 0
@@ -131,18 +132,27 @@ function plot_asset_networks(model;kwargs...)
     end
     #[ condition_color[get_state(getindex(model,i)).rul] for i in 1:nv(model.ntw_graph)]
     ruls = [ Int(round(get_state(getindex(model,i)).rul)) for i in 1:nv(model.ntw_graph)]
+    #condition_color[ruls[i]]
+    ruls = vcat(ruls[nv(model.ntw_graph)÷2+1:nv(model.ntw_graph)],ruls[1:nv(model.ntw_graph)÷2])
+    node_colors = [ ruls[i] > 0 ? condition_color[ruls[i]] : :gray for i=1:nv(model.ntw_graph) ] 
+    #node_colors = [:red, :yellow, :black, :blue, :purple, :indigo, :pink, :olive, :gold4, :chocolate1, :gray, :magenta, :tomato4, :ivory1, :navajowhite2, :maroon]
+    # for n in nv(model.ntw_graph)
+    #     node_color_dict[n] =  ruls[n] > 0 ? condition_color[ruls[n]] : :gray 
+    # end
     #adjust to array index
-    ruls .+= 1
+    # ruls .+= 1
     log_info(model.ticks," RULs: $(ruls)")
+    log_info(model.ticks," Node Colors: $(node_colors)")
     ntw_p = graphplot(
         model.base_ntw_graph
-        ,names = [get_eid(i,model) for i=1:nv(model.ntw_graph)]
+        ,names = [get_eid(i,model) for i=1:nv(model.ntw_graph)] #[ i for i in ruls ]
         , method = method
         ,size=(300,200)
         ,dpi=400
         ,node_weights = [ get_eid(i,model) > 9 ? 1 : 10 for i in 1:nv(model.ntw_graph)]  #[ i > 9 ? 1 : 10 for i in 1:nv(model.ntw_graph)]
         ,nodeshape = :hexagon
-        ,nodecolor = [ condition_color[i] for i in ruls ]
+        ,nodecolor = node_colors
+        #,nodecolor = node_color_dict
         # ,nodecolor = [ is_up(getindex(model,get_eid(i,model))) ? :lightgray : :red for i in 1:nv(model.ntw_graph) ]
         # ,markerstrokecolor = :dimgray
         ,edgecolor= edge_color_dict
