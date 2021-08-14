@@ -103,8 +103,8 @@ function plot_asset_networks(model;kwargs...)
     
     nsize = 0.2
     lwidth = 0.5
-    condition_color = cgrad([:red, :yellow, :green],collect(0.01:0.01:1))
-    method = :circular #model.ntw_model == GraphModel(4) ? :stress : :circular
+    condition_color = cgrad([:red, :yellow, :green],collect(0.00:0.01:1))
+    method = model.ntw_model == GraphModel(4) ? :stress : :circular
     Random.seed!(model.seed)
 
     edge_color_dict = Dict()
@@ -131,7 +131,8 @@ function plot_asset_networks(model;kwargs...)
     end
     #[ condition_color[get_state(getindex(model,i)).rul] for i in 1:nv(model.ntw_graph)]
     ruls = [ Int(round(get_state(getindex(model,i)).rul)) for i in 1:nv(model.ntw_graph)]
-    ruls = [80,90,75,95,62,85,75,90,68,80,70,82,68,72,64,80]
+    #adjust to array index
+    ruls .+= 1
     log_info(model.ticks," RULs: $(ruls)")
     ntw_p = graphplot(
         model.base_ntw_graph
