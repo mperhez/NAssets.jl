@@ -136,7 +136,7 @@ function plot_asset_networks(model;kwargs...)
     # rearrange ruls splitting array in 2 and starting with second half to match plotting algorithms, IDKW.   
     ruls = vcat(ruls[nv(model.ntw_graph)÷2+1:nv(model.ntw_graph)],ruls[1:nv(model.ntw_graph)÷2])
 
-    node_colors = [ ruls[i] > 0 ? condition_color[ruls[i]] : :gray for i=1:nv(model.ntw_graph) ] 
+    node_colors = [ ruls[i] > 0 ? condition_color[ruls[i]] : :lightgray for i=1:nv(model.ntw_graph) ] 
     # log_info(model.ticks," RULs: $(ruls)")
     ntw_p = graphplot(
         model.base_ntw_graph
@@ -147,8 +147,6 @@ function plot_asset_networks(model;kwargs...)
         ,node_weights = [ get_eid(i,model) > 9 ? 1 : 10 for i in 1:nv(model.ntw_graph)]  #[ i > 9 ? 1 : 10 for i in 1:nv(model.ntw_graph)]
         ,nodeshape = :hexagon
         ,nodecolor = node_colors
-        #,nodecolor = node_color_dict
-        # ,nodecolor = [ is_up(getindex(model,get_eid(i,model))) ? :lightgray : :red for i in 1:nv(model.ntw_graph) ]
         # ,markerstrokecolor = :dimgray
         ,edgecolor= edge_color_dict
         ,edgewidth= edge_width_dict
