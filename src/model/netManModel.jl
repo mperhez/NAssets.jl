@@ -47,7 +47,7 @@ function initialize(args,user_props;grid_dims=(3,3),seed=0)
         :query_cycle => 10,#10,# # how long the max_eq_queries_cycle applies for
         :prob_eq_queries_cycle => 1,#0.7,#0.1,#1,#0.7, #base probability of processing equal queries within the same :query_cycle. 0 means won't process the same query within the query_cycle, 1: means will process always repeated queries regardless of query_cycle
         :prob_random_walks =>  args[:prob_random_walks],# prob. of neighbour nodes to propagate query msgs.
-        :mnt_policy => 0,
+        :mnt_policy => args[:mnt_policy],
         :mnt_wc_duration => 10, #worst case duration
         :mnt_bc_duration => 5  #best case duration
     )

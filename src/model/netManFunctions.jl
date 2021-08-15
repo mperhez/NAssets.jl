@@ -161,7 +161,7 @@ end
 
 ## main functions
 
-new_config(seed,ctl_model,ntw_topo,size,n_steps,drop_proportion,prob_random_walks,benchmark, animation,k,Β,ctl_k,ctl_Β) =
+new_config(seed,ctl_model,ntw_topo,size,n_steps,drop_proportion,prob_random_walks,benchmark, animation,k,Β,ctl_k,ctl_Β,mnt_policy) =
     return ( seed = seed
             ,ctl_model=ctl_model
             ,ntw_topo = ntw_topo
@@ -177,6 +177,7 @@ new_config(seed,ctl_model,ntw_topo,size,n_steps,drop_proportion,prob_random_walk
             ,ctl_Β = ctl_Β
             ,custom_topo = nothing
             ,ctl_custom_topo = nothing
+            ,mnt_policy = mnt_policy
             )
 
 function get_dropping_nodes(drop_proportion)
@@ -242,7 +243,7 @@ function load_run_configs()
                             for Β in Βs
                                 for ctl_k in ctl_ks
                                     for ctl_Β in ctl_Βs
-                                        push!(configs,new_config(seed,ctl_model,ntw_topo,size,200,drop_proportion,1.0,false,true,k,Β,ctl_k,ctl_Β))
+                                        push!(configs,new_config(seed,ctl_model,ntw_topo,size,200,drop_proportion,1.0,false,true,k,Β,ctl_k,ctl_Β,1))
                                     end
                                 end
                             end
@@ -271,6 +272,11 @@ function get_run_label(config)
    
     run_label = base_label * "_$(config.size)_$(config.seed)_$(replace(string(config.prob_random_walks),"."=>""))"
 
+    run_label *= "_MNT_" * @match config.mnt_policy begin
+        0 => "CORR"
+        1 => "PREV"
+        2 => "OPT"
+    end
     return run_label
 end
 function single_run(config)
@@ -290,6 +296,8 @@ function single_run(config)
     args[:benchmark] = config.benchmark
     args[:animation] = config.animation
     args[:prob_random_walks] = config.prob_random_walks
+    args[:mnt_policy] = config.mnt_policy
+
 
     q_ctl_agents = 0
     run_label = get_run_label(config)
