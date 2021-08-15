@@ -17,37 +17,38 @@ function get_next_maintenance_due(sne::SimNE,model::ABM)
 end
 
 
-function trigger_maintenance(sne::SimNE)
-    state = get_state(sne)
-    # if state.maintenance_due == model.ticks
+# function trigger_maintenance(sne::SimNE)
+#     state = get_state(sne)
+#     # if state.maintenance_due == model.ticks
 
-    # end
-end
+#     # end
+# end
 
-"""
-It triggers maintenance when the asset is brokendown
+# """
+# It triggers maintenance when the asset is brokendown
 
-"""
-function do_corrective_man(sne::SimNE)
-    state = get_state(sne)
-    if !state.up
-        trigger_maintenance(sne)
-    end
-end
+# """
+# function do_corrective_man(sne::SimNE)
+#     state = get_state(sne)
+#     if !state.up
+#         trigger_maintenance(sne)
+#     end
+# end
 
-"""
-It triggers maintenance on due date assuming is before the asset breakdown
-"""
-function do_preventive_man(sne::SimNE,model::ABM)
-    state = get_state(sne)
-    if state.maintenance_due == model.ticks
-        trigger_maintenance(sne)
-    end
-end
+# """
+# It triggers maintenance on due date assuming is before the asset breakdown
+# """
+# function do_preventive_man(sne::SimNE,model::ABM)
+#     state = get_state(sne)
+#     if state.maintenance_due == model.ticks
+#         trigger_maintenance(sne)
+#     end
+# end
 
 function init_maintenance!(sne::SimNE,model::ABM)
     state = get_state(sne)
     #init with according to factory estimated parameters
+    state.rul_e = state.rul
     state.maintenance_due = state.rul_e - sne.maintenance.threshold
     set_state!(sne,state)
 end
@@ -93,13 +94,14 @@ function do_predictive_mnt!(sne::SimNE,model::ABM)
 end
 
 function do_maintenance_step!(sne::SimNE,model::ABM)
-    #control agent responsibility?
+    #TODO control agent responsibility?
    if is_start_mnt(sne,sne.maintenance.policy,model)
       start_mnt!(sne,model.ticks)
    end
    if sne.maintenance.job_start > 0 && sne.maintenance.job_start + sne.maintenance.duration == model.ticks
       stop_mnt!(sne,model)
    end
+   
 end
 
 
@@ -108,12 +110,12 @@ function is_start_mnt(sne::SimNE,mnt_policy::Type{CorrectiveM},model::ABM)
     return !get_state(sne).up && !get_state(sne).on_maintenance
 end
 
-function is_start_mnt(sne::SimNE,mnt_policy::PredictiveM,model::ABM)
-    return get_state(sne).mnt_due == model.ticks
+function is_start_mnt(sne::SimNE,mnt_policy::Type{PredictiveM},model::ABM)
+    return get_state(sne).maintenance_due - sne.maintenance.threshold == model.ticks 
 end
 
-function is_start_mmnt(sne::SimNE,mnt_policy::PreventiveM,model::ABM)
-    return get_state(sne).mnt_due == model.ticks
+function is_start_mnt(sne::SimNE,mnt_policy::Type{PreventiveM},model::ABM)
+    return get_state(sne).maintenance_due == model.ticks
 end
 
 function MaintenanceInfoCorrective(model)
