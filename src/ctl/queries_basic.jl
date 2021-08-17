@@ -5,7 +5,7 @@ function do_query!(msg::OFMessage,a::Agent,model)
     # If asset's network does not have any edge, there is no way to transport packets 
     ignore = ne(a.params[:ntw_graph]) > 0 ? false : true
     path=[]
-    log_info(model.ticks, a.id, "querying local... $(msg)===> ignore: $ignore ====> paths: $(a.paths)")
+    # log_info(model.ticks, a.id, "querying local... $(msg)===> ignore: $ignore ====> paths: $(a.paths)")
     if !ignore
         # src (from this sne) to dst
         query = (msg.dpid,msg.data.dst)       

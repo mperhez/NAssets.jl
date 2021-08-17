@@ -154,6 +154,18 @@ wb_c(t₀,t) = t >= t₀
 log_c(t₀,t) = t >= t₀
 
 """
+Linear degradation
+m: degradation slope
+b: expected life
+t: current time
+"""
+
+lineal_d(m,b,t) = begin 
+    v = -m * t + b
+    return v > 0 ? v : 0
+end
+
+"""
     Generates the time series until failure of an asset, given 
     the provided parameters:
 

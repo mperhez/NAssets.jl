@@ -4,7 +4,7 @@ Removes asset node (sne) from the network
 function drop_node!(sne::SimNE,model::ABM)
     set_down!(sne)
     g = model.ntw_graph
-    log_info(model.ticks," All neighbours of $(sne.id) are: $(all_neighbors(model.ntw_graph,get_address(sne.id,g))) ")
+    # log_info(model.ticks," All neighbours of $(sne.id) are: $(all_neighbors(model.ntw_graph,get_address(sne.id,g))) ")
     for nb in all_neighbors(model.ntw_graph,get_address(sne.id,g))
        sne_nb = getindex(model,get_eid(nb,model))
        link_down!(sne_nb,sne.id,model)

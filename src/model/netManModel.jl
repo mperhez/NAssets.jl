@@ -48,8 +48,12 @@ function initialize(args,user_props;grid_dims=(3,3),seed=0)
         :prob_eq_queries_cycle => 1,#0.7,#0.1,#1,#0.7, #base probability of processing equal queries within the same :query_cycle. 0 means won't process the same query within the query_cycle, 1: means will process always repeated queries regardless of query_cycle
         :prob_random_walks =>  args[:prob_random_walks],# prob. of neighbour nodes to propagate query msgs.
         :mnt_policy => args[:mnt_policy],
-        :mnt_wc_duration => 10, #worst case duration
-        :mnt_bc_duration => 5  #best case duration
+        :ntw_services => args[:ntw_services],
+        :mnt_wc_duration => args[:mnt_wc_duration], #worst case duration
+        :mnt_bc_duration => args[:mnt_bc_duration],  #best case duration
+        :mnt_wc_cost => args[:mnt_wc_cost], #worst case cost
+        :mnt_bc_cost => args[:mnt_bc_cost],  #best case cost
+        :traffic_dist_params => args[:traffic_dist_params] #traffic distribution parameters
     )
     #For G6: 
     #prob_eq_queries_cycle: 0.2
@@ -106,14 +110,19 @@ end
 """
     Create control agents
 """
-function create_control_agents!(model)
+function create_control_agents!(model::ABM)
     
-    a_params = Dict(:pkt_per_tick=>model.pkt_per_tick)
+    a_params::Dict{Symbol,Any} = Dict(:pkt_per_tick=>model.pkt_per_tick)
+    mnt::MaintenanceInfo = @match model.mnt_policy begin
+                1 => MaintenanceInfoPreventive(model)
+                2 => MaintenanceInfoPredictive(model)
+                _ => MaintenanceInfoCorrective(model)
+            end
     
     if model.ctrl_model == CENTRALISED
         id = nextid(model)
         a = add_agent_pos!(
-                Agent(id,1,a_params),model
+                Agent(id,1,mnt,Array{Int64}(undef,0,nv(model.properties[:ntw_graph])),a_params),model
             )
         #set_props!(model.ctl_graph, 1, Dict(:eid => 1, :aid => id) )
          ##assign controller to SimNE
@@ -126,7 +135,7 @@ function create_control_agents!(model)
             #next_fire = rand(0:0.2:model.:Τ)
             id = nextid(model)
             a = add_agent_pos!(
-                    Agent(id,i,a_params),model
+                    Agent(id,i,mnt,Array{Int64}(undef,0,1),a_params),model
                 )
             set_props!(model.ctl_graph, i, Dict(:eid => i, :aid => id) )
             ##assign controller to SimNE
@@ -279,6 +288,7 @@ function init_agents!(model)
     for id in sort(ids)
         init_agent!(getindex(model,id),model)
     end
+
 end
 
 """
@@ -307,6 +317,13 @@ function init_agent!(a::Agent,model)
         a.params[:base_ntw_graph] = model.ntw_graph
     end
     a.params[:last_cache_graph] = 0 #Last time cache was cleared
+
+    ##
+    if a.maintenance.policy ==  Type{PredictiveM}
+        opt_init.optimisation_initialisation( adjacency_matrix(a.params[:ntw_graph]),
+        model.traffic_dist_params, model.mnt_bc_cost, model.mnt_bc_duration, model.mnt_wc_cost, model.mnt_wc_duration)
+    end
+
 end
 
 function label_paths(time::Int64,paths::Array{LightGraphs.YenState{Float64,Int64},1})

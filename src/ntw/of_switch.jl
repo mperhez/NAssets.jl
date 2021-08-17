@@ -1,50 +1,4 @@
 #export NetworkAssetState, ModelState, ControlAgentState
-
-
-function OFMessage(id::Int64,ticks::Int,dpid::Int,reason::Ofp_Protocol)
-    return OFMessage(id,ticks,dpid,-1,reason,nothing)
-end
-
-"""
-    Message with default reason: Forward
-"""
-function OFMessage(id::Int64,ticks::Int,dpid::Int,in_port::Int,data::DPacket)
-    return OFMessage(id,ticks,dpid,in_port,OFPR_ACTION,data)
-end
-
-"""
-    Message with no input port
-"""
-function OFMessage(id::Int64,ticks::Int,dpid::Int,ofp::Ofp_Protocol,data::Int)
-    return OFMessage(id,ticks,dpid,-1,ofp,data)
-end
-
-"""
-    Message with pair in data
-"""
-function OFMessage(id::Int64,ticks::Int,dpid::Int,ofp::Ofp_Protocol,data::Tuple{Int64,Int64})
-    return OFMessage(id,ticks,dpid,-1,ofp,data)
-end
-
-
-
-function NetworkAssetState(ne_id::Int)
-    NetworkAssetState(ne_id,true,false,Vector{Tuple{Int64,String}}(),0,0,0,Vector{Flow}(),Dict(),Array{Float64,1}(),0.0,0.0,0)
-end
-
-
-
-function Agent(id,nid,params)
-    s0 = ControlAgentState(id,true,Dict(),0,0,0,0,0,[])
-    Agent(id,nid,:lightblue,0.1,Vector{Tuple{Int64,OFMessage,Bool}}(),Dict{Tuple{Int64,Int64},Array{Tuple{Int64,Float64,Array{Int64}}}}(),[s0],Array{Vector{AGMessage}}(undef,1,1),[],Channel{OFMessage}(500),Dict(),Dict(),[],params)
-end
-
-
-function SimNE(id,nid,params,max_q,maintenance)
-    SimNE(id,nid,0.3,Channel{OFMessage}(max_q),Vector{OFMessage}(),Dict{Tuple{Int64,Int64},Int64}(),[NetworkAssetState(id)],Dict(),-1,maintenance,params) #initialise SimNE with a placeholder in the controller
-end
-
-
 function forward!(msg::OFMessage,src::SimNE,model)
     # log_info("[$(model.ticks)]($(src.id)) Packet $(msg.id) delivered")
     out_pkt_count = get_state(src).out_pkt + 1
@@ -165,8 +119,11 @@ end
 
 function install_flow!(msg::OFMessage, sne::SimNE,model)
     nf = first(msg.data)
-    install_flow!(nf,sne,model)
-    clear_pending_query!(sne,nf,last(msg.data))
+    qid = last(msg.data)
+    install_flow!(nf,sne,model)   
+    if qid < 0
+        clear_pending_query!(sne,nf,qid)
+    end
 end
 
 function install_flow!(flow::Flow, sne::SimNE,model)
@@ -269,8 +226,6 @@ function pending_pkt_handler(a::SimNE,model)
 end
 
 
-
-
 function throughput(bytes₋₁,bytes₀, τ₋₁,τ₀)
     Δτ = τ₀ - τ₋₁
     Δbytes = bytes₀ - bytes₋₁
@@ -283,7 +238,7 @@ It simulates operations happening in a network asset
 when the link corresponding to the given dpn_id goes down. sne is up and node went down is dpn_id.
 """
 function link_down!(sne::SimNE,dpn_id::Int,model)
-    log_info(model.ticks,sne.id,"BEFORE link down start $dpn_id - all ports: $(get_port_edge_list(sne))")
+    # log_info(model.ticks,sne.id,"BEFORE link down start $dpn_id - all ports: $(get_port_edge_list(sne))")
     #remove from list of ports
     new_port_edge_list::Vector{Tuple{Int64,String}} = []
     dpn_port = -1
@@ -298,9 +253,9 @@ function link_down!(sne::SimNE,dpn_id::Int,model)
     delete_flow!(sne,dpn_port,model)
     set_port_edge_list!(sne,new_port_edge_list)
     controller = getindex(model,sne.controller_id)
-    log_info(model.ticks,sne.id,"Triggering event to ag: $(sne.controller_id) for dpn_id: $dpn_id ")
+    # log_info(model.ticks,sne.id,"Triggering event to ag: $(sne.controller_id) for dpn_id: $dpn_id ")
     trigger_of_event!(model.ticks,controller,dpn_id,Ofp_Event(1),model)
-    log_info(model.ticks,sne.id,"AFTER link down start $dpn_id - all ports: $(get_port_edge_list(sne))")
+    # log_info(model.ticks,sne.id,"AFTER link down start $dpn_id - all ports: $(get_port_edge_list(sne))")
 end
 
 """
@@ -331,7 +286,7 @@ function trigger_of_event!(ticks::Int,a::Agent,ev_data,ev_type::Ofp_Event,model)
                             OFMessage(next_ofmid!(model),ticks,a.id,OFPPR_DELETE,ev_data)
         Ofp_Event(2) => OFMessage(next_ofmid!(model),ticks,a.id,OFPPR_JOIN,ev_data)
     end
-    log_info(model.ticks,a.id,"Triggering event: $(msg)")
+    # log_info(model.ticks,a.id,"Triggering event: $(msg)")
     push_msg!(a,msg)
 end
 
@@ -556,7 +511,7 @@ function record_active_flow!(m,src,dst,ftype)
             if isempty(filter(af->af==nf,m_state.active_flows))
                 af = m_state.active_flows
                 push!(af,nf)
-            log_info(m.ticks,"aflows: $(get_state(m).active_flows)")
+            # log_info(m.ticks,"aflows: $(get_state(m).active_flows)")
             end
 end
 
@@ -566,14 +521,14 @@ function delete_flow!(sne::SimNE,out_port::Int64,model::ABM)
     new_flow_table::Vector{Flow} = []
     
     for f in get_flow_table(sne)
-        log_info(model.ticks,sne.id,"Existing flow: $f --> $out_port ---> $(f.params) ---> all ports: $(get_port_edge_list(sne))")
+        # log_info(model.ticks,sne.id,"Existing flow: $f --> $out_port ---> $(f.params) ---> all ports: $(get_port_edge_list(sne))")
         if  ~(out_port in f.params)
             push!(new_flow_table,f)
         end    
     end
     set_flow_table!(sne,new_flow_table)
     
-    log_info(model.ticks,sne.id,"New flow table AFTER DELETE: $new_flow_table ---> all ports: $(get_port_edge_list(sne))")
+    # log_info(model.ticks,sne.id,"New flow table AFTER DELETE: $new_flow_table ---> all ports: $(get_port_edge_list(sne))")
 end
 
 function drop_packet!(sne::SimNE)

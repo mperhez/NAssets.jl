@@ -9,7 +9,7 @@ function get_control_agent(asset_id::Int,model)
     return model.mapping_ctl_ntw[asset_id]
 end
 
-function get_controlled_assets(agent_id::Int,model)
+function get_controlled_assets(agent_id::Int,model)::Set{Int64}
     assets = filter(k->model.mapping_ctl_ntw[k] == agent_id,keys(model.mapping_ctl_ntw))
     #log_info("assets controlled by $(agent_id) are: $(length(assets))")
     return assets
@@ -74,37 +74,34 @@ end
 
 function do_agent_step!(a::SimNE,model)
     #Process OF messages (packet data traffic)
-    log_info(model.ticks,a.id, "start step! $(get_state(a).up) ==> $(get_state(a).rul)")
+    # log_info(model.ticks,a.id, "start step! $(get_state(a).up) ==> $(get_state(a).rul)")
     is_up(a) && is_ready(a) ? in_packet_processing(a,model) : nothing 
     
     # log_info(model.ticks,a.id,"rqsted: $(a.requested_ctl)")
     # @debug("[$(model.ticks)]($(a.id)) end step")
     deteriorate!(a,model)
-    do_maintenance_step!(a,model)
 end
 
 function do_agent_step!(a::Agent,model)
    
-    if get_state(a).up 
-        sneid_print = get_controlled_assets(a.id,model)
-        sne_print = getindex.([model],sneid_print)
-
+    if is_up(a)
         # for sprt in sne_print
         #     log_info(model.ticks,a.id," step!: {$(sprt.id)} $(get_state(sprt).flow_table) ===> all ports: $(get_port_edge_list(sprt)) ===> paths: $(a.paths)")
         # end        
+
+        ## Process OF Messages (SimNE to (sdn) control messages)
+        is_ready(a) ? in_packet_processing(a,model) : nothing #log_info("queue of $(a.id) is empty")
+
+        # Process inter-agent messages
+        # log_info(model.ticks,a.id,"==> a.paths ==> $(a.paths)")
+        do_receive_messages(a,model)
+
+        do_maintenance_step!(a,a.maintenance.policy,model)
     end
 
     # log_info(model.ticks,a.id,25,"pending msgs: $(length(a.
     # pending)) --> $(a.pending)")
     # log_info(model.ticks,a.id,25,"QUEUE --> $(a.queue.data)")
-
-    ## Process OF Messages (SimNE to (sdn) control messages)
-    is_up(a) && is_ready(a) ? in_packet_processing(a,model) : nothing #log_info("queue of $(a.id) is empty")
-
-    # Process inter-agent messages
-    # log_info(model.ticks,a.id,"==> a.paths ==> $(a.paths)")
-    do_receive_messages(a,model)
-
 
     # do_confidence_check!(a,model)
 
@@ -161,7 +158,7 @@ end
 
 ## main functions
 
-new_config(seed,ctl_model,ntw_topo,size,n_steps,drop_proportion,prob_random_walks,benchmark, animation,k,Β,ctl_k,ctl_Β,mnt_policy) =
+new_config(seed,ctl_model,ntw_topo,size,n_steps,drop_proportion,prob_random_walks,benchmark, animation,k,Β,ctl_k,ctl_Β,mnt_policy,ntw_services,mnt_wc_duration,mnt_bc_duration,mnt_wc_cost,mnt_bc_cost,traffic_dist_params) =
     return ( seed = seed
             ,ctl_model=ctl_model
             ,ntw_topo = ntw_topo
@@ -178,6 +175,12 @@ new_config(seed,ctl_model,ntw_topo,size,n_steps,drop_proportion,prob_random_walk
             ,custom_topo = nothing
             ,ctl_custom_topo = nothing
             ,mnt_policy = mnt_policy
+            ,ntw_services = ntw_services
+            ,mnt_wc_duration = mnt_wc_duration
+            ,mnt_bc_duration = mnt_bc_duration
+            ,mnt_wc_cost = mnt_wc_cost
+            ,mnt_bc_cost = mnt_bc_cost
+            ,traffic_dist_params = traffic_dist_params
             )
 
 function get_dropping_nodes(drop_proportion)
@@ -243,7 +246,7 @@ function load_run_configs()
                             for Β in Βs
                                 for ctl_k in ctl_ks
                                     for ctl_Β in ctl_Βs
-                                        push!(configs,new_config(seed,ctl_model,ntw_topo,size,200,drop_proportion,1.0,false,true,k,Β,ctl_k,ctl_Β,1))
+                                        push!(configs,new_config(seed,ctl_model,ntw_topo,size,50,drop_proportion,1.0,false,true,k,Β,ctl_k,ctl_Β,1,[(1,7),(4,1),(5,14),(9,5),(12,8)],5,3,150.,100.,[1,0.05]))
                                     end
                                 end
                             end
@@ -297,7 +300,12 @@ function single_run(config)
     args[:animation] = config.animation
     args[:prob_random_walks] = config.prob_random_walks
     args[:mnt_policy] = config.mnt_policy
-
+    args[:ntw_services] = config.ntw_services
+    args[:mnt_wc_duration] = config.mnt_wc_duration
+    args[:mnt_bc_duration] = config.mnt_bc_duration
+    args[:mnt_wc_cost] = config.mnt_wc_cost
+    args[:mnt_bc_cost] = config.mnt_bc_cost
+    args[:traffic_dist_params] = config.traffic_dist_params
 
     q_ctl_agents = 0
     run_label = get_run_label(config)

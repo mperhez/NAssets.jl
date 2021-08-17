@@ -78,12 +78,12 @@ end
 
 function process_msg!(a::Agent,msg::OFMessage,model)
 
-    log_info(model.ticks,a.id,"===>Message from sne: $(msg)")
+    # log_info(model.ticks,a.id,"===>Message from sne: $(msg)")
   
     @match msg.reason begin
         Ofp_Protocol(1) =>  
                         begin
-                            log_info(model.ticks,a.id,"in_pkt -> $msg ===> prv_queries:  $(a.previous_queries)")
+                            # log_info(model.ticks,a.id,"in_pkt -> $msg ===> prv_queries:  $(a.previous_queries)")
                             in_packet_handler(a,msg,model)
                         end
         Ofp_Protocol(2) => 

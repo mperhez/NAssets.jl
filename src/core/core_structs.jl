@@ -105,6 +105,7 @@ end
     MATCH_PATH = 2
     NEW_NB = 3
     NE_DOWN = 4
+    PREDICTED_NES_DOWN = 5
 end
 
 #if has come from in_port and src, going to dst
@@ -188,8 +189,33 @@ mutable struct ControlAgentState <: State
     path_scores::Array{Tuple{Int64,Int64,Float64}}
 end
 
-
-
+"""
+ It represents data structure for maintenance related info
+"""
+mutable struct MaintenanceInfo
+    #Current maintenance policy
+    policy::Type{<:MaintenanceType} 
+    # Expected useful life. Standard manufacturer time-to-failure
+    eul::Int64 
+    # When last job started
+    job_start::Int64 
+    # duration of current/next job
+    duration::Int64
+    # Cost of this type of maintenance
+    cost::Float64
+    #To trigger preventive maintenance ahead of breakdown
+    threshold::Int64
+    #How often rul predictions are run
+    predictive_freq::Int64 
+    # how many steps ahead the prediction is going to be for
+    prediction_window::Int64
+    deterioration_parameter::Float64
+    pending_jobs::Vector{Tuple{Int64,Int64}}
+    #Duration of the corrective maintenance
+    reference_duration::Int64 
+    #Cost of the corrective maintenance
+    reference_cost::Float64
+end
 
 """
     Control Agent
@@ -209,24 +235,16 @@ mutable struct Agent <: SOAgent
     previous_queries::Dict{Tuple{Int64,Int64},Tuple{Int64,Array{Int64}}} # (src,dst):(tick last queried,[nb ag queried])
     matched_queries::Dict{Tuple{Int64,Int64,Array{Int64}},Int64} 
     ctl_paths::Vector{Array{Int64}}
+    #Maintenance info for all assets controlled by this agent
+    maintenance::MaintenanceInfo
+    rul_predictions::Matrix{Int64}
     params::Dict{Symbol,Any}
 end
 
-
-
-
-"""
- It represents data structure for maintenance related info
-"""
-mutable struct MaintenanceInfo
-    policy::Type{<:MaintenanceType} #Current maintenance policy
-    eul::Int64 # Expected useful life. Standard manufacturer time-to-failure
-    job_start::Int64 # When last job started
-    duration::Int64 # duration of current/next job
-    threshold::Int64#To trigger preventive maintenance ahead of breakdown
-    predictive_freq::Int64 #How often rul predictions are run
+function Agent(id::Int64,nid::Int64,maintenance::MaintenanceInfo,rul_predictions,params::Dict{Symbol,Any})::Agent
+    s0 = ControlAgentState(id,true,Dict(),0,0,0,0,0,[])
+    Agent(id,nid,:lightblue,0.1,Vector{Tuple{Int64,OFMessage,Bool}}(),Dict{Tuple{Int64,Int64},Array{Tuple{Int64,Float64,Array{Int64}}}}(),[s0],Array{Vector{AGMessage}}(undef,1,1),[],Channel{OFMessage}(500),Dict(),Dict(),[],maintenance,rul_predictions,params)
 end
-
 
 """
     Simulated Physical Network Element
@@ -241,9 +259,15 @@ mutable struct SimNE <: SimAsset
     state_trj::Vector{NetworkAssetState}
     one_way_time_pkt::Dict{Int64,Array{Int64}}
     controller_id::Int64
-    maintenance::MaintenanceInfo
+    #Individual Maitenance info for this asset
+    maintenance::MaintenanceInfo 
     params::Dict{Symbol,Any}
 end
+
+function SimNE(id,nid,params,max_q,maintenance)
+    SimNE(id,nid,0.3,Channel{OFMessage}(max_q),Vector{OFMessage}(),Dict{Tuple{Int64,Int64},Int64}(),[NetworkAssetState(id)],Dict(),-1,maintenance,params) #initialise SimNE with a placeholder in the controller
+end
+
 
 function ModelState(tick::Int)
     ModelState(tick,Dict(),[])
@@ -253,5 +277,40 @@ end
 function SimpleAgState(condition_trj::Array{Float64,2}, health_trj::Vector{Float64})
     SimpleAgState(:red,condition_trj,health_trj)
 end
+
+
+
+function OFMessage(id::Int64,ticks::Int,dpid::Int,reason::Ofp_Protocol)
+    return OFMessage(id,ticks,dpid,-1,reason,nothing)
+end
+
+"""
+    Message with default reason: Forward
+"""
+function OFMessage(id::Int64,ticks::Int,dpid::Int,in_port::Int,data::DPacket)
+    return OFMessage(id,ticks,dpid,in_port,OFPR_ACTION,data)
+end
+
+"""
+    Message with no input port
+"""
+function OFMessage(id::Int64,ticks::Int,dpid::Int,ofp::Ofp_Protocol,data::Int)
+    return OFMessage(id,ticks,dpid,-1,ofp,data)
+end
+
+"""
+    Message with pair in data
+"""
+function OFMessage(id::Int64,ticks::Int,dpid::Int,ofp::Ofp_Protocol,data::Tuple{Int64,Int64})
+    return OFMessage(id,ticks,dpid,-1,ofp,data)
+end
+
+
+
+function NetworkAssetState(ne_id::Int)
+    NetworkAssetState(ne_id,true,false,Vector{Tuple{Int64,String}}(),0,0,0,Vector{Flow}(),Dict(),Array{Float64,1}(),0.0,0.0,0)
+end
+
+
 
 

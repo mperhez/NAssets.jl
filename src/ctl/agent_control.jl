@@ -153,6 +153,9 @@ function process_msg!(a::Agent,msg::AGMessage,model)
                         do_new_nb!(msg,a,model)                        
         AG_Protocol(4) => 
                         do_ne_down(a,msg,model)
+        
+        AG_Protocol(5) => 
+                        do_predicted_nes_down!(a,msg,model)
                      
         _ => begin
                 log_info("[$(model.ticks)]($(a.id)) -> match default!!")
@@ -197,7 +200,6 @@ end
  In reality this is the routine that checks heartbeats 
  from controlled NEs.
 """
-
 function controlled_sne_down!(a::Agent,dpn_id::Int,model)
     
     set_control_agent!(dpn_id,a.id*-1,model)
@@ -208,18 +210,18 @@ function controlled_sne_down!(a::Agent,dpn_id::Int,model)
         set_state!(a,s)
     end
     
-    log_info(model.ticks,a.id,"Removing node $dpn_id ...")
-    log_info(model.ticks,a.id,"Local base graph: $(sparse(a.params[:base_ntw_graph]))")
-    log_info(model.ticks,a.id,"Local ntw graph: $(sparse(a.params[:ntw_graph]))")
+    # log_info(model.ticks,a.id,"Removing node $dpn_id ...")
+    # log_info(model.ticks,a.id,"Local base graph: $(sparse(a.params[:base_ntw_graph]))")
+    # log_info(model.ticks,a.id,"Local ntw graph: $(sparse(a.params[:ntw_graph]))")
 
     lvb = to_local_vertex(a.params[:base_ntw_graph],dpn_id)
     lvc = to_local_vertex(a.params[:ntw_graph],dpn_id)
     a.params[:base_ntw_graph] = soft_remove_vertex(a.params[:base_ntw_graph],lvb)
     a.params[:ntw_graph] = soft_remove_vertex(a.params[:ntw_graph],lvc)
 
-    log_info(model.ticks,a.id,"Removed node $dpn_id ...")
-    log_info(model.ticks,a.id,"Local base graph: $(sparse(a.params[:base_ntw_graph]))")
-    log_info(model.ticks,a.id,"Local ntw graph: $(sparse(a.params[:ntw_graph]))")
+    # log_info(model.ticks,a.id,"Removed node $dpn_id ...")
+    # log_info(model.ticks,a.id,"Local base graph: $(sparse(a.params[:base_ntw_graph]))")
+    # log_info(model.ticks,a.id,"Local ntw graph: $(sparse(a.params[:ntw_graph]))")
     #TODO implement when a control agent is down too
     # do_drop!(msg,a,model)
 end
@@ -381,4 +383,43 @@ function remove_drop_sne!(a::Agent,dpid::Int64,drop_time::Int64)
 
     #     a.params[:last_cache_graph] = drop_time
     # end
+end
+
+"""
+It deals with prediction of unavailability (for a given time window) of a set of NEs under control.
+
+"""
+function do_predicted_nes_down!(a::Agent,msg::AGMessage,model::ABM)
+    #TODO operation for other than centralised agent
+    if get_state(a).up
+
+        log_info(model.ticks,a.id,"Pred_Down: Active paths $(get_state(a).active_paths)")
+
+        #remove nodes
+        # query_graph = deepcopy(a.params[:ntw_graph])
+        
+        # for dpn_id in dpn_ids
+        #     query_graph = soft_remove_vertex(query_graph,dpn_id)
+        # end
+
+        # query_time = model.ticks
+        # query = msg.body[:query]
+        # query_paths = []
+
+        # path = do_query(query_time,query,query_graph,query_paths)
+
+        # if isempty(path)
+        #     log_info(model.ticks,a.id,"Not path found")
+        #     # if !haskey(a.previous_queries,query)
+        #     #     sent_to = query_nbs!(a,msg,jg,query,trace,model)
+        #     #     a.previous_queries[query] = (model.ticks,sent_to)
+        #     # end
+        # else
+        #     # do_match!(path,msg,a,model)
+        #     # clear_pending_query!(a,query)
+        #     install_flow!(a,path,model,msg)
+        #     get_state(a).active_paths[(first(path),last(path))] = path
+        # end
+
+    end
 end
