@@ -11,7 +11,9 @@ function forward!(msg::OFMessage,src::SimNE,model)
 end
 
 function forward!(msg::OFMessage,src::SimNE,dst::SimNE,reason::Ofp_Protocol,model)
-    # log_info("[$(model.ticks)] ($(src.id)) forwarding $msg")
+    # if model.ticks > 45 && model.ticks < 60 
+    #     log_info(model.ticks,src.id,5,"[$(model.ticks)] ($(src.id)) forwarding $msg")
+    # end
     in_ports = filter(p->p[2]=="s$(src.id)",get_port_edge_list(dst))
     in_port = in_ports[1][1]
     push_msg!(src,dst,OFMessage(next_ofmid!(model),model.ticks,src.id,in_port,reason,msg.data),model)
@@ -31,7 +33,9 @@ function route_traffic!(a::SimNE,msg::OFMessage,model)
                             , get_flow_table(a))
                             
     if !isempty(flow)
-        # log_info(model.ticks,a.id,9," Routing Msg $(msg) --- $(msg.in_port)---- flout_out: $(flow[1].params[1][1]) --- all ports: $(get_port_edge_list(a))")
+        # if model.ticks > 40 && model.ticks < 60
+        #     log_info(model.ticks,a.id,5," Routing Msg $(msg) --- $(msg.in_port)----    flout_out: $(flow[1].params[1][1]) --- all ports: $(get_port_edge_list(a))")
+        # end
         
         if flow[1].action == OFS_Output
             if flow[1].params[1][1] != 0
@@ -92,7 +96,7 @@ end
 """
 function push_msg!(src::SimNE,dst::SimNE,msg::OFMessage,model)
     #put!(sne.queue,msg)
-    #log_info("[$(model.ticks)] msgs: $(model.ntw_links_msgs)")
+    
     l = (get_address(src.id,model.ntw_graph),get_address(dst.id,model.ntw_graph))
     l = l[1] < l[2] ? l : (l[2],l[1])
     if !haskey(model.ntw_links_msgs,l)
@@ -102,10 +106,16 @@ function push_msg!(src::SimNE,dst::SimNE,msg::OFMessage,model)
     push!(link_queue,msg)
     links_load = get_state(model).links_load
     current_load = haskey(links_load,l) ? links_load[l] : 0
+
     links_load[l] = current_load + 1    
     
+
     out_pkt_count = get_state(src).out_pkt + 1
     set_out_pkt!(src,out_pkt_count)
+    # if model.ticks > 45 && model.ticks < 60 
+    #      log_info(model.ticks,src.id,5,"AFTER push msgs: $(model.ntw_links_msgs)")
+    #      log_info(model.ticks,src.id,9,"AFTER push msgs: $(model.ntw_links_msgs)")
+    # end
 end
 
 """

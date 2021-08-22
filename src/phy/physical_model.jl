@@ -28,7 +28,7 @@ function deteriorate!(sne::SimNE,model::ABM)
         # if sne.id == 5
         #     state.rul = state.rul - 3
         # else
-            state.rul = state.rul - 1
+            state.rul = lineal_d(sne.maintenance.deterioration_parameter,state.rul,1)
         # end
 
         if state.rul == 0

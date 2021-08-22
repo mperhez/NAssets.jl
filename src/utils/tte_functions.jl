@@ -150,7 +150,6 @@ wb_c(t₀,t) = t >= t₀
         t₀: initial value for the cycle/phase
         t: value to evaluate
 """
-
 log_c(t₀,t) = t >= t₀
 
 """
@@ -159,7 +158,6 @@ m: degradation slope
 b: expected life
 t: current time
 """
-
 lineal_d(m,b,t) = begin 
     v = -m * t + b
     return v > 0 ? v : 0
@@ -180,7 +178,6 @@ end
     tse: extra parameter required by tsf
     f_c: function that defines criteria for a valid value in the time series.
 """
-
 function values_f(ttf,n,Δᵩ,ϵₛ,f,params,tsf,tse_params,f_c)
     ϕ = 0
     t₀ = 0

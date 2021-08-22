@@ -154,8 +154,8 @@ function process_msg!(a::Agent,msg::AGMessage,model)
         AG_Protocol(4) => 
                         do_ne_down(a,msg,model)
         
-        AG_Protocol(5) => 
-                        do_predicted_nes_down!(a,msg,model)
+        # AG_Protocol(5) => 
+        #                 do_update_local_graph!(a,msg,model)
                      
         _ => begin
                 log_info("[$(model.ticks)]($(a.id)) -> match default!!")
@@ -389,37 +389,59 @@ end
 It deals with prediction of unavailability (for a given time window) of a set of NEs under control.
 
 """
-function do_predicted_nes_down!(a::Agent,msg::AGMessage,model::ABM)
+function do_update_flows!(a::Agent,ntw_changes::Vector{Int64},model::ABM)
     #TODO operation for other than centralised agent
     if get_state(a).up
 
-        log_info(model.ticks,a.id,"Pred_Down: Active paths $(get_state(a).active_paths)")
+        log_info(model.ticks,a.id,"Pred_Down: ntw_changes $(ntw_changes)")
+
+        joining_nodes = filter(x->x>0,ntw_changes)
+        dropping_nodes = -1 * filter(x->x<0,ntw_changes)
+        
+        query_graph = deepcopy(a.params[:ntw_graph])
+        
+        #add nodes
+        for jng_id in joining_nodes
+            query_graph = soft_remove_vertex(query_graph,jng_id)
+
+            base_g = a.params[:base_ntw_graph]
+
+            lv = to_local_vertex(base_g,jng_id)
+            nbs = neighbors(base_g,lv)
+
+            #TODO check if nbs is up?
+
+            for nb_id in nbs
+                add_edge!(query_graph,nb_id,jng_id)
+                add_edge!(query_graph,jng_id,nb_id)
+            end
+        end
 
         #remove nodes
-        # query_graph = deepcopy(a.params[:ntw_graph])
+        for dpn_id in dropping_nodes
+            query_graph = soft_remove_vertex(query_graph,dpn_id)
+        end
+
+        query_time = model.ticks
         
-        # for dpn_id in dpn_ids
-        #     query_graph = soft_remove_vertex(query_graph,dpn_id)
-        # end
+        for query in model.ntw_services
+            query_paths = Dict{Tuple{Int64,Int64},Array{Tuple{Int64,Float64,Float64,Array{Int64}}}}()
 
-        # query_time = model.ticks
-        # query = msg.body[:query]
-        # query_paths = []
+            path = do_query(query_time,query,query_graph,query_paths)
 
-        # path = do_query(query_time,query,query_graph,query_paths)
-
-        # if isempty(path)
-        #     log_info(model.ticks,a.id,"Not path found")
-        #     # if !haskey(a.previous_queries,query)
-        #     #     sent_to = query_nbs!(a,msg,jg,query,trace,model)
-        #     #     a.previous_queries[query] = (model.ticks,sent_to)
-        #     # end
-        # else
-        #     # do_match!(path,msg,a,model)
-        #     # clear_pending_query!(a,query)
-        #     install_flow!(a,path,model,msg)
-        #     get_state(a).active_paths[(first(path),last(path))] = path
-        # end
-
+            if isempty(path)
+                 log_info(model.ticks,a.id,"Not path found")
+            #     # if !haskey(a.previous_queries,query)
+            #     #     sent_to = query_nbs!(a,msg,jg,query,trace,model)
+            #     #     a.previous_queries[query] = (model.ticks,sent_to)
+            #     # end
+            else
+            #     # do_match!(path,msg,a,model)
+            #     # clear_pending_query!(a,query)
+                msg = OFMessage(-1, model.ticks,-1,0,OFPR_ADD_FLOW,[])
+                 install_flow!(a,last(path),model,msg)
+            #     get_state(a).active_paths[(first(path),last(path))] = path
+            end
+        end
     end
 end

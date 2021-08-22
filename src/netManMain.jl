@@ -25,7 +25,7 @@ script_dir = pwd() * "/src/pyopt/" #@__DIR__
 pushfirst!(PyVector(pyimport("sys")."path"), script_dir)
 opt_init = pyimport("optimisation_initialisation")
 opt_run = pyimport("maintenance_planning")
-
+np = pyimport("numpy")
 
 csv_custom_nodes = "/home/mep53/workspace/data/bt/metro-access/"*"nodes_t2_t3_150618_CutA.csv"
 csv_custom_links = "/home/mep53/workspace/data/bt/metro-access/"*"New21CNCoreTopology.csv"

@@ -91,9 +91,12 @@ function create_sim_asset_agents!(model)
         # @show i
         
         mnt = @match model.mnt_policy begin
-            1 => MaintenanceInfoPreventive(model)
-            2 => MaintenanceInfoPredictive(model)
-            _ => MaintenanceInfoCorrective(model)
+            1 => MaintenanceInfoPreventive(0.2,model)
+            2 => MaintenanceInfoPredictive(0.2,model)
+            _ => MaintenanceInfoCorrective(0.2,model)
+        end
+        if id == 9
+            mnt.deterioration_parameter = 1. 
         end
         a = add_agent_pos!(
                 SimNE(id,i,a_params,10*model.pkt_per_tick,mnt),model
@@ -122,7 +125,7 @@ function create_control_agents!(model::ABM)
     if model.ctrl_model == CENTRALISED
         id = nextid(model)
         a = add_agent_pos!(
-                Agent(id,1,mnt,Array{Int64}(undef,0,nv(model.properties[:ntw_graph])),a_params),model
+                Agent(id,1,mnt,Array{Float64}(undef,0,nv(model.properties[:ntw_graph])),a_params),model
             )
         #set_props!(model.ctl_graph, 1, Dict(:eid => 1, :aid => id) )
          ##assign controller to SimNE
@@ -319,9 +322,17 @@ function init_agent!(a::Agent,model)
     a.params[:last_cache_graph] = 0 #Last time cache was cleared
 
     ##
-    if a.maintenance.policy ==  Type{PredictiveM}
-        opt_init.optimisation_initialisation( adjacency_matrix(a.params[:ntw_graph]),
-        model.traffic_dist_params, model.mnt_bc_cost, model.mnt_bc_duration, model.mnt_wc_cost, model.mnt_wc_duration)
+    log_info(model.ticks,"type of mnt: $(a.maintenance.policy == PredictiveM)")
+    if a.maintenance.policy ==  PredictiveM
+        #conversion to py
+        ajm_py = np.matrix(adjacency_matrix(a.params[:ntw_graph]))
+        log_info(model.ticks,"adj=> $ajm_py")
+        opt_init.optimisation_initialisation( ajm_py,
+        model.traffic_dist_params
+        #[1,0.05]
+        , model.mnt_bc_cost, model.mnt_bc_duration, model.mnt_wc_cost, model.mnt_wc_duration)
+
+        log_info(model.ticks,"H2=> $(opt_init.H2)")
     end
 
 end

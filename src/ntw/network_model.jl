@@ -77,7 +77,7 @@ function generate_traffic!(model)
     #random pkts
     traffic_μ = first(model.traffic_dist_params)
     traffic_sd = last(model.traffic_dist_params)
-    q_pkts = abs(round(0.1*model.pkt_per_tick*get_random(model.seed,model.ticks,Normal(traffic_μ,traffic_sd))))
+    q_pkts = abs(round(0.001*model.pkt_per_tick*get_random(model.seed,model.ticks,Normal(traffic_μ,traffic_sd))))
     # q_pkts: A percentage of the model.pkt_per_tick so NEs are able to process traffic coming from different nodes (NEs)
     #src,dst = samplepair(1:nv(model.ntw_graph)) # can be replaced for random pair
     #pairs =[(1,7),(4,1),(5,14)] #[(9,5)] #[(4,5)]#

@@ -82,6 +82,12 @@ mutable struct ModelState <: State
     active_flows::Vector{Tuple{Int,Int,Flow_Type}} # source,destination,type
 end
 
+@enum CTL_Event begin
+    NetworkChange = 1 #Network change and reroute traffic
+    TriggerDown = 2 #Trigger SNE down
+    TriggerUp = 3 #Trigger SNE up
+    Prediction = 4 #Update RUL predictions
+end
 
 
 @enum Ofp_Event begin
@@ -149,6 +155,14 @@ mutable struct OFEvent
     msg::OFMessage    
 end
 
+mutable struct ControlEvent
+    #When event is triggered
+    time::Int64 
+    #type of event
+    type::CTL_Event
+    #affected snes
+    snes::Vector{Int64}
+end
 
 mutable struct Flow 
     dpid::Int64 # datapath id
@@ -210,7 +224,6 @@ mutable struct MaintenanceInfo
     # how many steps ahead the prediction is going to be for
     prediction_window::Int64
     deterioration_parameter::Float64
-    pending_jobs::Vector{Tuple{Int64,Int64}}
     #Duration of the corrective maintenance
     reference_duration::Int64 
     #Cost of the corrective maintenance
@@ -237,13 +250,14 @@ mutable struct Agent <: SOAgent
     ctl_paths::Vector{Array{Int64}}
     #Maintenance info for all assets controlled by this agent
     maintenance::MaintenanceInfo
-    rul_predictions::Matrix{Int64}
+    rul_predictions::Matrix{Float64}
+    events::Dict{Int64,Vector{ControlEvent}}
     params::Dict{Symbol,Any}
 end
 
 function Agent(id::Int64,nid::Int64,maintenance::MaintenanceInfo,rul_predictions,params::Dict{Symbol,Any})::Agent
     s0 = ControlAgentState(id,true,Dict(),0,0,0,0,0,[])
-    Agent(id,nid,:lightblue,0.1,Vector{Tuple{Int64,OFMessage,Bool}}(),Dict{Tuple{Int64,Int64},Array{Tuple{Int64,Float64,Array{Int64}}}}(),[s0],Array{Vector{AGMessage}}(undef,1,1),[],Channel{OFMessage}(500),Dict(),Dict(),[],maintenance,rul_predictions,params)
+    Agent(id,nid,:lightblue,0.1,Vector{Tuple{Int64,OFMessage,Bool}}(),Dict{Tuple{Int64,Int64},Array{Tuple{Int64,Float64,Array{Int64}}}}(),[s0],Array{Vector{AGMessage}}(undef,1,1),[],Channel{OFMessage}(500),Dict(),Dict(),[],maintenance,rul_predictions,Dict{Int64,Vector{ControlEvent}}(),params)
 end
 
 """
