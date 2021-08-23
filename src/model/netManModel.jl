@@ -323,16 +323,19 @@ function init_agent!(a::Agent,model)
 
     ##
     log_info(model.ticks,"type of mnt: $(a.maintenance.policy == PredictiveM)")
-    if a.maintenance.policy ==  PredictiveM
-        #conversion to py
-        ajm_py = np.matrix(adjacency_matrix(a.params[:ntw_graph]))
-        log_info(model.ticks,"adj=> $ajm_py")
-        opt_init.optimisation_initialisation( ajm_py,
-        model.traffic_dist_params
-        #[1,0.05]
-        , model.mnt_bc_cost, model.mnt_bc_duration, model.mnt_wc_cost, model.mnt_wc_duration)
+    if a.maintenance.policy !=  CorrectiveM
+        schedule_event!(a,CTL_Event(4),a.maintenance.predictive_freq,Array{Int64,1}())
+        if a.maintenance.policy ==  PredictiveM
+            #conversion to py
+            ajm_py = np.matrix(adjacency_matrix(a.params[:ntw_graph]))
+            log_info(model.ticks,"adj=> $ajm_py")
+            opt_init.optimisation_initialisation( ajm_py,
+            model.traffic_dist_params
+            #[1,0.05]
+            , model.mnt_bc_cost, model.mnt_bc_duration, model.mnt_wc_cost, model.mnt_wc_duration)
 
-        log_info(model.ticks,"H2=> $(opt_init.H2)")
+            log_info(model.ticks,"H2=> $(opt_init.H2)")
+        end
     end
 
 end

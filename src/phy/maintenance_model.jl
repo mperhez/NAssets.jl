@@ -53,22 +53,27 @@ function init_maintenance!(sne::SimNE,model::ABM)
     set_state!(sne,state)
 end
 
-function start_mnt!(sne::SimNE,time_start::Int64)
-    sne.maintenance.job_start = time_start
+function start_mnt!(a::Agent,sne::SimNE,model::ABM)
+    sne.maintenance.job_start = model.ticks
     state = get_state(sne)
     state.up = false
+    state.rul = 0
     state.on_maintenance = true
     set_state!(sne,state)
+    drop_node!(sne,model)
+    schedule_event!(a,CTL_Event(3),model.ticks + a.maintenance.duration,[sne.id])
 end
 
-function stop_mnt!(sne::SimNE)
+function stop_mnt!(a::Agent,sne::SimNE,model::ABM)
     state = get_state(sne)
+    state.up = true
     state.on_maintenance = false
     state.rul = sne.maintenance.eul
     state.maintenance_due = sne.maintenance.job_start + sne.maintenance.duration + sne.maintenance.eul - sne.maintenance.threshold
     sne.maintenance.job_start = -1
     set_state!(sne,state)
-
+    rejoin_node!(model,sne.id)
+    schedule_event!(a,CTL_Event(1), model.ticks + 2, [sne.id])
 end
 
 function start_mnt!(sne::SimNE,time_start::Int64,mnt_policy::Type{CorrectiveM})
@@ -119,18 +124,35 @@ function do_maintenance_step!(a::Agent,mnt_policy::Type{CorrectiveM},model::ABM)
 
 end
 
-function schedule_maintenance!(a::Agent,mnt_due::Int64,sne_id::Int64)
-    #sne.id => i, time => mnt_due
-            #schedule start and stop of maintenance job
-            if !haskey(a.maintenance.pending_jobs_start,mnt_due)
-                a.maintenance.pending_jobs_start[mnt_due] = []
-            end
-            if !haskey(a.maintenance.pending_jobs_stop,mnt_due+a.maintenance.duration+1)
-                a.maintenance.pending_jobs_stop[mnt_due+a.maintenance.duration+1] = []
-            end
-            push!(a.maintenance.pending_jobs_start[mnt_due],sne_id)
-            push!(a.maintenance.pending_jobs_stop[mnt_due+a.maintenance.duration+1],sne_id)
+"""
+Schedules an event of type ``type`` on the given agent ``a`` at time ``time``, affecting the snes with ids: ``snes``.
+"""
+function schedule_event!(a::Agent,type::CTL_Event,time::Int64,snes::Vector{Int64})
+    if !haskey(a.events,time)
+        a.events[time] = Array{ControlEvent,1}()
+    end
+    push!(a.events[time],ControlEvent(time,type,snes))
 end
+
+"""
+Schedules an event of type ``type`` on the given agent ``a`` at time ``time``.
+"""
+function schedule_event!(a::Agent,type::CTL_Event,time::Int64)
+    schedule_event!(a,type,time,Array{Int64,1}())
+end
+
+# function schedule_maintenance!(a::Agent,mnt_due::Int64,sne_id::Int64)
+#     #sne.id => i, time => mnt_due
+#             #schedule start and stop of maintenance job
+#             if !haskey(a.maintenance.pending_jobs_start,mnt_due)
+#                 a.maintenance.pending_jobs_start[mnt_due] = []
+#             end
+#             if !haskey(a.maintenance.pending_jobs_stop,mnt_due+a.maintenance.duration+1)
+#                 a.maintenance.pending_jobs_stop[mnt_due+a.maintenance.duration+1] = []
+#             end
+#             push!(a.maintenance.pending_jobs_start[mnt_due],sne_id)
+#             push!(a.maintenance.pending_jobs_stop[mnt_due+a.maintenance.duration+1],sne_id)
+# end
 
 function update_maintenance_plan!(a::Agent,mnt_policy::Type{PreventiveM},model::ABM)
     window_size = a.maintenance.prediction_window
@@ -139,7 +161,11 @@ function update_maintenance_plan!(a::Agent,mnt_policy::Type{PreventiveM},model::
     for i=1:size(ruls,1)
         threshold_reached = findall(x->x==1,ruls[i,:] .<= a.maintenance.threshold)
         if !isempty(threshold_reached)
-            schedule_maintenance!(a,model.ticks + minimum(threshold_reached),i)
+            #negative indicates i goes down for maintenance
+            #1st reroute traffic out of node
+            schedule_event!(a,CTL_Event(1),model.ticks + minimum(threshold_reached),[-1*i])
+            #2nd perform maintenance
+            schedule_event!(a,CTL_Event(2),model.ticks + minimum(threshold_reached)+2,[-1*i])
         end
     end
 end
@@ -157,7 +183,8 @@ function update_maintenance_plan!(a::Agent,mnt_policy::Type{PredictiveM},model::
     log_info(model.ticks,a.id," From Alena's algo: $(mnt_plan)")
     for sne_id in 1:length(mnt_plan) 
         if mnt_plan[sne_id] > 0
-            schedule_maintenance!(a,model.ticks+mnt_plan[sne_id],sne_id)
+            # negative indicates that sne_id goes down for maintenance
+            schedule_event!(a,CTL_Event(1),model.ticks+mnt_plan[sne_id],-1*sne_id)
         end
     end
 end
@@ -168,17 +195,28 @@ It processes scheduled events
 function do_events_step!(a::Agent,model::ABM)
     if haskey(a.events,model.ticks)
         evs = a.events[model.ticks]
-        ntw_changes = []
+        ntw_changes = Array{Int64,1}()
 
-        for e in evs, nid in e.snes
-            sne = getindex(model,nid)
+        for e in evs
             @match e.type begin
                 CTL_Event(1) => 
-                             push!(ntw_changes,nid)
+                            for nid in e.snes
+                                sne = getindex(model,abs(nid))
+                                push!(ntw_changes,nid)
+                            end
                 CTL_Event(2) =>
-                             start_mnt!(sne,model.ticks)
+                            for nid in e.snes
+                                sne = getindex(model,abs(nid))
+                                start_mnt!(a,sne,model)
+                            end
                 CTL_Event(3) =>
-                             stop_mnt!(sne)
+                            for nid in e.snes
+                                sne = getindex(model,nid)
+                                stop_mnt!(a,sne,model)
+                            end
+                CTL_Event(4) =>
+                            do_rul_predictions!(a,model)
+                
                 _ => log_info(model.ticks,a.id,"Control event not recognised: $e")
             end
 
@@ -193,62 +231,88 @@ function do_events_step!(a::Agent,model::ABM)
 end
 
 """
+Run RUL predictions for the assets controlled by agent ``a``
+"""
+function do_rul_predictions!(a::Agent,model::ABM)
+    window_size = a.maintenance.prediction_window
+    #sort snes by id, works either for centralised (all assets one control agent or decentralised 1 asset per agent) #TODO decentralised with more than 1 asset per agent.
+    # sne_ids = sort(collect(get_controlled_assets(a.id,model)))
+    sne_ids = collect(1:nv(a.params[:base_ntw_graph]))
+
+    snes = getindex.([model],sne_ids)
+    
+    log_info(model.ticks,a.id,"sne_ids: $(sne_ids)")
+    
+    #arrange predictions in a matrix of dims: length(snes) x window_size.
+    ruls_pred = permutedims(hcat(get_rul_predictions.(snes,[model.ticks],[window_size])...))
+    a.rul_predictions = length(a.rul_predictions) > 0 ? hcat(a.rul_predictions,ruls_pred) : ruls_pred
+    # log_info(model.ticks,a.id," length: $(size(a.rul_predictions)) rul pred: $(a.rul_predictions)")
+    log_info(model.ticks,a.id,"Pred Maint=> services: $(model.ntw_services))")
+
+    update_maintenance_plan!(a,a.maintenance.policy,model)
+    #collect(get_controlled_assets(a.id,model))
+    #run next prediction
+    schedule_event!(a,CTL_Event(4),model.ticks+a.maintenance.predictive_freq)
+end
+
+
+"""
 Do preventive maintenance activities for the assets controlled by the given agent.
 """
-function do_maintenance_step!(a::Agent,mnt_policy::Type{T},model::ABM) where T<:MaintenanceType
+# function do_maintenance_step!(a::Agent,mnt_policy::Type{T},model::ABM) where T<:MaintenanceType
 
-    #prediction
-    if model.ticks%a.maintenance.predictive_freq == 0
-        window_size = a.maintenance.prediction_window
-        #sort snes by id, works either for centralised (all assets one control agent or decentralised 1 asset per agent) #TODO decentralised with more than 1 asset per agent.
-        # sne_ids = sort(collect(get_controlled_assets(a.id,model)))
-        sne_ids = collect(1:nv(a.params[:base_ntw_graph]))
+#     #prediction
+#     if model.ticks%a.maintenance.predictive_freq == 0
+#         window_size = a.maintenance.prediction_window
+#         #sort snes by id, works either for centralised (all assets one control agent or decentralised 1 asset per agent) #TODO decentralised with more than 1 asset per agent.
+#         # sne_ids = sort(collect(get_controlled_assets(a.id,model)))
+#         sne_ids = collect(1:nv(a.params[:base_ntw_graph]))
 
-        snes = getindex.([model],sne_ids)
+#         snes = getindex.([model],sne_ids)
         
-        log_info(model.ticks,a.id,"sne_ids: $(sne_ids)")
+#         log_info(model.ticks,a.id,"sne_ids: $(sne_ids)")
         
-        #arrange predictions in a matrix of dims: length(snes) x window_size.
-        ruls_pred = permutedims(hcat(get_rul_predictions.(snes,[model.ticks],[window_size])...))
-        a.rul_predictions = length(a.rul_predictions) > 0 ? hcat(a.rul_predictions,ruls_pred) : ruls_pred
-        # log_info(model.ticks,a.id," length: $(size(a.rul_predictions)) rul pred: $(a.rul_predictions)")
-        log_info(model.ticks,a.id,"Pred Maint=> services: $(model.ntw_services))")
+#         #arrange predictions in a matrix of dims: length(snes) x window_size.
+#         ruls_pred = permutedims(hcat(get_rul_predictions.(snes,[model.ticks],[window_size])...))
+#         a.rul_predictions = length(a.rul_predictions) > 0 ? hcat(a.rul_predictions,ruls_pred) : ruls_pred
+#         # log_info(model.ticks,a.id," length: $(size(a.rul_predictions)) rul pred: $(a.rul_predictions)")
+#         log_info(model.ticks,a.id,"Pred Maint=> services: $(model.ntw_services))")
 
-        update_maintenance_plan!(a,mnt_policy,model)
-    end
+#         update_maintenance_plan!(a,mnt_policy,model)
+#     end
     
-    #check a.pending_jobs if any job for the current tick, if so start
-    ntw_changes::Vector{Int64} = []
-    if haskey(a.maintenance.pending_jobs_start,model.ticks)
-        for nid in a.maintenance.pending_jobs_start[model.ticks]
-            push!(ntw_changes,-1 * nid )
-            sne = getindex(model,nid)
-            start_mnt!(sne,model.ticks)
-        end
-        delete!(a.maintenance.pending_jobs_start,model.ticks)
-    end
+#     #check a.pending_jobs if any job for the current tick, if so start
+#     ntw_changes::Vector{Int64} = []
+#     if haskey(a.maintenance.pending_jobs_start,model.ticks)
+#         for nid in a.maintenance.pending_jobs_start[model.ticks]
+#             push!(ntw_changes,-1 * nid )
+#             sne = getindex(model,nid)
+#             start_mnt!(sne,model.ticks)
+#         end
+#         delete!(a.maintenance.pending_jobs_start,model.ticks)
+#     end
 
-    if haskey(a.maintenance.pending_jobs_stop,model.ticks)
-        for nid in a.maintenance.pending_jobs_stop[model.ticks]
-            push!(ntw_changes,nid)
-            sne = getindex(model,nid)
-            stop_mnt!(sne)
-        end
-        delete!(a.maintenance.pending_jobs_stop,model.ticks)
-    end
+#     if haskey(a.maintenance.pending_jobs_stop,model.ticks)
+#         for nid in a.maintenance.pending_jobs_stop[model.ticks]
+#             push!(ntw_changes,nid)
+#             sne = getindex(model,nid)
+#             stop_mnt!(sne)
+#         end
+#         delete!(a.maintenance.pending_jobs_stop,model.ticks)
+#     end
 
-    if !isempty(ntw_changes)
-        do_update_flows!(a,ntw_changes,model)
-    end
+#     if !isempty(ntw_changes)
+#         do_update_flows!(a,ntw_changes,model)
+#     end
 
-    ##create ag message for predicted nes down
+#     ##create ag message for predicted nes down
 
-    #check duration against job start
-    #for stop
-    ## create message for predicted nes_down? (should be renamed)
-    ## retrigger query and install of paths with maintained assets
+#     #check duration against job start
+#     #for stop
+#     ## create message for predicted nes_down? (should be renamed)
+#     ## retrigger query and install of paths with maintained assets
 
-end
+# end
 
 
 

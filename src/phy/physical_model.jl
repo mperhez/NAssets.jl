@@ -4,7 +4,7 @@ Removes asset node (sne) from the network
 function drop_node!(sne::SimNE,model::ABM)
     set_down!(sne)
     g = model.ntw_graph
-    # log_info(model.ticks," All neighbours of $(sne.id) are: $(all_neighbors(model.ntw_graph,get_address(sne.id,g))) ")
+    log_info(model.ticks," All neighbours of $(sne.id) are: $(all_neighbors(model.ntw_graph,get_address(sne.id,g))) ")
     for nb in all_neighbors(model.ntw_graph,get_address(sne.id,g))
        sne_nb = getindex(model,get_eid(nb,model))
        link_down!(sne_nb,sne.id,model)
@@ -12,7 +12,7 @@ function drop_node!(sne::SimNE,model::ABM)
        
     #it simulates control detects sne down:
     aid = get_control_agent(sne.id,model)
-    a = getindex(model,aid)
+    a = getindex(model,abs(aid))
     controlled_sne_down!(a,sne.id,model)
 
     #soft remove 
@@ -32,7 +32,10 @@ function deteriorate!(sne::SimNE,model::ABM)
         # end
 
         if state.rul == 0
+            a = getindex(model,abs(sne.controller_id))
             drop_node!(sne,model)
+            schedule_event!(a,CTL_Event(2),model.ticks+1,[sne.id])
+            schedule_event!(a,CTL_Event(1),model.ticks+1,[-1*sne.id])
         end
     end
 end

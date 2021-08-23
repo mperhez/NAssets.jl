@@ -96,7 +96,7 @@ function do_agent_step!(a::Agent,model)
         # log_info(model.ticks,a.id,"==> a.paths ==> $(a.paths)")
         do_receive_messages(a,model)
 
-        do_maintenance_step!(a,a.maintenance.policy,model)
+        do_events_step!(a,model)
     end
 
     # log_info(model.ticks,a.id,25,"pending msgs: $(length(a.
