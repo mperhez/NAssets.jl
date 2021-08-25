@@ -349,3 +349,6 @@ function MaintenanceInfoPredictive(model)
     MaintenanceInfoPredictive(1.,model)
 end
 
+### TODO REVIEW ##
+
+cost(av) = (1 - av) * 100

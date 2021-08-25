@@ -54,6 +54,9 @@ function install_flow!(a::Agent,path::Array{Int64,1},model::ABM,msg::OFMessage=n
          if i < length(lpath)
             next_port = filter(p->parse(Int,p[2][2:end]) == lpath[i+1],ports)
             out_port = isempty(next_port) ? -1 : first(first(next_port))
+         else
+            #make sure it reaches the host regardles of the incoming port
+            in_port = "*"
          end
          
          if out_port >= 0 

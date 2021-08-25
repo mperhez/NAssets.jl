@@ -320,3 +320,133 @@ function plot_geo_network_step(base_geo_plot,g::MetaGraph,sne_steps::DataFrame,s
     p = graphplot!(base_geo_plot,g,x=lons,y=lats,alpha=0.3,dpi=dpi,size=size,nodesize=2,aspect_ratio=1,curvature_scalar=0.5,nodecolor=[ condition_color[i] for i in ruls ])
     return p 
 end
+
+
+"""
+Plot network according to arguments
+# """
+# function plot_network(g::MetaGraph,)
+# end
+
+
+########TODO REVIEW#############
+
+
+function prepare_graph!(g::MetaGraph,snes_ts::Vector{Vector{NetworkAssetState}},model_ts::Vector{ModelState},props::Dict{Symbol,Symbol})
+
+    rul_prop = props[:rul] 
+    up_prop = props[:up]
+    tpt_prop = props[:tpt]
+
+        #vertices
+        for nid=1:nv(g)
+            sne_ts = snes_ts[nid]
+            set_prop!(g,nid,rul_prop,[ s.rul for s in sne_ts ][1:end-1])#remove last to have equal ticks to edges
+            set_prop!(g,nid,up_prop,[ s.up for s in sne_ts ][1:end-1])
+        end
+
+        #edges
+        for e in edges(g)
+            if e.src < e.dst
+                edge_ts = [ haskey(s.links_load,(e.src,e.dst)) ? s.links_load[(e.src,e.dst)] : haskey(s.links_load,(e.dst,e.src)) ? s.links_load[(e.dst,e.src)] : 0  for s in model_ts ]
+                set_prop!(g,e.src,e.dst,tpt_prop, edge_ts)
+                set_prop!(g,e.dst,e.src,tpt_prop, edge_ts)
+            end
+            
+        end
+    return g
+end
+
+
+"""
+labels is a dictionary where keys are: :tpt for througput and :up for node alive.
+"""
+function get_edge_plot_props_step(g::MetaGraph,t::Int64,props::Dict{Symbol,Symbol})
+
+    e_color = Dict()
+    e_width = Dict()
+    e_style = Dict()
+
+    for e in edges(g)
+        if get_prop(g,e,props[:tpt])[t] > 0
+            e_color[(e.src,e.dst)] = :green
+            e_width[(e.src,e.dst)] = 3
+            e_style[(e.src,e.dst)] = t % 3 > 0 ? t % 3 > 1 ? :dashdot : :solid : :dot
+        else
+            e_width[(e.src,e.dst)] = 1
+            e_style[(e.src,e.dst)] = :solid
+            if get_prop(g,e.src,props[:up])[t] && get_prop(g,e.dst,props[:up])[t]
+                e_color[(e.src,e.dst)] = :gray
+            else
+                e_color[(e.src,e.dst)] = :white
+            end
+        end
+    end
+
+    return e_color, e_width, e_style
+end
+
+function get_vertex_plot_props_step(g::MetaGraph,t::Int64,props::Dict{Symbol,Symbol})
+    condition_color = cgrad([:red, :yellow, :green],collect(0.00:0.01:1))
+
+    ruls = [ get_prop(g,v,props[:rul])[t] for v=1:nv(g) ]
+    ruls = vcat(ruls[nv(g)÷2+1:nv(g)],ruls[1:nv(g)÷2])
+
+    v_color = [ ruls[i] > 0 ? condition_color[Int(round(ruls[i]))] : :lightgray for i=1:length(ruls)]
+
+    return v_color
+end
+
+
+function plot_graph_step(g::MetaGraph,v_props::Dict{Symbol,Symbol},e_props::Dict{Symbol,Symbol},t::Int64)
+    Random.seed!(seed)
+    method = :stress
+    v_size = 0.3
+    v_shape = :hexagon
+
+    e_color,e_width,e_style = get_edge_plot_props_step(g,t,e_props)
+    v_color = get_vertex_plot_props_step(g,t,v_props)
+    g_plot = graphplot(
+                        g
+                        ,method = method
+                        ,names = collect(1:nv(g))
+                        ,node_weights = [ i >9 ? 1 : 10 for i=1:nv(g) ]
+                        ,node_size = v_size
+                        ,nodecolor = v_color
+                        ,nodeshape = v_shape
+                        ,edgecolor = e_color
+                        ,edgewidth = e_width
+                        ,edgestyle = e_style
+                        # ,bottom_margin = 1
+                        )
+    return g_plot
+end
+
+function plot_tpt_step(snes_ts::Vector{Vector{NetworkAssetState}},ca_ts::Vector{State},t::Int64)
+    ap_ts = [ ca_ts[t].active_paths for t = 1:length(ca_ts) ]
+    # print(ap_ts)
+    p = plot(xlims=[0,140],ylims=[0,250]
+    #,xlabel="Time",ylabel="Throughput (MB)"
+    ,xticks=false
+    , legend=false)
+    for k in keys(ap_ts[t])
+        path = ap_ts[t][k]
+        if length(path) > 1
+            #get tpt for the last sne of the path only
+            tpts = hcat([ get_throughput_trj(snes_ts[sne],t) for sne=1:length(snes_ts) if sne == last(path) ]...)
+            # print(tpts)
+            p = plot!(p,tpts, label = k)
+        end
+    end
+    return p
+end
+
+function plot_maintenance_cost_step(snes_ts::Vector{Vector{NetworkAssetState}},t::Int64)
+    av_snes = sum(eachrow([  snes_ts[sne][tk].up  for sne=1:length(snes_ts), tk=1:t ]))./length(snes_ts)
+    return plot(
+                cumsum(cost.(av_snes))
+                ,legend = false
+                ,ylims=[0,140]
+                ,xlims=[0,140]
+            )
+end

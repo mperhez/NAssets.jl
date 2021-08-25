@@ -370,7 +370,12 @@ function init_agent!(sne::SimNE,model)
     
     for i in 1:size(nbs,1)
         push_ep_entry!(sne,(i,"s$(nbs[i])"))
+        #install flows to host of the same id
+        # install_flow!(Flow(sne.id,MRule("$i","$(nbs[i])","$(sne.id)"),[0],OFS_Action(1)),sne,model)
     end
+
+    
+    
 
    
     init_condition!(sne,model)

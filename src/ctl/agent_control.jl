@@ -428,7 +428,7 @@ function do_update_flows!(a::Agent,ntw_changes::Vector{Int64},model::ABM)
             query_paths = Dict{Tuple{Int64,Int64},Array{Tuple{Int64,Float64,Float64,Array{Int64}}}}()
 
             path = do_query(query_time,query,query_graph,query_paths)
-
+            
             if isempty(path)
                  log_info(model.ticks,a.id,"Not path found")
             #     # if !haskey(a.previous_queries,query)
@@ -439,9 +439,18 @@ function do_update_flows!(a::Agent,ntw_changes::Vector{Int64},model::ABM)
             #     # do_match!(path,msg,a,model)
             #     # clear_pending_query!(a,query)
                 msg = OFMessage(-1, model.ticks,-1,0,OFPR_ADD_FLOW,[])
-                 install_flow!(a,last(path),model,msg)
-            #     get_state(a).active_paths[(first(path),last(path))] = path
+                install_flow!(a,last(path),model,msg)
+                spath = last(path)
+                if length(spath) > 1
+                    k = (first(spath),last(spath))
+                    log_info(model.ticks,a.id,"key: $(k) ==> Ag Path: $spath")
+                    get_state(a).active_paths[k] = spath
+                end
             end
+
         end
+
+        
+
     end
 end

@@ -488,8 +488,16 @@ function get_throughput_up(sne::SimNE,model)
 end
 
 function get_throughput_trj(sne::SimNE)
-     [ isempty(st.throughput_out) ? 0 : mean([st.throughput_out[k] for k in keys(st.throughput_out)])  for st in sne.state_trj]
+    return get_throughput_trj(sne.state_trj,length(sne.state_trj))
 end
+
+function get_throughput_trj(state_trj::Vector{NetworkAssetState},t::Int64)
+   return [ isempty(st.throughput_out) ? 0 : mean([st.throughput_out[k] for k in keys(st.throughput_out)])  for st in state_trj[1:t]]
+end
+
+# function get_throughput_trj(sne::SimNE)
+#      [ isempty(st.throughput_out) ? 0 : mean([st.throughput_out[k] for k in keys(st.throughput_out)])  for st in sne.state_trj]
+# end
 
 function get_packet_loss_trj(sne::SimNE)
     [ st.drop_pkt  for st in sne.state_trj ]
