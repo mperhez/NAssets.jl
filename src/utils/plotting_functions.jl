@@ -417,7 +417,7 @@ function plot_graph_step(g::MetaGraph,v_props::Dict{Symbol,Symbol},e_props::Dict
                         ,edgecolor = e_color
                         ,edgewidth = e_width
                         ,edgestyle = e_style
-                        # ,bottom_margin = 1
+                        ,bottom_margin = -30Plots.px
                         )
     return g_plot
 end
