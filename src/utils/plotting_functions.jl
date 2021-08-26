@@ -401,7 +401,7 @@ end
 function plot_graph_step(g::MetaGraph,v_props::Dict{Symbol,Symbol},e_props::Dict{Symbol,Symbol},t::Int64)
     Random.seed!(seed)
     method = :stress
-    v_size = 0.3
+    v_size = 0.4
     v_shape = :hexagon
 
     e_color,e_width,e_style = get_edge_plot_props_step(g,t,e_props)
