@@ -350,5 +350,5 @@ function MaintenanceInfoPredictive(model)
 end
 
 ### TODO REVIEW ##
-
+#maintenance cost
 cost(av) = (1 - av) * 100
