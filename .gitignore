@@ -434,3 +434,8 @@ $RECYCLE.BIN/
 ##temporary animations
 
 *.gif
+*.mp4
+*.mkv
+*.pptx
+demo/*
+*.zip
