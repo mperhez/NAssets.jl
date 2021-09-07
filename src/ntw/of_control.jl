@@ -24,6 +24,7 @@ end
 """
 function install_flow!(a::Agent,path::Array{Int64,1},model::ABM,msg::OFMessage=nothing)
     # find which ones of path I am controlling
+    
     es = get_controlled_assets(a.id,model)
     lpath = isempty(path) ? es : path 
     eois = intersect(es,lpath)
@@ -31,52 +32,58 @@ function install_flow!(a::Agent,path::Array{Int64,1},model::ABM,msg::OFMessage=n
     
     log_info(model.ticks,a.id,"{$(get_controlled_assets(a.id,model))} install_flow! => path: $path -- es: $es -- eois: $eois - msg: -> $msg")
     
-    for e in eois
-        i = length(lpath) > 1 ? first(indexin(e,lpath)) : 1
-        sne = getindex(model,e)
-        i_prev = i > 1 ? i - 1 : i
-         
-        ports = get_port_edge_list(sne)
- 
-        # log_info("[$(model.ticks)]{$(a.id)}($(sne.id)) - ports: $(ports) - i: $i - i_prev: $i_prev - e: $e -- lpath : $lpath")
-         #Regardless of where the traffic comes
-         r_src = "*" #string("h",first(lpath)) 
-         r_dst = last(lpath)
-         in_port = 0
-         if i == 1
-             in_port = msg.in_port
-             #TODO of_msg remove from pending
-         else
-             in_port = first([ first(p) for p in ports if parse(Int,p[2][2:end]) == lpath[i_prev]])
-         end
-         out_port = 0
-         
-         if i < length(lpath)
-            next_port = filter(p->parse(Int,p[2][2:end]) == lpath[i+1],ports)
-            out_port = isempty(next_port) ? -1 : first(first(next_port))
-         else
-            #make sure it reaches the host regardles of the incoming port
-            in_port = "*"
-         end
-         
-         if out_port >= 0 
-            flow = Flow(  sne.id
-                    ,MRule(string(in_port)
-                    ,string(r_src)
-                    ,string(r_dst))
-                    ,[out_port]
-                    ,OFS_Output)
-            qid = msg.id
-            install_msg = OFMessage(next_ofmid!(model), model.ticks,e,1,OFPR_ADD_FLOW,(flow=flow,qid=qid))
-            send_msg!(e,install_msg,model)
-         else
-            log_info(model.ticks,a.id,"ERROR: Unable to find port")            
-         end
+    #check that all nodes of path are up node are up if centralised
+    is_install = model.ctrl_model == CENTRALISED ? length(collect(eois)) != length(path) ? false : true : true
 
-         next_sne = out_port > 0 ? lpath[i+1] : lpath[i]
-        #  log_info(model.ticks,a.id,"--> ($(sne.id),$(next_sne))")
+    if is_install
+        for e in eois
+            i = length(lpath) > 1 ? first(indexin(e,lpath)) : 1
+            sne = getindex(model,e)
+            i_prev = i > 1 ? i - 1 : i
+            
+            ports = get_port_edge_list(sne)
+    
+            # log_info("[$(model.ticks)]{$(a.id)}($(sne.id)) - ports: $(ports) - i: $i - i_prev: $i_prev - e: $e -- lpath : $lpath")
+            #Regardless of where the traffic comes
+            r_src = "*" #string("h",first(lpath)) 
+            r_dst = last(lpath)
+            in_port = 0
+            if i == 1
+                in_port = msg.in_port
+                #TODO of_msg remove from pending
+            else
+                in_port = first([ first(p) for p in ports if parse(Int,p[2][2:end]) == lpath[i_prev]])
+            end
+            out_port = 0
+            
+            if i < length(lpath)
+                next_port = filter(p->parse(Int,p[2][2:end]) == lpath[i+1],ports)
+                out_port = isempty(next_port) ? -1 : first(first(next_port))
+            else
+                #make sure it reaches the host regardles of the incoming port
+                in_port = "*"
+            end
+            
+            if out_port >= 0 
+                flow = Flow(  sne.id
+                        ,MRule(string(in_port)
+                        ,string(r_src)
+                        ,string(r_dst))
+                        ,[out_port]
+                        ,OFS_Output)
+                qid = msg.id
+                install_msg = OFMessage(next_ofmid!(model), model.ticks,e,1,OFPR_ADD_FLOW,(flow=flow,qid=qid))
+                send_msg!(e,install_msg,model)
+            else
+                log_info(model.ticks,a.id,"ERROR: Unable to find port")            
+            end
+
+            next_sne = out_port > 0 ? lpath[i+1] : lpath[i]
+            #  log_info(model.ticks,a.id,"--> ($(sne.id),$(next_sne))")
+        end
+    else
+        log_info(model.ticks,a.id,"Install flow, path discarded: $path")
     end
-   
 end
 
 function process_msg!(a::Agent,msg::OFMessage,model)

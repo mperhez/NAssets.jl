@@ -246,7 +246,7 @@ function load_run_configs()
                             for Β in Βs
                                 for ctl_k in ctl_ks
                                     for ctl_Β in ctl_Βs
-                                        push!(configs,new_config(seed,ctl_model,ntw_topo,size,200,drop_proportion,1.0,false,true,k,Β,ctl_k,ctl_Β,1,[(1,7),(4,1),(5,14),(12,8)],20,10,150.,100.,[1,0.05]))
+                                        push!(configs,new_config(seed,ctl_model,ntw_topo,size,200,drop_proportion,1.0,false,true,k,Β,ctl_k,ctl_Β,2,[(1,7),(4,1),(5,14),(12,8)],20,10,150.,100.,[1,0.05]))
                                     end
                                 end
                             end

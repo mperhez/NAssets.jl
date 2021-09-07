@@ -54,6 +54,7 @@ function init_maintenance!(sne::SimNE,model::ABM)
 end
 
 function start_mnt!(a::Agent,sne::SimNE,model::ABM)
+    log_info(model.ticks,a.id,"Starting mnt... $(sne.id)")
     sne.maintenance.job_start = model.ticks
     state = get_state(sne)
     state.up = false
@@ -65,6 +66,7 @@ function start_mnt!(a::Agent,sne::SimNE,model::ABM)
 end
 
 function stop_mnt!(a::Agent,sne::SimNE,model::ABM)
+    log_info(model.ticks,a.id,"Stopping mnt...$(sne.id)")
     state = get_state(sne)
     state.up = true
     state.on_maintenance = false
@@ -105,24 +107,24 @@ function get_rul_predictions(sne::SimNE,current_time::Int64,window_size::Int64):
     return [ lineal_d(sne.maintenance.deterioration_parameter,rul,t) for t = 1 : window_size  ]
 end
 
-"""
-Do corrective maintenance activities for the assets under control of a given agent.
-"""
-function do_maintenance_step!(a::Agent,mnt_policy::Type{CorrectiveM},model::ABM)
+# """
+# Do corrective maintenance activities for the assets under control of a given agent.
+# """
+# function do_maintenance_step!(a::Agent,mnt_policy::Type{CorrectiveM},model::ABM)
    
-    sne_ids = get_controlled_assets(a.id,model)
+#     sne_ids = get_controlled_assets(a.id,model)
 
-    for sne_id in sne_ids
-        sne = getindex(model,sne_id)
-        if is_start_mnt(sne,mnt_policy,model)
-            start_mnt!(sne,model.ticks,mnt_policy)
-        end
-        if sne.maintenance.job_start > 0 && sne.maintenance.job_start + sne.maintenance.duration == model.ticks
-            stop_mnt!(sne,mnt_policy,model)
-        end
-    end
+#     for sne_id in sne_ids
+#         sne = getindex(model,sne_id)
+#         if is_start_mnt(sne,mnt_policy,model)
+#             start_mnt!(sne,model.ticks,mnt_policy)
+#         end
+#         if sne.maintenance.job_start > 0 && sne.maintenance.job_start + sne.maintenance.duration == model.ticks
+#             stop_mnt!(sne,mnt_policy,model)
+#         end
+#     end
 
-end
+# end
 
 """
 Schedules an event of type ``type`` on the given agent ``a`` at time ``time``, affecting the snes with ids: ``snes``.
@@ -170,24 +172,65 @@ function update_maintenance_plan!(a::Agent,mnt_policy::Type{PreventiveM},model::
     end
 end
 
+
+"""
+  It processes a route received from optimisation algorithm
+"""
+function process_route!(time::Int64,a::Agent,rw,services::Vector{Tuple{Int64,Int64}})
+    path = Array{Int64,1}()
+    log_info(time,a.id,"full rw: $(rw)")
+    hd =  first(services[Int(rw[2])])
+    route = rw[3:end]
+    i_nxt = hd
+        
+    while true
+        push!(path,i_nxt)
+        i_nxt = Int(route[i_nxt])
+        if i_nxt == 0 
+           # && i_nxt != last(model.ntw_services[rw[2]])
+           break           
+        end
+    end
+
+    log_info(time,a.id," $(rw[1:3]) ==> path: $path ")
+    schedule_event!(a,CTL_Event(5),time+Int(rw[1]),path)
+end
+
+
 function update_maintenance_plan!(a::Agent,mnt_policy::Type{PredictiveM},model::ABM)
     window_size = a.maintenance.prediction_window
     ruls = a.rul_predictions[:,size(a.rul_predictions,2)-window_size+1:size(a.rul_predictions,2)]
-    #data conversion to py
-    services_py = np.matrix(model.ntw_services)
+    #data conversion to py, minus 1 as indexes in py start in 0
+    services_py = np.matrix(model.ntw_services) .- 1
     ruls_py = np.matrix(ruls)
     #pycall to optimisation function
     log_info(model.ticks,a.id,"srvs=>$(services_py)")
     log_info(model.ticks,a.id,"ruls_py=>$(ruls_py)")
-    mnt_plan = opt_run.maintenance_planning(services_py, ruls_py)
-    log_info(model.ticks,a.id," From Alena's algo: $(mnt_plan)")
+    mnt_plan, routes = opt_run.maintenance_planning(services_py, ruls_py)
+    #convert routes to julia indexes
+    #routes[:,2:end] = routes[:,2:end] .+ 1
+    
+    log_info(model.ticks,a.id," From Alena's algo PLAN: $(mnt_plan)")
+    log_info(model.ticks,a.id," From Alena's algo ROUTES: $(routes)")
+    
+    routes = routes .+ 1
+
+    if size(routes,2) > 1
+        for rw in eachrow(routes)
+            process_route!(model.ticks,a,rw,model.ntw_services)
+        end
+    elseif size(routes,2) == 1
+        process_route!(model.ticks,a,routes,model.ntw_services)
+    end
+
     for sne_id in 1:length(mnt_plan) 
         if mnt_plan[sne_id] > 0
             # negative indicates that sne_id goes down for maintenance
-            schedule_event!(a,CTL_Event(1),model.ticks+mnt_plan[sne_id],-1*sne_id)
+            schedule_event!(a,CTL_Event(2),model.ticks+mnt_plan[sne_id],sne_id)
         end
     end
 end
+
 
 """
 It processes scheduled events
@@ -217,13 +260,16 @@ function do_events_step!(a::Agent,model::ABM)
                 CTL_Event(4) =>
                             do_rul_predictions!(a,model)
                 
+                CTL_Event(5) =>
+                            do_update_flows_from_path!(a,e.snes,model)
+                
                 _ => log_info(model.ticks,a.id,"Control event not recognised: $e")
             end
 
         end
 
         if !isempty(ntw_changes)
-            do_update_flows!(a,ntw_changes,model)
+            do_update_flows_from_changes!(a,ntw_changes,model)
         end
 
         delete!(a.events,model.ticks)

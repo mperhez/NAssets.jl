@@ -389,11 +389,11 @@ end
 It deals with prediction of unavailability (for a given time window) of a set of NEs under control.
 
 """
-function do_update_flows!(a::Agent,ntw_changes::Vector{Int64},model::ABM)
+function do_update_flows_from_changes!(a::Agent,ntw_changes::Vector{Int64},model::ABM)
     #TODO operation for other than centralised agent
     if get_state(a).up
 
-        log_info(model.ticks,a.id,"Pred_Down: ntw_changes $(ntw_changes)")
+        log_info(model.ticks,a.id,"Pred_Down: ntw_changes!!!!!! $(ntw_changes)")
 
         joining_nodes = filter(x->x>0,ntw_changes)
         dropping_nodes = -1 * filter(x->x<0,ntw_changes)
@@ -424,7 +424,10 @@ function do_update_flows!(a::Agent,ntw_changes::Vector{Int64},model::ABM)
 
         query_time = model.ticks
         
-        for query in model.ntw_services
+        #Only trigger queries if maintenance policy is not predictive (where routes/flows come from the optimisation algorithm)
+        queries = a.maintenance.policy != PredictiveM  ? model.ntw_services : []
+
+        for query in queries
             query_paths = Dict{Tuple{Int64,Int64},Array{Tuple{Int64,Float64,Float64,Array{Int64}}}}()
 
             path = do_query(query_time,query,query_graph,query_paths)
@@ -438,19 +441,26 @@ function do_update_flows!(a::Agent,ntw_changes::Vector{Int64},model::ABM)
             else
             #     # do_match!(path,msg,a,model)
             #     # clear_pending_query!(a,query)
-                msg = OFMessage(-1, model.ticks,-1,0,OFPR_ADD_FLOW,[])
-                install_flow!(a,last(path),model,msg)
-                spath = last(path)
-                if length(spath) > 1
-                    k = (first(spath),last(spath))
-                    log_info(model.ticks,a.id,"key: $(k) ==> Ag Path: $spath")
-                    get_state(a).active_paths[k] = spath
-                end
+                do_update_flows_from_path!(a,last(path),model)
             end
 
         end
 
         
 
+    end
+end
+
+"""
+Update flows of the snes controlled by the agent a and for the path given, 
+"""
+function do_update_flows_from_path!(a::Agent,path::Array{Int64,1},model::ABM)
+    msg = OFMessage(-1, model.ticks,-1,0,OFPR_ADD_FLOW,[])
+    
+    install_flow!(a,path,model,msg)
+    if length(path) > 1
+        k = (first(path),last(path))
+        # log_info(model.ticks,a.id,"key: $(k) ==> Ag Path: $spath")
+        get_state(a).active_paths[k] = path
     end
 end

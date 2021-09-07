@@ -87,6 +87,7 @@ end
     TriggerDown = 2 #Trigger SNE down
     TriggerUp = 3 #Trigger SNE up
     Prediction = 4 #Update RUL predictions
+    InstallFlows = 5 #Install flows already calculated, different from 1, which calculates flow based on network shortest path 
 end
 
 

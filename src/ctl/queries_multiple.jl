@@ -142,11 +142,11 @@ function do_query(time::Int64,query::Tuple{Int64,Int64},lg::MetaGraph,paths::Dic
         default_confidence = 0.5
         push!(lg_paths,(time,default_confidence,last(path_state.dists),last(path_state.paths)))
     end
-
+    log_info(time," reaches here: $(path_state.paths)")
     #assumes query_paths is sorted by tick,score
     lg_ps = !isempty(lg_paths) ? first(lg_paths)[3] : -1.0
     cp_ps = !isempty(cp_paths) ? first(cp_paths)[3] : -1.0
-
+    log_info(time," AND here: $(path_state.paths)")
     path = @match (lg_ps,cp_ps) begin
         #no path
         (-1.0,-1.0)  => []
@@ -157,7 +157,7 @@ function do_query(time::Int64,query::Tuple{Int64,Int64},lg::MetaGraph,paths::Dic
         #path in cache paths and local graph
         (_::Float64,_::Float64) => first(cp_paths)[3] < first(lg_paths)[3] ? first(cp_paths) : first(lg_paths) ##lower is better
     end
-       
+    log_info(time," reaches END: $(path_state.paths)")       
     return path
 end
 
