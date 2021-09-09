@@ -1,4 +1,22 @@
 """
+It creates regional metro network
+
+"""
+function load_custom_regional_metro()
+
+    
+    #adjacency matrix
+    csv_file =  "data/networks/"*"adj_matrix_regional_metro_network.csv"
+    am = readdlm(csv_file, ',', Int, '\n')
+
+    #create metapgraph
+    g = MetaGraph(SimpleGraph(am))
+    set_indexing_prop!(g,:eid)
+    
+    return g
+end
+
+"""
 It creates custom's backbone rich graph from given files
 
 """

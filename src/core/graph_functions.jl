@@ -239,7 +239,8 @@ Get underlying graph
 function get_graph(seed,size,topo;k=0,Β=0,custom_topo=nothing)
     Random.seed!(seed)
     ntw = @match topo begin
-        GraphModel(0)=> load_custom_backbone(csv_custom_nodes,csv_custom_links)#custom_topo
+        # GraphModel(0)=> load_custom_backbone(csv_custom_nodes,csv_custom_links)#custom_topo
+        GraphModel(0)=> load_custom_regional_metro()#custom_topo
         GraphModel(2) => MetaGraph( [Int(i) for i in ring_graph(size)])
         GraphModel(3) => MetaGraph(LightGraphs.complete_graph(size))
         GraphModel(4) => MetaGraph( [Int(i) for i in grid2(Int(sqrt(size)))])
