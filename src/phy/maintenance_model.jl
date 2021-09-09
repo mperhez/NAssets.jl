@@ -75,7 +75,10 @@ function stop_mnt!(a::Agent,sne::SimNE,model::ABM)
     sne.maintenance.job_start = -1
     set_state!(sne,state)
     rejoin_node!(model,sne.id)
-    schedule_event!(a,CTL_Event(1), model.ticks + 2, [sne.id])
+    #Only if the agent's maintenance policy is corrective
+    if a.maintenance.policy == CorrectiveM
+        schedule_event!(a,CTL_Event(1), model.ticks + 2, [sne.id])
+    end
 end
 
 function start_mnt!(sne::SimNE,time_start::Int64,mnt_policy::Type{CorrectiveM})
@@ -206,13 +209,17 @@ function update_maintenance_plan!(a::Agent,mnt_policy::Type{PredictiveM},model::
     #pycall to optimisation function
     log_info(model.ticks,a.id,"srvs=>$(services_py)")
     log_info(model.ticks,a.id,"ruls_py=>$(ruls_py)")
-    mnt_plan, routes = opt_run.maintenance_planning(services_py, ruls_py)
-    #convert routes to julia indexes
-    #routes[:,2:end] = routes[:,2:end] .+ 1
+    mnt_plan, routes = opt_run.maintenance_planning(model.ticks,services_py, ruls_py)
+    
+    #when necessary, convert routes output to matrix, where size(ruls,1) + 2 is length of each routes matrix row.
+    if size(routes,2) != size(ruls,1) + 2
+        routes = transpose(reshape(routes,size(ruls,1) + 2,:))
+    end
     
     log_info(model.ticks,a.id," From Alena's algo PLAN: $(mnt_plan)")
-    log_info(model.ticks,a.id," From Alena's algo ROUTES: $(routes)")
+    log_info(model.ticks,a.id," From Alena's algo=> ROUTES: $(routes)")
     
+    #convert routes from py to julia indexes
     routes = routes .+ 1
 
     if size(routes,2) > 1
@@ -226,7 +233,8 @@ function update_maintenance_plan!(a::Agent,mnt_policy::Type{PredictiveM},model::
     for sne_id in 1:length(mnt_plan) 
         if mnt_plan[sne_id] > 0
             # negative indicates that sne_id goes down for maintenance
-            schedule_event!(a,CTL_Event(2),model.ticks+mnt_plan[sne_id],sne_id)
+            log_info(model.ticks,a.id," event for: $(mnt_plan[sne_id])")
+            schedule_event!(a,CTL_Event(2),Int(model.ticks+mnt_plan[sne_id]),[sne_id])
         end
     end
 end
@@ -383,7 +391,7 @@ function MaintenanceInfoCorrective(model)
     MaintenanceInfoCorrective(1.,model)
 end
 function MaintenanceInfoPreventive(deteriation::Float64,model)
-    return MaintenanceInfo(PreventiveM,100,-1,model.mnt_bc_duration,model.mnt_bc_cost,20,10,10,deteriation,model.mnt_wc_duration,model.mnt_wc_cost)
+    return MaintenanceInfo(PreventiveM,100,-1,model.mnt_bc_duration,model.mnt_bc_cost,10,10,10,deteriation,model.mnt_wc_duration,model.mnt_wc_cost)
 end
 function MaintenanceInfoPreventive(model)
     MaintenanceInfoPreventive(1.,model)
