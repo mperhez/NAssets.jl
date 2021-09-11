@@ -136,7 +136,7 @@ function plot_asset_networks(model;kwargs...)
     # rearrange ruls splitting array in 2 and starting with second half to match plotting algorithms, IDKW.   
     ruls = vcat(ruls[nv(model.ntw_graph)÷2+1:nv(model.ntw_graph)],ruls[1:nv(model.ntw_graph)÷2])
 
-    node_colors = [ ruls[i] > 0 ? condition_color[ruls[i]] : :lightgray for i=1:nv(model.ntw_graph) ] 
+    node_colors = [ ruls[i] > 0 ? condition_color[ruls[i]] : :red for i=1:nv(model.ntw_graph) ] 
     # log_info(model.ticks," RULs: $(ruls)")
     ntw_p = graphplot(
         model.base_ntw_graph
@@ -337,12 +337,14 @@ function prepare_graph!(g::MetaGraph,snes_ts::Vector{Vector{NetworkAssetState}},
     rul_prop = props[:rul] 
     up_prop = props[:up]
     tpt_prop = props[:tpt]
+    drop_prop = props[:drop]
 
         #vertices
         for nid=1:nv(g)
             sne_ts = snes_ts[nid]
             set_prop!(g,nid,rul_prop,[ s.rul for s in sne_ts ][1:end-1])#remove last to have equal ticks to edges
             set_prop!(g,nid,up_prop,[ s.up for s in sne_ts ][1:end-1])
+            set_prop!(g,nid,drop_prop,[ s.drop_pkt for s in sne_ts ][1:end-1])
         end
 
         #edges
@@ -362,14 +364,14 @@ end
 labels is a dictionary where keys are: :tpt for througput and :up for node alive.
 """
 function get_edge_plot_props_step(g::MetaGraph,t::Int64,props::Dict{Symbol,Symbol})
-
+    colors = Dict(1=>:blue,14=>:green,7=>:purple,8=>:orange)
     e_color = Dict()
     e_width = Dict()
     e_style = Dict()
 
     for e in edges(g)
         if get_prop(g,e,props[:tpt])[t] > 0
-            e_color[(e.src,e.dst)] = :green
+            e_color[(e.src,e.dst)] = "#2F9D96"#"#1C5E5A" #:green
             e_width[(e.src,e.dst)] = 3
             e_style[(e.src,e.dst)] = t % 3 > 0 ? t % 3 > 1 ? :dashdot : :solid : :dot
         else
@@ -387,13 +389,14 @@ function get_edge_plot_props_step(g::MetaGraph,t::Int64,props::Dict{Symbol,Symbo
 end
 
 function get_vertex_plot_props_step(g::MetaGraph,t::Int64,props::Dict{Symbol,Symbol})
-    condition_color = cgrad([:red, :yellow, :green],collect(0.00:0.01:1))
+    condition_color = cgrad(["#FF5964", "#FDF3C4", "#669bbc"],collect(0.00:0.01:1))
 
+    ups = [ get_prop(g,v,props[:up])[t] for v=1:nv(g) ]
     ruls = [ get_prop(g,v,props[:rul])[t] for v=1:nv(g) ]
     ruls = vcat(ruls[nv(g)÷2+1:nv(g)],ruls[1:nv(g)÷2])
-
-    v_color = [ ruls[i] > 0 ? condition_color[Int(round(ruls[i]))] : :lightgray for i=1:length(ruls)]
-
+    
+    v_color = [ ruls[i] > 0 ? condition_color[Int(round(ruls[i]))+1] : :white for i=1:length(ruls)]
+    
     return v_color
 end
 
@@ -422,31 +425,78 @@ function plot_graph_step(g::MetaGraph,v_props::Dict{Symbol,Symbol},e_props::Dict
     return g_plot
 end
 
-function plot_tpt_step(snes_ts::Vector{Vector{NetworkAssetState}},ca_ts::Vector{State},t::Int64)
-    ap_ts = [ ca_ts[t].active_paths for t = 1:length(ca_ts) ]
-    # print(ap_ts)
-    p = plot(xlims=[0,140],ylims=[0,250]
+function plot_tpt_step(snes_ts::Vector{Vector{NetworkAssetState}},snes_ref_ts::Vector{Vector{NetworkAssetState}},model_ts::Array{ModelState, 1},t::Int64)
+    max_x = 180
+    colors = Dict(1=>:blue,14=>:green,7=>:purple,8=>:orange)
+
+    #get end node of each active flow (service)
+    end_snes_ts = [ [f[2] for f in model_ts[t].active_flows if f[3] == f_E || f[3] == f_SE] for t=1:t ]
+    sort!(end_snes_ts)
+    p = plot(xlims=[0,max_x],ylims=[0,250]
     #,xlabel="Time",ylabel="Throughput (MB)"
     ,xticks=false
-    , legend=false)
-    for k in keys(ap_ts[t])
-        path = ap_ts[t][k]
-        if length(path) > 1
-            #get tpt for the last sne of the path only
-            tpts = hcat([ get_throughput_trj(snes_ts[sne],t) for sne=1:length(snes_ts) if sne == last(path) ]...)
-            # print(tpts)
-            p = plot!(p,tpts, label = k)
-        end
+    ,legend=false#:outertop#:outerright
+    )
+    for end_sne in end_snes_ts[t]
+        tpts_ref = hcat([ get_throughput_trj(snes_ref_ts[sne],max_x) for sne=1:length(snes_ref_ts) if sne in end_sne ]...)
+        p = plot!(tpts_ref, color = colors[end_sne], alpha=0.2
+        #,linestyle=:dot 
+        )
+        tpts = hcat([ get_throughput_trj(snes_ts[sne],t) for sne=1:length(snes_ts) if sne == end_sne ]...)
+        p = plot!(p,tpts,color=colors[end_sne])
     end
+    
     return p
 end
 
-function plot_maintenance_cost_step(snes_ts::Vector{Vector{NetworkAssetState}},t::Int64)
-    av_snes = sum(eachrow([  snes_ts[sne][tk].up  for sne=1:length(snes_ts), tk=1:t ]))./length(snes_ts)
+function plot_maintenance_cost_step(snes_ts::Vector{Vector{NetworkAssetState}},model_ts::Array{ModelState, 1},t::Int64)
+    costs = zeros(1:t)    
+    if t > 1
+
+        ruls = [  snes_ts[sne][tk].on_maintenance ? snes_ts[sne][tk].rul : -1.0  for sne=1:length(snes_ts), tk=1:t ]
+
+        is_starts = hcat(Bool.(zeros(1:length(snes_ts))),[  !snes_ts[sne][tk-1].on_maintenance && snes_ts[sne][tk].on_maintenance ? true : false for sne=1:length(snes_ts),tk=2:t ])
+
+        is_actives = transpose(hcat([ is_in.(sne,
+                                            [ unique(vcat([ vcat(f[1],f[2]) for f in model_ts[tk].active_flows ]...)) for tk=1:t ]) for sne in collect(1:length(snes_ts)) ]...))
+
+
+
+        costs = cumsum(sum(eachrow(
+                    maintenance_cost.(
+                        ruls,
+                        is_starts,
+                        is_actives,
+                        5, 4, 10, 3
+                    )
+                )))
+
+        if t == 140
+         
+        println("=========RULS=============")
+        print(ruls)
+        print("\n")
+        println("========IS_STARTS==============")
+        print(is_starts)
+        print("\n")
+        println("========IS_ACTIVEs==============")
+        print(is_actives)
+        print("\n")
+        println("==========COSTS============")
+        print(costs)
+        print("\n")
+        end
+        
+    end
+    
     return plot(
-                cumsum(cost.(av_snes))
+                costs
                 ,legend = false
-                ,ylims=[0,140]
-                ,xlims=[0,140]
+                ,ylims=[0,1000]
+                ,xlims=[0,180]
             )
+
+
+    # sum_dp = sum(eachrow([  snes_ts[sne][tk].drop_pkt  for sne=1:length(snes_ts), tk=1:t ]))
+
 end
