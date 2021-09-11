@@ -58,7 +58,7 @@ function start_mnt!(a::Agent,sne::SimNE,model::ABM)
     sne.maintenance.job_start = model.ticks
     state = get_state(sne)
     state.up = false
-    state.rul = 0
+    #state.rul = 0
     state.on_maintenance = true
     set_state!(sne,state)
     drop_node!(sne,model)
@@ -406,3 +406,37 @@ end
 ### TODO REVIEW ##
 #maintenance cost
 cost(av) = (1 - av) * 100
+
+"""
+Maintenance cost at a given time step:
+
+rul_mnt: rul of an asset (sne) of the network that is undergoing maintenance. If rul == 0., then it is corrective maintenance, if rul > 0, then it is preventive maintenance. Otherwise (-1) no maintenance ongoing.
+
+is_start: indicates if maintenance has started so time-independent costs are added
+
+is_active: indicates if the asset was active in the network before maintenance started, i.e. was part of an active flow.
+
+dt_cost: downtime cost, cost of service flow/production loss per time step, time-dependent. Added when corrective maintenance.
+
+l_cost: labour cost per time step, time-dependent. 
+
+p_cost: parts costs for maintenance regardless of the time it takes, time-independent, only added when maintenance starts.
+
+r_cost: cost of loss of remaining life. Added when preventive maintenance. 
+"""
+
+function maintenance_cost(rul_mnt,is_start,is_active,dt_cost,l_cost,p_cost,r_cost)
+
+    #parts costs
+    mnt_cost = is_start ? p_cost : 0.
+
+    #labour costs
+    mnt_cost += rul_mnt >= 0. ? l_cost : 0.
+
+    #downtime costs
+    mnt_cost += rul_mnt == 0. && is_active ? dt_cost : 0.
+
+    #loss of life costs
+    mnt_cost += is_start ? rul_mnt * r_cost : 0.
+    
+end
