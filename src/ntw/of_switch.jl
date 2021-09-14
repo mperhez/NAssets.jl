@@ -1,7 +1,7 @@
 #export NetworkAssetState, ModelState, ControlAgentState
 function forward!(msg::OFMessage,src::SimNE,model)
-    # log_info("[$(model.ticks)]($(src.id)) Packet $(msg.id) delivered")
     out_pkt_count = get_state(src).out_pkt + 1
+    log_info(model.ticks,msg.data.dst,1, "Packet from $(msg.data.src) delivered -> out pkts count: $(out_pkt_count)")
     set_out_pkt!(src,out_pkt_count)
 
     if !haskey(src.one_way_time_pkt,msg.data.src)
@@ -11,9 +11,11 @@ function forward!(msg::OFMessage,src::SimNE,model)
 end
 
 function forward!(msg::OFMessage,src::SimNE,dst::SimNE,reason::Ofp_Protocol,model)
-    # if model.ticks > 45 && model.ticks < 60 
-    #     log_info(model.ticks,src.id,5,"[$(model.ticks)] ($(src.id)) forwarding $msg")
-    # end
+    if model.ticks >= 53 && model.ticks <= 58 
+        log_info(model.ticks,src.id,4," forwarding to $(dst.id) ==> $msg")
+        log_info(model.ticks,src.id,3," forwarding to $(dst.id) ==> $msg")
+        log_info(model.ticks,src.id,2," forwarding to $(dst.id) ==> $msg")
+    end
     in_ports = filter(p->p[2]=="s$(src.id)",get_port_edge_list(dst))
     in_port = in_ports[1][1]
     push_msg!(src,dst,OFMessage(next_ofmid!(model),model.ticks,src.id,in_port,reason,msg.data),model)
@@ -24,18 +26,20 @@ function forward!(msg::OFMessage,src::SimNE,dst::SimNE,reason::Ofp_Protocol,mode
 end
 
 function route_traffic!(a::SimNE,msg::OFMessage,model)
-    
+    if model.ticks >= 56 && model.ticks <= 59
+        log_info(model.ticks,a.id,2," BEF Routing Msg $(msg) ==> flows: $(get_flow_table(a))")
+    end
     out_pkt_count = 0
     flow = filter(fw -> 
                             ( fw.match_rule.src == string(msg.data.src) || fw.match_rule.src == "*" )
-                            && (fw.match_rule.in_port == string(msg.in_port) || fw.match_rule.in_port == "*" )
+                           # && (fw.match_rule.in_port == string(msg.in_port) || fw.match_rule.in_port == "*" )
                             && (fw.match_rule.dst == string(msg.data.dst) || fw.match_rule.dst == "*")
                             , get_flow_table(a))
                             
     if !isempty(flow)
-        # if model.ticks > 40 && model.ticks < 60
-        #     log_info(model.ticks,a.id,5," Routing Msg $(msg) --- $(msg.in_port)----    flout_out: $(flow[1].params[1][1]) --- all ports: $(get_port_edge_list(a))")
-        # end
+        if model.ticks >= 56 && model.ticks <= 59
+        log_info(model.ticks,a.id,2,"AFT Routing Msg $(msg) --- $(msg.in_port)----    flout_out: $(flow[1].params[1][1]) --- all ports: $(get_port_edge_list(a))")
+        end
         
         if flow[1].action == OFS_Output
             if flow[1].params[1][1] != 0
@@ -185,6 +189,9 @@ end
 Processes msgs to SimNE
 """
 function process_msg!(sne::SimNE,msg::OFMessage,model)
+    if model.ticks >= 56 && model.ticks <= 58
+        log_info(model.ticks,sne.id,2,msg)
+    end
     @match msg.reason begin
         Ofp_Protocol(1) =>  
                         begin
@@ -192,7 +199,9 @@ function process_msg!(sne::SimNE,msg::OFMessage,model)
                         end
         Ofp_Protocol(3) => 
                         begin
-                            # log_info("[$(model.ticks)]($(sne.id)) -> processing $(msg.reason)")
+                            if model.ticks >=54 && model.ticks <= 56
+                                log_info(model.ticks,sne.id,6,"$(msg) -> processing $(msg.reason)")
+                            end
                             install_flow!(msg,sne,model)       
                         end
         Ofp_Protocol(4) => 
@@ -492,7 +501,7 @@ function get_throughput_trj(sne::SimNE)
 end
 
 function get_throughput_trj(state_trj::Vector{NetworkAssetState},t::Int64)
-   return [ isempty(st.throughput_out) ? 0 : mean([st.throughput_out[k] for k in keys(st.throughput_out)])  for st in state_trj[1:t]]
+   return [ isempty(st.throughput_out) ? 0. : mean([st.throughput_out[k] for k in keys(st.throughput_out)])  for st in state_trj[1:t]]
 end
 
 # function get_throughput_trj(sne::SimNE)
@@ -561,6 +570,7 @@ function calculate_metrics_step!(sne::SimNE,model::ABM)
 
     for k in keys(sne.one_way_time_pkt)
         # state.throughput_out[k] = mean(model.pkt_size .* sne.one_way_time_pkt[k])
+        #how long on average the packets from k took to reach destination
         state.throughput_out[k] = ( model.pkt_size * length(sne.one_way_time_pkt[k])) / mean(sne.one_way_time_pkt[k])
         # pkt_size * No. pkts / mean time it took each pkt
 
