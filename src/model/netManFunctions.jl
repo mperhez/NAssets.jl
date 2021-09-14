@@ -79,6 +79,9 @@ function do_agent_step!(a::SimNE,model)
     
     # log_info(model.ticks,a.id,"rqsted: $(a.requested_ctl)")
     # @debug("[$(model.ticks)]($(a.id)) end step")
+    # if model.ticks == 100
+    #     a.maintenance.deterioration_parameter = 0.7 
+    # end
     deteriorate!(a,model)
 end
 
@@ -229,8 +232,8 @@ end
 function load_run_configs() 
     configs = []
     for ctl_model in [GraphModel(1)]#, ControlModel(4) ] #instances(ControlModel)
-        for ntw_topo in [GraphModel(4)] #6
-            for size in [16]#, 50, 100]
+        for ntw_topo in [GraphModel(0)] #4#6
+            for size in [92]#, 50, 100]
                 for drop_proportion in [10]
                     for seed in [123]
                         ks = ntw_topo == GraphModel(6) ||
@@ -246,7 +249,7 @@ function load_run_configs()
                             for Β in Βs
                                 for ctl_k in ctl_ks
                                     for ctl_Β in ctl_Βs
-                                        push!(configs,new_config(seed,ctl_model,ntw_topo,size,200,drop_proportion,1.0,false,true,k,Β,ctl_k,ctl_Β,2,[(1,7),(4,1),(5,14),(12,8)],20,10,150.,100.,[1,0.05]))
+                                        push!(configs,new_config(seed,ctl_model,ntw_topo,size,100,drop_proportion,1.0,false,false,k,Β,ctl_k,ctl_Β,2,[(1,7),(4,1),(5,14),(12,8)],20,10,150.,100.,[1,0.05]))
                                     end
                                 end
                             end
@@ -258,6 +261,43 @@ function load_run_configs()
     end
     return configs
 end
+
+function load_run_configs(g_size,m_policy,services,steps) 
+    ntw_graph = g_size == 92 ? 0 : 4
+    configs = []
+    for ctl_model in [GraphModel(1)]#, ControlModel(4) ] #instances(ControlModel)
+        for ntw_topo in [GraphModel(ntw_graph)] 
+            for size in [g_size]
+                for drop_proportion in [10]
+                    for seed in [123]
+                        ks = ntw_topo == GraphModel(6) ||
+                            ntw_topo == GraphModel(7) ? [4] : [0]
+                        ctl_ks = ctl_model == GraphModel(6) ||
+                                ctl_model == GraphModel(7) ? [4] : [0]
+                        Βs = ntw_topo == GraphModel(6) ||
+                                ntw_topo == GraphModel(7) ? [0.8] : [0.0]
+                        ctl_Βs = ctl_model == GraphModel(6) ||
+                                    ctl_model == GraphModel(7) ? [0.8] : [0.0]
+                        
+                        for k in ks
+                            for Β in Βs
+                                for ctl_k in ctl_ks
+                                    for ctl_Β in ctl_Βs
+                                        push!(configs,new_config(seed,ctl_model,ntw_topo,size,steps,drop_proportion,1.0,false,false,k,Β,ctl_k,ctl_Β,m_policy,services,20,10,150.,100.,[1,0.05]))
+                                    end
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+    return configs
+end
+
+
+
 
 function get_run_label(config)
     base_label = "$(config.ntw_topo)"
@@ -338,7 +378,7 @@ function single_run(config)
     # print(last(result_model)["get_state_trj"])
     
     #sdir = data_dir*"runs2/$(config.ctl_model)/"
-    sdir = data_dir*"runs3/"
+    sdir = data_dir*"demo/"
 
     if !isdir(sdir)
         mkdir(sdir) 

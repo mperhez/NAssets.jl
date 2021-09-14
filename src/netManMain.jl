@@ -83,7 +83,20 @@ end
 data_dir = "data/"
 plots_dir = "plots/"
 BenchmarkTools.DEFAULT_PARAMETERS.samples = 100
-configs = load_run_configs()
+#configs = load_run_configs()
+
+services = [(1,7),(4,1),(5,14),(12,8)]
+
+scenario_2_ruls = [65,78,84,86,93,49,90]
+scenario_2_ids = [2,6,9,13,10,15,16]
+
+steps = 145
+configs = []
+#push!(configs,first(load_run_configs(16,0,services,steps)))
+#push!(configs,first(load_run_configs(16,1,services,steps)))
+push!(configs,first(load_run_configs(16,2,services,steps)))
+
+
 #Logging.disable_logging(Logging.Info)
 #enable logs
 Logging.disable_logging(Logging.BelowMinLevel)

@@ -95,9 +95,13 @@ function create_sim_asset_agents!(model)
             2 => MaintenanceInfoPredictive(0.2,model)
             _ => MaintenanceInfoCorrective(0.2,model)
         end
-        if id == 9
+        # if id == 9
+        #     mnt.deterioration_parameter = 2. 
+        # end
+        if id in scenario_2_ids
             mnt.deterioration_parameter = 1. 
         end
+
         a = add_agent_pos!(
                 SimNE(id,i,a_params,10*model.pkt_per_tick,mnt),model
             )
