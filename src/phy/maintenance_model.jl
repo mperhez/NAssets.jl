@@ -179,13 +179,15 @@ end
 """
   It processes a route received from optimisation algorithm
 """
-function process_route!(time::Int64,a::Agent,rw,services::Vector{Tuple{Int64,Int64}})
+function process_route!(a::Agent,rw,model::ABM)
+    log_info(model.ticks,a.id,"full rw: $(rw)")
     path = Array{Int64,1}()
-    log_info(time,a.id,"full rw: $(rw)")
+    services = model.ntw_services
     hd =  first(services[Int(rw[2])])
     route = rw[3:end]
     i_nxt = hd
-        
+    
+
     while true
         push!(path,i_nxt)
         i_nxt = Int(route[i_nxt])
@@ -194,14 +196,17 @@ function process_route!(time::Int64,a::Agent,rw,services::Vector{Tuple{Int64,Int
            break           
         end
     end
+    
+    snes = [ getindex(model,Int(sid)) for sid in path ]
+    time = maximum([ !is_up(sne) ? sne.maintenance.job_start + sne.maintenance.duration : model.ticks + Int(rw[1]) for sne in snes ])
 
-    log_info(time,a.id," $(rw[1:3]) ==> path: $path ")
-    schedule_event!(a,CTL_Event(5),time+Int(rw[1]),path)
+    log_info(model.ticks,a.id," $(rw[1:3]) event scheduled for t=$(time) ==> path: $path ")
+    schedule_event!(a,CTL_Event(5),time,path)
 end
 
 
 function update_maintenance_plan!(a::Agent,mnt_policy::Type{PredictiveM},model::ABM)
-    window_size = a.maintenance.prediction_window
+    window_size = a.maintenance.prediction_window * 2
     ruls = a.rul_predictions[:,size(a.rul_predictions,2)-window_size+1:size(a.rul_predictions,2)]
     #data conversion to py, minus 1 as indexes in py start in 0
     services_py = np.matrix(model.ntw_services) .- 1
@@ -224,10 +229,10 @@ function update_maintenance_plan!(a::Agent,mnt_policy::Type{PredictiveM},model::
 
     if size(routes,2) > 1
         for rw in eachrow(routes)
-            process_route!(model.ticks,a,rw,model.ntw_services)
+            process_route!(a,rw,model)
         end
     elseif size(routes,2) == 1
-        process_route!(model.ticks,a,routes,model.ntw_services)
+        process_route!(a,routes,model)
     end
 
     for sne_id in 1:length(mnt_plan) 
@@ -247,8 +252,9 @@ function do_events_step!(a::Agent,model::ABM)
     if haskey(a.events,model.ticks)
         evs = a.events[model.ticks]
         ntw_changes = Array{Int64,1}()
-
+        
         for e in evs
+            log_info(model.ticks,a.id,"Triggering event: $e")
             @match e.type begin
                 CTL_Event(1) => 
                             for nid in e.snes
@@ -288,7 +294,8 @@ end
 Run RUL predictions for the assets controlled by agent ``a``
 """
 function do_rul_predictions!(a::Agent,model::ABM)
-    window_size = a.maintenance.prediction_window
+    window_size = a.maintenance.prediction_window * 2
+
     #sort snes by id, works either for centralised (all assets one control agent or decentralised 1 asset per agent) #TODO decentralised with more than 1 asset per agent.
     # sne_ids = sort(collect(get_controlled_assets(a.id,model)))
     sne_ids = collect(1:nv(a.params[:base_ntw_graph]))
@@ -412,7 +419,7 @@ Maintenance cost at a given time step:
 
 rul_mnt: rul of an asset (sne) of the network that is undergoing maintenance. If rul == 0., then it is corrective maintenance, if rul > 0, then it is preventive maintenance. Otherwise (-1) no maintenance ongoing.
 
-is_start: indicates if maintenance has started so time-independent costs are added
+is_start: indicates if maintenance has just started so time-independent costs are added
 
 is_active: indicates if the asset was active in the network before maintenance started, i.e. was part of an active flow.
 
