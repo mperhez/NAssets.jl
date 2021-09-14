@@ -281,9 +281,12 @@ end
 function plot_geo_network(base_geo_plot,g::MetaGraph)
     dpi = 300
     size = (400,500)
-    lons = [ get_prop(g,i,:bng_lon) for i=1:nv(g)]
-    lats = [ get_prop(g,i,:bng_lat) for i=1:nv(g)]
-    p = graphplot!(base_geo_plot,g,x=lons,y=lats,alpha=0.3,dpi=dpi,size=size,nodesize=2,aspect_ratio=1,curvature_scalar=0.5,nodecolor=:red)
+    n_v = nv(g)
+    lons = [ get_prop(g,i,:bng_lon) for i=1:n_v]
+    lats = [ get_prop(g,i,:bng_lat) for i=1:n_v]
+    p = graphplot!(base_geo_plot,g,x=lons,y=lats,alpha=0.3,dpi=dpi,size=size,nodesize=4.5,aspect_ratio=1,curvature_scalar=0.5,nodecolor="#FDF3C4"
+    ,names=collect(1:n_v)
+    ,fontsize=3, edgecolor = :green)
     return p 
 end
 
@@ -321,6 +324,37 @@ function plot_geo_network_step(base_geo_plot,g::MetaGraph,sne_steps::DataFrame,s
     return p 
 end
 
+function plot_geo_network_step(base_geo_plot,g::MetaGraph,v_props::Dict{Symbol,Symbol},e_props::Dict{Symbol,Symbol},t::Int64)
+    dpi = 300
+    size = (400,500)
+    
+    v_size = 4.5
+    v_shape = :hexagon
+    n_v = nv(g)
+    lons = [ get_prop(g,i,:bng_lon) for i=1:n_v]
+    lats = [ get_prop(g,i,:bng_lat) for i=1:n_v]
+    e_color,e_width,e_style = get_edge_plot_props_step(g,t,e_props)
+    v_color = get_vertex_plot_props_step(g,t,v_props)
+    g_plot = graphplot!(
+                        base_geo_plot
+                        ,g
+                        ,x=lons,y=lats
+                        ,alpha=0.3
+                        ,names = collect(1:n_v)
+                        ,node_weights = [ i >9 ? 1 : 10 for i=1:n_v ]
+                        ,node_size = v_size
+                        ,nodecolor = v_color
+                        ,nodeshape = v_shape
+                        ,edgecolor = e_color
+                        ,edgewidth = e_width
+                        ,edgestyle = e_style
+                        ,left_margin = -400Plots.px
+                        ,right_margin = -250Plots.px
+                        ,fontsize=3
+                        ,dpi=dpi,size=size, aspect_ratio=1,curvature_scalar=0.5
+                        )
+    return g_plot
+end
 
 """
 Plot network according to arguments
@@ -330,7 +364,6 @@ Plot network according to arguments
 
 
 ########TODO REVIEW#############
-
 
 function prepare_graph!(g::MetaGraph,snes_ts::Vector{Vector{NetworkAssetState}},model_ts::Vector{ModelState},props::Dict{Symbol,Symbol})
 
@@ -430,7 +463,7 @@ function plot_tpt_step(snes_ts::Vector{Vector{NetworkAssetState}},snes_ref_ts::V
     colors = Dict(1=>:blue,14=>:green,7=>:purple,8=>:orange)
 
     #get end node of each active flow (service)
-    end_snes_ts = [ [f[2] for f in model_ts[t].active_flows if f[3] == f_E || f[3] == f_SE] for t=1:t ]
+    end_snes_ts = [[1,7,8,14] for tk=1:t]#[ [f[2] for f in model_ts[t].active_flows if f[3] == f_E || f[3] == f_SE] for t=1:t ]
     sort!(end_snes_ts)
     p = plot(xlims=[0,max_x],ylims=[0,250]
     #,xlabel="Time",ylabel="Throughput (MB)"
@@ -443,9 +476,12 @@ function plot_tpt_step(snes_ts::Vector{Vector{NetworkAssetState}},snes_ref_ts::V
         #,linestyle=:dot 
         )
         tpts = hcat([ get_throughput_trj(snes_ts[sne],t) for sne=1:length(snes_ts) if sne == end_sne ]...)
+
         p = plot!(p,tpts,color=colors[end_sne])
     end
-    
+    if t == 80
+        print(get_throughput_trj(snes_ts[1],t))
+    end
     return p
 end
 
@@ -500,3 +536,47 @@ function plot_maintenance_cost_step(snes_ts::Vector{Vector{NetworkAssetState}},m
     # sum_dp = sum(eachrow([  snes_ts[sne][tk].drop_pkt  for sne=1:length(snes_ts), tk=1:t ]))
 
 end
+
+
+
+function plot_maintenance_cost_step(snes_ts1::Vector{Vector{NetworkAssetState}},snes_ts2::Vector{Vector{NetworkAssetState}},snes_ts3::Vector{Vector{NetworkAssetState}},model_ts::Array{ModelState, 1},t::Int64)
+    costs = zeros(3,t)
+    
+    snes_ts = [snes_ts1,snes_ts2,snes_ts3]
+    
+    if t > 1
+
+        for sr=1:length(snes_ts)
+            ruls = [  snes_ts[sr][sne][tk].on_maintenance ? snes_ts[sr][sne][tk].rul : -1.0  for sne=1:length(snes_ts[sr]), tk=1:t ]
+
+            is_starts = hcat(Bool.(zeros(1:length(snes_ts[sr]))),[  !snes_ts[sr][sne][tk-1].on_maintenance && snes_ts[sr][sne][tk].on_maintenance ? true : false for sne=1:length(snes_ts[sr]),tk=2:t ])
+
+            is_actives = transpose(hcat([ is_in.(sne,
+                                                [ unique(vcat([ vcat(f[1],f[2]) for f in model_ts[tk].active_flows ]...)) for tk=1:t ]) for sne in collect(1:length(snes_ts[sr])) ]...))
+
+
+
+            costs[:,sr] = cumsum(sum(eachrow(
+                        maintenance_cost.(
+                            ruls,
+                            is_starts,
+                            is_actives,
+                            5, 4, 10, 3
+                        )
+                    )))
+        end
+        
+    end
+    
+    return plot(
+                costs
+                ,legend = false
+                ,ylims=[0,1000]
+                ,xlims=[0,180]
+            )
+
+
+    # sum_dp = sum(eachrow([  snes_ts[sne][tk].drop_pkt  for sne=1:length(snes_ts), tk=1:t ]))
+
+end
+

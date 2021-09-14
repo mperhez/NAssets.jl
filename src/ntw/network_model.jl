@@ -2,17 +2,29 @@
 It creates regional metro network
 
 """
-function load_custom_regional_metro()
+function load_custom_regional_metro(csv_adj_m,csv_coordinates)
 
-    
+    csv_adj_m = "data/networks/"*"adj_matrix_regional_metro_network.csv"
+    csv_coordinates = "data/networks/"*"regional_metro_coordinates_bn.csv"
+
     #adjacency matrix
-    csv_file =  "data/networks/"*"adj_matrix_regional_metro_network.csv"
-    am = readdlm(csv_file, ',', Int, '\n')
+    am = readdlm(csv_adj_m, ',', Int, '\n')
 
-    #create metapgraph
+    #coordinates
+    df_net = CSV.File(csv_coordinates) |> DataFrame
+    df_net = sort(df_net,[:id])
+    #create metagraph
     g = MetaGraph(SimpleGraph(am))
     set_indexing_prop!(g,:eid)
-    
+
+    #populate metagraph
+    vi = 0
+    for r in eachrow(df_net)
+        vi += 1
+        set_props!(g,vi,Dict(:bng_lon=>r.bng_lon,:bng_lat=>r.bng_lat))
+    end
+
+
     return g
 end
 
