@@ -9,7 +9,7 @@ using ZipFile, Shapefile
 using Random
 using Match
 using LinearAlgebra
-#using StatsBase
+using StatsBase
 using Distributions
 using StatsPlots
 using SparseArrays
@@ -17,7 +17,7 @@ using Laplacians
 using DataStructures
 using RollingFunctions
 using BenchmarkTools
-#using Statistics
+using Statistics
 using Logging,LoggingExtras
 using Dates,TimeZones
 
