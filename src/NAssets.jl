@@ -62,6 +62,6 @@ include("model/netManModel.jl")
 #Multiple queries
 include("ctl/queries_multiple.jl")
 
-export load_run_configs, single_run_with_file_logging
+export load_run_configs, single_run_with_logging
 
 end # module
