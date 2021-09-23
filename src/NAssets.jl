@@ -2,7 +2,7 @@ module NAssets
 
 using Agents: vertices
 using MetaGraphs: add_vertex!, has_edge
-using Agents, AgentsPlots, Plots, LightGraphs, MetaGraphs, SimpleWeightedGraphs, GraphPlot, GraphRecipes, NetworkLayout
+using Agents, AgentsPlots, Plots, LightGraphs, MetaGraphs, GraphPlot, GraphRecipes, NetworkLayout
 using Tables, DataFrames
 using CSV, JSON, Serialization, DelimitedFiles
 using BritishNationalGrid
