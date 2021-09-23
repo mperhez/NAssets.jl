@@ -19,7 +19,7 @@ using DataStructures
 using RollingFunctions
 using BenchmarkTools
 using Statistics
-using Logging,LoggingExtras, LoggingFacilities
+using Logging,LoggingExtras
 using Dates,TimeZones
 
 
