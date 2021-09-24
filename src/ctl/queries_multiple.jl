@@ -16,7 +16,7 @@ function do_query!(msg::OFMessage,a::Agent,model)
         query_graph = a.params[:ntw_graph]
 
         ####For benchmark#####
-        sdir = data_dir 
+        sdir = model.data_dir 
         record_benchmark!(sdir,model.run_label,a.id,query_time,query,query_graph,query_paths,model.benchmark) 
                 
         path = do_query(query_time,query,query_graph,query_paths)
