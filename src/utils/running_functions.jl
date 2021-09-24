@@ -134,6 +134,7 @@ end
 function single_run(config)
     Random.seed!(config.seed)
     args= Dict()
+    args[:N]=config.n_steps
     ntw_graph = load_network_graph(get_graph(config.seed,config.size,config.ntw_topo;k=config.k,Β=config.Β,custom_topo=config.custom_topo))
     args[:ntw_graph]=ntw_graph
     # args[:dropping_nodes]= get_dropping_nodes(config.drop_proportion)
