@@ -143,16 +143,18 @@ function single_run(config)
     args[:seed] = config.seed
     args[:benchmark] = config.benchmark
     args[:animation] = config.animation
-    args[:prob_random_walks] = config.prob_random_walks
+    args[:prob_random_walks] = config.prob_random_walks # prob. of neighbour nodes to propagate query msgs.
     args[:mnt_policy] = config.mnt_policy
     args[:ntw_services] = config.ntw_services
-    args[:mnt_wc_duration] = config.mnt_wc_duration
+    args[:mnt_wc_duration] = config.mnt_wc_duration #worst case duration
     args[:mnt_bc_duration] = config.mnt_bc_duration
     args[:mnt_wc_cost] = config.mnt_wc_cost
-    args[:mnt_bc_cost] = config.mnt_bc_cost
-    args[:traffic_dist_params] = config.traffic_dist_params
+    args[:mnt_bc_cost] = config.mnt_bc_cost #best case cost
+    args[:traffic_dist_params] = config.traffic_dist_params #traffic distribution parameters
     args[:data_dir] = config.data_dir
     args[:plots_dir] = config.plots_dir
+    args[:rul_deterioration] = 0.2 #default rul deterioration
+
     q_ctl_agents = 0
     run_label = get_run_label(config)
     args[:run_label] = run_label
@@ -171,7 +173,7 @@ function single_run(config)
     args[:dropping_times] = get_dropping_times(config.seed,30,0.2,nv(ntw_graph),config.n_steps)
     adata = [get_state_trj]
     mdata = [:mapping_ctl_ntw,get_state_trj]
-    result_agents,result_model = run_model(config.n_steps,args,params; agent_data = adata, model_data = mdata)
+    result_agents,result_model = run_model(config.n_steps,args; agent_data = adata, model_data = mdata)
     
     ctl_ags = last(result_agents[result_agents[!,:id] .> nv(ntw_graph) ,:],q_ctl_agents)[!,"get_state_trj"]
     nes = last(result_agents[result_agents[!,:id] .<= nv(ntw_graph) ,:],nv(ntw_graph))[!,"get_state_trj"]

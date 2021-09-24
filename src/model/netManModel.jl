@@ -1,39 +1,25 @@
 """
 Basic initialization
 """
-function initialize(args,user_props;grid_dims=(3,3),seed=0)
-    pulses = []
-    for i in 1:args[:q]
-        push!(pulses,[])
-    end
+function initialize(user_props;grid_dims=(3,3),seed=0)
+    # pulses = []
+    # for i in 1:args[:q]
+    #     push!(pulses,[])
+    # end
 
     # Global model props
     default_props = Dict(
-        :run_label => args[:run_label],
-        :seed=>seed,
-        :benchmark=>args[:benchmark],
-        :animation=>args[:animation],
         :ticks => 0,# # time unit
         :pkt_id => 0,
         :amsg_id =>0,
         :ofmsg_id=>0,
         :ofmsg_reattempt=>10,#4,# greater number to avoid duplicated install flows
-        # :pulses=>pulses,
-        # :Τ => args[:Τ], # Max time steps to fire
-        # :ΔΦ => args[:ΔΦ],
-        :base_ntw_graph => args[:ntw_graph], # initial graph for reference
-        :ntw_graph => args[:ntw_graph],
-        :ctl_graph => args[:ctl_graph],
-        # :dropping_nodes=>args[:dropping_nodes],
-        :dropping_times=>args[:dropping_times],
         :mapping_ctl_ntw => Dict{Int64,Int64}(), # mapping between (Ctl) Agent and SimNE
         :mapping_ntw_sne => Dict{Int64,Int64}(), #mapping btwn the underlying network and the corresponding simNE agent 
-        :ctrl_model => args[:ctrl_model], 
-        :ntw_model => args[:ntw_model], 
         :pkt_size => 1,#0.065, # (in MB) pkt size  IP between 21 is 65536 bytes Ref: Internet Core Protocols: The Definitive Guide by Eric Hall
         :freq => 30, # frequency of monitoring # used?
         :N=>args[:N],
-        # key(src,dst)=>value(time_left_at_link =>msg)
+
         :ntw_links_msgs=>Dict{Tuple{Int,Int},Vector{Vector{OFMessage}}}(),
         :ntw_links_delays =>Dict{Tuple{Int,Int},Int}(),
         :state_trj => Vector{ModelState}(),
@@ -45,18 +31,7 @@ function initialize(args,user_props;grid_dims=(3,3),seed=0)
         :max_cache_paths => 2,
         :clear_cache_graph_freq => 25,#25, # How often the ntw graph is cleared to initial state, 0: no cache. A value of 10, is not enough in a 16 mesh network to find paths when queries are not repeated, prob_eq_query. Carefully, this should be higher than query cycle when prob_eq_queries_cycle = 0.
         :query_cycle => 10,#10,# # how long the max_eq_queries_cycle applies for
-        :prob_eq_queries_cycle => 1,#0.7,#0.1,#1,#0.7, #base probability of processing equal queries within the same :query_cycle. 0 means won't process the same query within the query_cycle, 1: means will process always repeated queries regardless of query_cycle
-        :prob_random_walks =>  args[:prob_random_walks],# prob. of neighbour nodes to propagate query msgs.
-        :mnt_policy => args[:mnt_policy],
-        :ntw_services => args[:ntw_services],
-        :mnt_wc_duration => args[:mnt_wc_duration], #worst case duration
-        :mnt_bc_duration => args[:mnt_bc_duration],  #best case duration
-        :mnt_wc_cost => args[:mnt_wc_cost], #worst case cost
-        :mnt_bc_cost => args[:mnt_bc_cost],  #best case cost
-        :traffic_dist_params => args[:traffic_dist_params], #traffic distribution parameters
-        :data_dir => args[:data_dir],
-        :plots_dir => args[:plots_dir]
-
+        :prob_eq_queries_cycle => 1#0.7,#0.1,#1,#0.7, #base probability of processing equal queries within the same :query_cycle. 0 means won't process the same query within the query_cycle, 1: means will process always repeated queries regardless of query_cycle
     )
     #For G6: 
     #prob_eq_queries_cycle: 0.2
@@ -94,9 +69,9 @@ function create_sim_asset_agents!(model)
         # @show i
         
         mnt = @match model.mnt_policy begin
-            1 => MaintenanceInfoPreventive(0.2,model)
-            2 => MaintenanceInfoPredictive(0.2,model)
-            _ => MaintenanceInfoCorrective(0.2,model)
+            1 => MaintenanceInfoPreventive(model.rul_deterioration,model)
+            2 => MaintenanceInfoPredictive(rul_deterioration,model)
+            _ => MaintenanceInfoCorrective(rul_deterioration,model)
         end
         # if id == 9
         #     mnt.deterioration_parameter = 2. 
@@ -238,9 +213,9 @@ end
 """
 Simple run model function
 """
-function run_model(n,args,properties; agent_data, model_data)
-    seed = args[:seed]
-    model = initialize(args,properties;seed)
+function run_model(n,properties; agent_data, model_data)
+    seed = properties[:seed]
+    model = initialize(properties;seed)
 
     
     # agent_shape(a::Agent) = :square
