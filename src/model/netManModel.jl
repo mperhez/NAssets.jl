@@ -18,9 +18,9 @@ function initialize(args,user_props;grid_dims=(3,3),seed=0)
         :amsg_id =>0,
         :ofmsg_id=>0,
         :ofmsg_reattempt=>10,#4,# greater number to avoid duplicated install flows
-        :pulses=>pulses,
-        :Τ => args[:Τ], # Max time steps to fire
-        :ΔΦ => args[:ΔΦ],
+        # :pulses=>pulses,
+        # :Τ => args[:Τ], # Max time steps to fire
+        # :ΔΦ => args[:ΔΦ],
         :base_ntw_graph => args[:ntw_graph], # initial graph for reference
         :ntw_graph => args[:ntw_graph],
         :ctl_graph => args[:ctl_graph],
@@ -53,7 +53,10 @@ function initialize(args,user_props;grid_dims=(3,3),seed=0)
         :mnt_bc_duration => args[:mnt_bc_duration],  #best case duration
         :mnt_wc_cost => args[:mnt_wc_cost], #worst case cost
         :mnt_bc_cost => args[:mnt_bc_cost],  #best case cost
-        :traffic_dist_params => args[:traffic_dist_params] #traffic distribution parameters
+        :traffic_dist_params => args[:traffic_dist_params], #traffic distribution parameters
+        :data_dir => args[:data_dir],
+        :plots_dir => args[:plots_dir]
+
     )
     #For G6: 
     #prob_eq_queries_cycle: 0.2
@@ -272,7 +275,7 @@ function run_model(n,args,properties; agent_data, model_data)
                 collect_model_data!(df_m, model, model_data, i)
             end
         plot_label = model.run_label * "_anim"
-        gif(anim, plots_dir * plot_label * ".gif", fps = 5)
+        gif(anim, model[:plots_dir] * plot_label * ".gif", fps = 5)
     else
         for i in 0:n
             step!(model, agent_step!,model_step!)

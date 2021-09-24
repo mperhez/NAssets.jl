@@ -1,4 +1,4 @@
-function get_map_shape_local()
+function get_map_shape_local(data_dir::String)
     
     zipfile = data_dir*"Regions_(December_2017)_Boundaries.zip"
     r = ZipFile.Reader(zipfile)
