@@ -188,15 +188,8 @@ function single_run(config)
     
     #sdir = data_dir*"runs2/$(config.ctl_model)/"
     sdir = config.data_dir
-    tdir = split(sdir,"/")
-    dirc = ""
-
-    for tk=1:length(tdir)
-        dirc *= tdir[tk] * "/"
-        if !isdir(dirc)
-            mkdir(dirc) 
-        end
-    end
+    
+    check_create_dir!(sdir)
 
     vnes = Vector{Vector{NetworkAssetState}}()
     for ne in nes

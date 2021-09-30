@@ -14,3 +14,18 @@ end
 Helper function that checks if x value is in vector V
 """
 is_in(x::Int64,V) = x in V
+
+"""
+    Checks if a directory exists, otherwise create it.
+"""
+function check_create_dir!(dir_name)
+    tdir = split(dir_name,"/")
+    dirc = ""
+
+    for tk=1:length(tdir)
+        dirc *= tdir[tk] * "/"
+        if !isdir(dirc)
+            mkdir(dirc) 
+        end
+    end
+end
