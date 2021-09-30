@@ -438,4 +438,5 @@ $RECYCLE.BIN/
 *.mkv
 *.pptx
 demo/*
+data/*
 *.zip
