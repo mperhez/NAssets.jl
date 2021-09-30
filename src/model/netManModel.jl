@@ -249,6 +249,7 @@ function run_model(n,properties; agent_data, model_data)
                 collect_model_data!(df_m, model, model_data, i)
             end
         plot_label = model.run_label * "_anim"
+        check_create_dir!(model.plots_dir)
         gif(anim, model.plots_dir * plot_label * ".gif", fps = 5)
     else
         for i in 0:n
