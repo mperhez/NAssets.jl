@@ -15,4 +15,4 @@ RUN apk add --no-cache python3 git freetype \
     && julia network-fleet-abm/src/netManPkg.jl
 
 WORKDIR network-fleet-abm
-CMD ["julia","src/netManMain.jl"]
+CMD ["julia","examples/simple.jl"]
