@@ -141,7 +141,7 @@ function install_flow!(msg::OFMessage, sne::SimNE,model)
 end
 
 function install_flow!(flow::Flow, sne::SimNE,model)
-    log_info(model.ticks,sne.id," Installing flow: $(sne.id) - $(flow)")
+    # log_info(model.ticks,sne.id," Installing flow: $(sne.id) - $(flow)")
     ft = get_state(sne).flow_table
     
     #Assumes only one flow to a given destination, hence replace existing flows leading towards the same destination
@@ -149,7 +149,7 @@ function install_flow!(flow::Flow, sne::SimNE,model)
     
     push!(nft,flow) #msg.data[1] = flow, msg.data[2] = query_id:qid
     set_flow_table!(sne,nft)
-    log_info(model.ticks,sne.id," Installed flow: $(sne.id) - $(get_state(sne).flow_table)")
+    # log_info(model.ticks,sne.id," Installed flow: $(sne.id) - $(get_state(sne).flow_table)")
 end
 
 
@@ -305,7 +305,7 @@ function trigger_of_event!(ticks::Int,a::Agent,ev_data,ev_type::Ofp_Event,model)
                             OFMessage(next_ofmid!(model),ticks,a.id,OFPPR_DELETE,ev_data)
         Ofp_Event(2) => OFMessage(next_ofmid!(model),ticks,a.id,OFPPR_JOIN,ev_data)
     end
-    # log_info(model.ticks,a.id,"Triggering event: $(msg)")
+    
     push_msg!(a,msg)
 end
 
