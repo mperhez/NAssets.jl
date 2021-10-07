@@ -133,7 +133,7 @@ function do_receive_messages(a::Agent,model)
 end
 
 function do_send_messages(a::Agent,model)
-    g = a.params[:ctl_graph]
+    g = a.ctl_graph
     # In this graph a is always node 1
     nbs = neighbors(g,1)
 
@@ -236,9 +236,7 @@ Clears cache of control agent
 """
 function clear_cache!(a::Agent,model::ABM)
     if model.ticks - a.params[:last_cache_graph] == model.clear_cache_graph_freq
-        # log_info(model.ticks,a.id,"cc prev My graph-> vertices: $(nv(a.params[:ntw_graph])) -- edges: $(ne(a.params[:ntw_graph]))")
-        a.params[:ntw_graph] = a.params[:base_ntw_graph]
-        # log_info(model.ticks,a.id,"cc after My graph-> vertices: $(nv(a.params[:ntw_graph])) -- edges: $(ne(a.params[:ntw_graph]))")
+        a.ntw_graph = a.base_ntw_graph
         a.params[:last_cache_graph] = model.ticks
         a.paths = Dict()
     end

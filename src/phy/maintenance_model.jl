@@ -254,7 +254,7 @@ function do_events_step!(a::Agent,model::ABM)
         ntw_changes = Array{Int64,1}()
         
         for e in evs
-            log_info(model.ticks,a.id,"Triggering event: $e")
+            # log_info(model.ticks,a.id,"Triggering event: $e")
             @match e.type begin
                 CTL_Event(1) => 
                             for nid in e.snes
@@ -298,17 +298,17 @@ function do_rul_predictions!(a::Agent,model::ABM)
 
     #sort snes by id, works either for centralised (all assets one control agent or decentralised 1 asset per agent) #TODO decentralised with more than 1 asset per agent.
     # sne_ids = sort(collect(get_controlled_assets(a.id,model)))
-    sne_ids = collect(1:nv(a.params[:base_ntw_graph]))
+    sne_ids = collect(1:nv(a.base_ntw_graph))
 
     snes = getindex.([model],sne_ids)
     
-    log_info(model.ticks,a.id,"sne_ids: $(sne_ids)")
+    #log_info(model.ticks,a.id,"sne_ids: $(sne_ids)")
     
     #arrange predictions in a matrix of dims: length(snes) x window_size.
     ruls_pred = permutedims(hcat(get_rul_predictions.(snes,[model.ticks],[window_size])...))
     a.rul_predictions = length(a.rul_predictions) > 0 ? hcat(a.rul_predictions,ruls_pred) : ruls_pred
     # log_info(model.ticks,a.id," length: $(size(a.rul_predictions)) rul pred: $(a.rul_predictions)")
-    log_info(model.ticks,a.id,"Pred Maint=> services: $(model.ntw_services))")
+    # log_info(model.ticks,a.id,"Pred Maint=> services: $(model.ntw_services))")
 
     update_maintenance_plan!(a,a.maintenance.policy,model)
     #collect(get_controlled_assets(a.id,model))

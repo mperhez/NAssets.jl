@@ -3,7 +3,7 @@ Initial query by controller receiving OF message
 """
 function do_query!(msg::OFMessage,a::Agent,model)
     # If asset's network does not have any edge, there is no way to transport packets 
-    ignore = ne(a.params[:ntw_graph]) > 0 ? false : true
+    ignore = ne(a.ntw_graph) > 0 ? false : true
     path=[]
     # log_info(model.ticks, a.id, "querying local... $(msg)===> ignore: $ignore ====> paths: $(a.paths)")
     if !ignore
@@ -13,10 +13,10 @@ function do_query!(msg::OFMessage,a::Agent,model)
         #existing precalc paths
         query_paths = a.paths
         #local graph to query
-        query_graph = a.params[:ntw_graph]
+        query_graph = a.ntw_graph
 
         ####For benchmark#####
-        sdir = data_dir 
+        sdir = model.data_dir 
         record_benchmark!(sdir,model.run_label,a.id,query_time,query,query_graph,query_paths,model.benchmark) 
                 
         path = do_query(query_time,query,query_graph,query_paths)
@@ -71,13 +71,13 @@ function do_query!(msg::AGMessage,a::Agent,model)
             # Aggregated information from other agents
             ## join graph received
             msg_ntw_g = create_subgraph(msg.body[:ntw_edgel],msg.body[:ntw_equiv],:eid)
-            jg = join_subgraphs(a.params[:ntw_graph],msg_ntw_g)
+            jg = join_subgraphs(a.ntw_graph,msg_ntw_g)
 
             # Update Knowledge Base 
             # update local graph, however the problem it can grow too much
             # hence there is a periodic clear_cache to restore to original
             if model.clear_cache_graph_freq != 0
-                a.params[:ntw_graph] = jg
+                a.ntw_graph = jg
             end
             
             
@@ -130,12 +130,9 @@ function do_query(time::Int64,query::Tuple{Int64,Int64},lg::MetaGraph,paths::Dic
     #query pre-calculated (cache) paths
     cp_paths = haskey(paths,query) ? paths[query] : []
 
-    log_info(time,"paths in precalc paths: $cp_paths")
-
     #query graph path regardless of cache, in case there is another
     # TODO: Do this only if cache path is too old
     path_state = query_paths(lg,query)
-    log_info(time," paths in known graph: $(path_state.paths)")
 
     #reshape paths found local graph
     for lg_path in path_state.paths

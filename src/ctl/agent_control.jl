@@ -11,7 +11,7 @@ end
 function send_msg!(receiver::Int64,msg::AGMessage,model)
     rag = getindex(model,receiver)
     #TODO get delay of link in ticks
-    g = rag.params[:ctl_graph]
+    g = rag.ctl_graph
     lv = to_local_vertex(g,msg.sid,:aid)
     lva = to_local_vertex(g,rag.id,:aid) 
     #need index of nbs 
@@ -23,7 +23,7 @@ function send_msg!(receiver::Int64,msg::AGMessage,model)
 end    
 
 function send_to_nbs!(msg_template::AGMessage,a::Agent,model)::Array{Int64}
-    cg = a.params[:ctl_graph]
+    cg = a.ctl_graph
     nbs = neighbors(cg,to_local_vertex(cg,a.id,:aid))
     gid_nbs = [cg[v,:aid] for v in nbs]
     gid_nbs = [gid for gid in gid_nbs if ~(gid in msg_template.body[:trace]) ]
@@ -41,6 +41,8 @@ function send_to_nbs!(msg_template::AGMessage,a::Agent,model)::Array{Int64}
             push!(msgs_sent,nb)
         end
     end
+
+    log_info(model.ticks,a.id,"msgs sent: $(msgs_sent)")
 
     return msgs_sent
 
@@ -137,9 +139,9 @@ end
 function process_msg!(a::Agent,msg::AGMessage,model)
     #log_info(model.ticks,a.id,18,"->processing $(msg)")
     
-    if model.ticks >= 41
-         log_info(model.ticks,a.id,"--> is_up? $(get_state(a).up) -- > Processing AG msg: $msg ")
-    end
+    # if model.ticks >= 41
+        #  log_info(model.ticks,a.id,"--> is_up? $(get_state(a).up) -- > Processing AG msg: $msg ")
+    # end
 
     @match msg.reason begin
         AG_Protocol(1) => 
@@ -171,7 +173,7 @@ end
 function do_new_nb!(msg::AGMessage,a::Agent,model)
     
     new_nbs = msg.body[:new_nbs]
-    lg = a.params[:ctl_graph]
+    lg = a.ctl_graph
     ls = to_local_vertex(lg,a.id)
     for nb in new_nbs
         ld = to_local_vertex(lg,nb)
@@ -209,19 +211,12 @@ function controlled_sne_down!(a::Agent,dpn_id::Int,model)
         s.up = false
         set_state!(a,s)
     end
-    
-    # log_info(model.ticks,a.id,"Removing node $dpn_id ...")
-    # log_info(model.ticks,a.id,"Local base graph: $(sparse(a.params[:base_ntw_graph]))")
-    # log_info(model.ticks,a.id,"Local ntw graph: $(sparse(a.params[:ntw_graph]))")
 
-    lvb = to_local_vertex(a.params[:base_ntw_graph],dpn_id)
-    lvc = to_local_vertex(a.params[:ntw_graph],dpn_id)
-    a.params[:base_ntw_graph] = soft_remove_vertex(a.params[:base_ntw_graph],lvb)
-    a.params[:ntw_graph] = soft_remove_vertex(a.params[:ntw_graph],lvc)
+    lvb = to_local_vertex(a.base_ntw_graph,dpn_id)
+    lvc = to_local_vertex(a.ntw_graph,dpn_id)
+    a.base_ntw_graph = soft_remove_vertex(a.base_ntw_graph,lvb)
+    a.ntw_graph = soft_remove_vertex(a.ntw_graph,lvc)
 
-    # log_info(model.ticks,a.id,"Removed node $dpn_id ...")
-    # log_info(model.ticks,a.id,"Local base graph: $(sparse(a.params[:base_ntw_graph]))")
-    # log_info(model.ticks,a.id,"Local ntw graph: $(sparse(a.params[:ntw_graph]))")
     #TODO implement when a control agent is down too
     # do_drop!(msg,a,model)
 end
@@ -240,25 +235,20 @@ function controlled_sne_up!(a::Agent,rjn_id::Int,live_nbs::Array{Int64},model::A
         set_up!(a)
     end
 
-    lvb = to_local_vertex(a.params[:base_ntw_graph],rjn_id)
-    lvc = to_local_vertex(a.params[:ntw_graph],rjn_id)
-    # add_vertex!(a.params[:base_ntw_graph])
-    # add_vertex!(a.params[:ntw_graph])
+    lvb = to_local_vertex(a.base_ntw_graph,rjn_id)
+    lvc = to_local_vertex(a.ntw_graph,rjn_id)
+    # add_vertex!(a.base_ntw_graph)
+    # add_vertex!(a.ntw_graph)
     
-    # set_prop!(a.params[:base_ntw_graph],nv(a.params[:base_ntw_graph]),:eid,rjn_id)
-    # set_prop!(a.params[:ntw_graph],nv(a.params[:ntw_graph]),:eid,rjn_id)
+    # set_prop!(a.base_ntw_graph,nv(a.base_ntw_graph),:eid,rjn_id)
+    # set_prop!(a.ntw_graph,nv(a.ntw_graph),:eid,rjn_id)
 
     #just added vertices, last id
-    # lvb = nv(a.params[:base_ntw_graph])
-    # lvc = nv(a.params[:ntw_graph])
+    # lvb = nv(a.base_ntw_graph)
+    # lvc = nv(a.ntw_graph)
 
-    a.params[:base_ntw_graph] = add_edges_gids(a.params[:base_ntw_graph],lvb,live_nbs,:eid)
-    a.params[:ntw_graph] = add_edges_gids(a.params[:ntw_graph],lvc,live_nbs,:eid)
-
-
-    # log_info(model.ticks,a.id,"Detecting node rejoining $rjn_id")
-    # log_info(model.ticks,a.id,"Local base graph: $(sparse(a.params[:base_ntw_graph]))")
-    # log_info(model.ticks,a.id,"Local ntw graph: $(sparse(a.params[:ntw_graph]))")
+    a.base_ntw_graph = add_edges_gids(a.base_ntw_graph,lvb,live_nbs,:eid)
+    a.ntw_graph = add_edges_gids(a.ntw_graph,lvc,live_nbs,:eid)
 end
 
 function get_state(a::Agent)::State
@@ -353,16 +343,16 @@ function remove_drop_sne!(a::Agent,dpid::Int64,drop_time::Int64)
     #update graphs used by the control agent accordingly
 
    #is dpid in base ntw graph?
-   lvb = to_local_vertex(a.params[:base_ntw_graph],dpid)
-   lvc = to_local_vertex(a.params[:ntw_graph],dpid)
+   lvb = to_local_vertex(a.base_ntw_graph,dpid)
+   lvc = to_local_vertex(a.ntw_graph,dpid)
 
    log_info(drop_time,a.id," Removing dpid: $dpid from local base: $lvb --- local curr: $lvc")
 
    if lvb != 0
-    a.params[:base_ntw_graph] = soft_remove_vertex(a.params[:base_ntw_graph],lvb)
+    a.base_ntw_graph = soft_remove_vertex(a.base_ntw_graph,lvb)
    end
    if lvc != 0
-        a.params[:ntw_graph] = soft_remove_vertex(a.params[:ntw_graph],lvc)
+        a.ntw_graph = soft_remove_vertex(a.ntw_graph,lvc)
    end
 
    state = get_state(a)
@@ -371,18 +361,10 @@ function remove_drop_sne!(a::Agent,dpid::Int64,drop_time::Int64)
         if !(dpid in last(p))
           new_ap[first(p)] = last(p)
         end
-    #log_info(drop_time,a.id,"active paths: $(first(p)) --- $(last(p)) --==> $(!(dpid in last(p)))")
    end
 
    state.active_paths = new_ap
    set_state!(a,state)
-
-   
-    # if lvb != 0 # node is not in local graph
-        
-
-    #     a.params[:last_cache_graph] = drop_time
-    # end
 end
 
 """
@@ -398,13 +380,13 @@ function do_update_flows_from_changes!(a::Agent,ntw_changes::Vector{Int64},model
         joining_nodes = filter(x->x>0,ntw_changes)
         dropping_nodes = -1 * filter(x->x<0,ntw_changes)
         
-        query_graph = deepcopy(a.params[:ntw_graph])
+        query_graph = deepcopy(a.ntw_graph)
         
         #add nodes
         for jng_id in joining_nodes
             query_graph = soft_remove_vertex(query_graph,jng_id)
 
-            base_g = a.params[:base_ntw_graph]
+            base_g = a.base_ntw_graph
 
             lv = to_local_vertex(base_g,jng_id)
             nbs = neighbors(base_g,lv)

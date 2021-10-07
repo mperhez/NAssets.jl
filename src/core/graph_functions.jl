@@ -264,17 +264,16 @@ function get_subgraph(g,nodes,id_prop)
 
     for i=1:length(nodes)
         # get vertex for node id (assumes only one)
-        v = first(filter(v->g[v,id_prop] == nodes[i],1:nv(g)))
+        v = first(filter(v->get_prop(g,v,id_prop) == nodes[i],1:nv(g)))
         
         #subgraph
-        push!(nbs,[ g[j,id_prop] for j in neighbors(g,v)])
+        push!(nbs,[ get_prop(g,j,id_prop) for j in neighbors(g,v)])
         #push!(nbs,neighbors(g,nodes[i]))
         push!(nbs,[nodes[i]])
     end
-
     nnbs = vcat(nbs...)
     sub_g = deepcopy(g)
-    vs = [ sub_g[v,id_prop] for v in collect(vertices(sub_g))]
+    vs = [ get_prop(sub_g,v,id_prop) for v in collect(vertices(sub_g))]
     to_del = [v for v ∈ vs if v ∉ nnbs]
    
     for d in to_del

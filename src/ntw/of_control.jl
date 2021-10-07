@@ -30,7 +30,7 @@ function install_flow!(a::Agent,path::Array{Int64,1},model::ABM,msg::OFMessage=n
     eois = intersect(es,lpath)
     lpath = [ v for v in lpath]
     
-    log_info(model.ticks,a.id,"{$(get_controlled_assets(a.id,model))} install_flow! => path: $path -- es: $es -- eois: $eois - msg: -> $msg")
+    # log_info(model.ticks,a.id,"{$(get_controlled_assets(a.id,model))} install_flow! => path: $path -- es: $es -- eois: $eois - msg: -> $msg")
     
     #check that all nodes of path are up node are up if centralised
     is_install = model.ctrl_model == CENTRALISED ? length(collect(eois)) != length(path) ? false : true : true
@@ -257,25 +257,25 @@ function node_rejoin_handler(a,msg,model)
    #update local graph
     src = first(msg.data)
     dst = last(msg.data)
-    lvc_s = to_local_vertex(a.params[:ntw_graph],src)
-    lvc_d = to_local_vertex(a.params[:ntw_graph],dst)
-    lvb_s = to_local_vertex(a.params[:base_ntw_graph],src)
-    lvb_d = to_local_vertex(a.params[:base_ntw_graph],dst)
+    lvc_s = to_local_vertex(a.ntw_graph,src)
+    lvc_d = to_local_vertex(a.ntw_graph,dst)
+    lvb_s = to_local_vertex(a.base_ntw_graph,src)
+    lvb_d = to_local_vertex(a.base_ntw_graph,dst)
 
     if lvb_s > 0 && lvb_d > 0
-        if !has_edge(a.params[:base_ntw_graph],lvb_s,lvb_d)
-            add_edge!(a.params[:base_ntw_graph],lvb_s,lvb_d)
+        if !has_edge(a.base_ntw_graph,lvb_s,lvb_d)
+            add_edge!(a.base_ntw_graph,lvb_s,lvb_d)
         end
-        if !has_edge(a.params[:base_ntw_graph],lvb_d,lvb_s)
-            add_edge!(a.params[:base_ntw_graph],lvb_d,lvb_s)
+        if !has_edge(a.base_ntw_graph,lvb_d,lvb_s)
+            add_edge!(a.base_ntw_graph,lvb_d,lvb_s)
         end
     end
     if lvc_s > 0 && lvc_d > 0
-        if !has_edge(a.params[:ntw_graph],lvc_s,lvc_d)
-            add_edge!(a.params[:ntw_graph],lvc_s,lvc_d)
+        if !has_edge(a.ntw_graph,lvc_s,lvc_d)
+            add_edge!(a.ntw_graph,lvc_s,lvc_d)
         end
-        if !has_edge(a.params[:ntw_graph],lvc_d,lvc_s)
-            add_edge!(a.params[:ntw_graph],lvc_d,lvc_s)
+        if !has_edge(a.ntw_graph,lvc_d,lvc_s)
+            add_edge!(a.ntw_graph,lvc_d,lvc_s)
         end
     end
 

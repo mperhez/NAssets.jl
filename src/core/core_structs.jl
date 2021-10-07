@@ -253,12 +253,15 @@ mutable struct Agent <: SOAgent
     maintenance::MaintenanceInfo
     rul_predictions::Matrix{Float64}
     events::Dict{Int64,Vector{ControlEvent}}
+    ntw_graph::MetaGraph
+    base_ntw_graph::MetaGraph
+    ctl_graph::MetaGraph
     params::Dict{Symbol,Any}
 end
 
 function Agent(id::Int64,nid::Int64,maintenance::MaintenanceInfo,rul_predictions,params::Dict{Symbol,Any})::Agent
     s0 = ControlAgentState(id,true,Dict(),0,0,0,0,0,[])
-    Agent(id,nid,:lightblue,0.1,Vector{Tuple{Int64,OFMessage,Bool}}(),Dict{Tuple{Int64,Int64},Array{Tuple{Int64,Float64,Array{Int64}}}}(),[s0],Array{Vector{AGMessage}}(undef,1,1),[],Channel{OFMessage}(500),Dict(),Dict(),[],maintenance,rul_predictions,Dict{Int64,Vector{ControlEvent}}(),params)
+    Agent(id,nid,:lightblue,0.1,Vector{Tuple{Int64,OFMessage,Bool}}(),Dict{Tuple{Int64,Int64},Array{Tuple{Int64,Float64,Array{Int64}}}}(),[s0],Array{Vector{AGMessage}}(undef,1,1),[],Channel{OFMessage}(500),Dict(),Dict(),[],maintenance,rul_predictions,Dict{Int64,Vector{ControlEvent}}(),MetaGraph(),MetaGraph(),MetaGraph(),params)
 end
 
 """

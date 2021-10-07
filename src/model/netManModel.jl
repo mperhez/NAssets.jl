@@ -116,7 +116,6 @@ function create_control_agents!(model::ABM)
     else
         # log_info(" Nodes CTL: $(nv(model.properties[:ctl_graph]))")
         for i in 1:nv(model.properties[:ctl_graph])
-            #next_fire = rand(0:0.2:model.:Τ)
             id = nextid(model)
             a = add_agent_pos!(
                     Agent(id,i,mnt,Array{Int64}(undef,0,1),a_params),model
@@ -169,10 +168,10 @@ function model_step!(model)
     # Run controllers first
     for a in allagents(model) 
         if typeof(a) == Agent
-            log_info(model.ticks,a.id,"---------")
+            # log_info(model.ticks,a.id,"---------")
             # log_info(model.ticks,a.id,"links: $(a.msgs_links)")
-            # log_info(model.ticks,a.id," known graph: $(collect(edges(a.params[:ntw_graph])))")
-            kn = [ a.params[:ntw_graph][i,:eid] for i=1:nv(a.params[:ntw_graph]) ]
+            # log_info(model.ticks,a.id," known graph: $(collect(edges(a.ntw_graph)))")
+            kn = [ a.ntw_graph[i,:eid] for i=1:nv(a.ntw_graph) ]
             # log_info(model.ticks,a.id," known nodes: $(kn)")
             #log_info(model.ticks,a.id,"ctl_paths: $(a.ctl_paths)")
             do_agent_step!(a,model)
@@ -181,7 +180,7 @@ function model_step!(model)
     #Then run SimNEs
     for a in allagents(model) 
         if typeof(a) == SimNE
-            log_info(model.ticks,a.id,"---------")
+            #log_info(model.ticks,a.id,"---------")
             do_agent_step!(a,model)
         end
     end
@@ -273,7 +272,6 @@ function init_agents!(model)
     for id in sort(ids)
         init_agent!(getindex(model,id),model)
     end
-
 end
 
 """
@@ -289,27 +287,25 @@ function init_agent!(a::Agent,model)
         sub_g = get_subgraph(model.ntw_graph,nodes,:eid)
         # log_info("Asset Network size $(nv(sub_g))")
         nodes = [a.id]
-        ctl_sub_g = get_subgraph(model.ctl_graph,nodes,:aid)
-        # log_info("Control Network size $(nv(ctl_sub_g))")
-        a.params[:ntw_graph] = sub_g
-        a.params[:base_ntw_graph] = sub_g
-        a.params[:ctl_graph] = ctl_sub_g
+        ctl_sub_g = get_subgraph(model.ctl_graph,nodes,:aid)       
+        a.ntw_graph = sub_g
+        a.base_ntw_graph = sub_g
+        a.ctl_graph = ctl_sub_g
         a.params[:delay_ctl_link] = 2 # 1: no delay
         #Init vector of msgs
-        a.msgs_links = init_array_vectors(AGMessage,a.params[:delay_ctl_link],degree(a.params[:ctl_graph],to_local_vertex(a.params[:ctl_graph],a.id,:aid)))
+        a.msgs_links = init_array_vectors(AGMessage,a.params[:delay_ctl_link],degree(a.ctl_graph,to_local_vertex(a.ctl_graph,a.id,:aid)))
     else
-        a.params[:ntw_graph] = model.ntw_graph
-        a.params[:base_ntw_graph] = model.ntw_graph
+        a.ntw_graph = model.ntw_graph
+        a.base_ntw_graph = model.ntw_graph
     end
     a.params[:last_cache_graph] = 0 #Last time cache was cleared
 
     ##
-    log_info(model.ticks,"type of mnt: $(a.maintenance.policy == PredictiveM)")
     if a.maintenance.policy !=  CorrectiveM
         schedule_event!(a,CTL_Event(4),a.maintenance.predictive_freq,Array{Int64,1}())
         if a.maintenance.policy ==  PredictiveM
             #conversion to py
-            ajm_py = np.matrix(adjacency_matrix(a.params[:ntw_graph]))
+            ajm_py = np.matrix(adjacency_matrix(a.ntw_graph))
             log_info(model.ticks,"adj=> $ajm_py")
             opt_init.optimisation_initialisation( ajm_py,
             model.traffic_dist_params
@@ -319,7 +315,6 @@ function init_agent!(a::Agent,model)
             log_info(model.ticks,"H2=> $(opt_init.H2)")
         end
     end
-
 end
 
 function label_paths(time::Int64,paths::Array{LightGraphs.YenState{Float64,Int64},1})
