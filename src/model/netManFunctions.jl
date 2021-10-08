@@ -155,7 +155,7 @@ function record_benchmark!(bdir,run_label,aid,query_time,query,query_graph,query
         b = @benchmark begin 
             do_query($query_time,$query,$query_graph,$query_paths)
         end
-        serialize( bdir * run_label *"_$(first(query))_$(last(query))_$(query_time)_$(aid)_bchmk.bin",b)
+        serialize( bdir * "/"* run_label *"_$(first(query))_$(last(query))_$(query_time)_$(aid)_bchmk.bin",b)
     end        
 end
 

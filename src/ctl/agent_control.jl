@@ -17,7 +17,7 @@ function send_msg!(receiver::Int64,msg::AGMessage,model)
     #need index of nbs 
     nbs = neighbors(g,lva)
     i = first(indexin(lv,nbs))
-    log_info(model.ticks,"From $(msg.sid) to  $(receiver) ==> $(msg) ~~~> $(size(rag.msgs_links,1)) --- $i")
+    # log_info(model.ticks,"From $(msg.sid) to  $(receiver) ==> $(msg) ~~~> $(size(rag.msgs_links,1)) --- $i")
     push!(rag.msgs_links[size(rag.msgs_links,1),i],msg)
     
 end    
@@ -30,7 +30,7 @@ function send_to_nbs!(msg_template::AGMessage,a::Agent,model)::Array{Int64}
     random_nbs = rand(Binomial(1,model.prob_random_walks),length(gid_nbs))
     random_nbs = [rnb for rnb in random_nbs .* gid_nbs if rnb > 0]
     msgs_sent::Array{Int64} = []
-    log_info(model.ticks,a.id,"sending msg: $msg_template  to $(length(gid_nbs)) nbs: $(gid_nbs)")
+    # log_info(model.ticks,a.id,"sending msg: $msg_template  to $(length(gid_nbs)) nbs: $(gid_nbs)")
     
     #disable msgs
     for nb in random_nbs
@@ -42,7 +42,7 @@ function send_to_nbs!(msg_template::AGMessage,a::Agent,model)::Array{Int64}
         end
     end
 
-    log_info(model.ticks,a.id,"msgs sent: $(msgs_sent)")
+    # log_info(model.ticks,a.id,"msgs sent: $(msgs_sent)")
 
     return msgs_sent
 
@@ -52,7 +52,7 @@ end
     Processing for MATCH_PATH msg
 """
 function do_match!(msg::AGMessage,a::Agent,model)
-    log_info(model.ticks,a.id,"do_match! -> msg : $(msg)")
+    # log_info(model.ticks,a.id,"do_match! -> msg : $(msg)")
     
     query = msg.body[:query]
     new_path = msg.body[:path]# (tick,confidence,score,path)
@@ -66,7 +66,7 @@ function do_match!(msg::AGMessage,a::Agent,model)
     #however new check required when path query is done locally, as nodes
     # might have dropped since the time the path is received here. 
     invalid_path = is_invalid_path(new_path,ces_in_path,model)
-    log_info(model.ticks,a.id,25,"invalidity check: $new_path ==> $invalid_path")
+    # log_info(model.ticks,a.id,25,"invalidity check: $new_path ==> $invalid_path")
     if !invalid_path
         
         trace_bk = msg.body[:trace_bk]
@@ -104,7 +104,7 @@ function do_match!(msg::AGMessage,a::Agent,model)
                 end
             end
             mark_reprocess_of_msg!(a,msg)
-            log_info(model.ticks,a.id,"new path ENDING do_match: => $(a.paths) ++++++++===> $(a.pending)")
+            # log_info(model.ticks,a.id,"new path ENDING do_match: => $(a.paths) ++++++++===> $(a.pending)")
         else # This agent is not the original requester of the path
             #continue back propagation of msg
             msg.body[:trace_bk] = trace_bk[1:end-1]
@@ -121,7 +121,7 @@ end
     Prepare MATCH reply
 """
 function do_match!(found_path::Tuple{Int64,Float64,Float64,Array{Int64}},msg::AGMessage,a::Agent,model)
-    log_info(model.ticks,a.id,"*do_match! -> msg : $(msg) -> found: $(found_path)")
+    # log_info(model.ticks,a.id,"*do_match! -> msg : $(msg) -> found: $(found_path)")
     query = msg.body[:query]
     trace = deepcopy(msg.body[:trace])
     append!(trace,a.id)

@@ -1,7 +1,7 @@
 #export NetworkAssetState, ModelState, ControlAgentState
 function forward!(msg::OFMessage,src::SimNE,model)
     out_pkt_count = get_state(src).out_pkt + 1
-    log_info(model.ticks,msg.data.dst,1, "Packet from $(msg.data.src) delivered -> out pkts count: $(out_pkt_count)")
+    # log_info(model.ticks,msg.data.dst,1, "Packet from $(msg.data.src) delivered -> out pkts count: $(out_pkt_count)")
     set_out_pkt!(src,out_pkt_count)
 
     if !haskey(src.one_way_time_pkt,msg.data.src)
@@ -11,11 +11,11 @@ function forward!(msg::OFMessage,src::SimNE,model)
 end
 
 function forward!(msg::OFMessage,src::SimNE,dst::SimNE,reason::Ofp_Protocol,model)
-    if model.ticks >= 53 && model.ticks <= 58 
-        log_info(model.ticks,src.id,4," forwarding to $(dst.id) ==> $msg")
-        log_info(model.ticks,src.id,3," forwarding to $(dst.id) ==> $msg")
-        log_info(model.ticks,src.id,2," forwarding to $(dst.id) ==> $msg")
-    end
+    # if model.ticks >= 53 && model.ticks <= 58 
+    #     log_info(model.ticks,src.id,4," forwarding to $(dst.id) ==> $msg")
+    #     log_info(model.ticks,src.id,3," forwarding to $(dst.id) ==> $msg")
+    #     log_info(model.ticks,src.id,2," forwarding to $(dst.id) ==> $msg")
+    # end
     in_ports = filter(p->p[2]=="s$(src.id)",get_port_edge_list(dst))
     in_port = in_ports[1][1]
     push_msg!(src,dst,OFMessage(next_ofmid!(model),model.ticks,src.id,in_port,reason,msg.data),model)
@@ -26,9 +26,9 @@ function forward!(msg::OFMessage,src::SimNE,dst::SimNE,reason::Ofp_Protocol,mode
 end
 
 function route_traffic!(a::SimNE,msg::OFMessage,model)
-    if model.ticks >= 56 && model.ticks <= 59
-        log_info(model.ticks,a.id,2," BEF Routing Msg $(msg) ==> flows: $(get_flow_table(a))")
-    end
+    # if model.ticks >= 56 && model.ticks <= 59
+    #     log_info(model.ticks,a.id,2," BEF Routing Msg $(msg) ==> flows: $(get_flow_table(a))")
+    # end
     out_pkt_count = 0
     flow = filter(fw -> 
                             ( fw.match_rule.src == string(msg.data.src) || fw.match_rule.src == "*" )
@@ -37,9 +37,9 @@ function route_traffic!(a::SimNE,msg::OFMessage,model)
                             , get_flow_table(a))
                             
     if !isempty(flow)
-        if model.ticks >= 56 && model.ticks <= 59
-        log_info(model.ticks,a.id,2,"AFT Routing Msg $(msg) --- $(msg.in_port)----    flout_out: $(flow[1].params[1][1]) --- all ports: $(get_port_edge_list(a))")
-        end
+        # if model.ticks >= 56 && model.ticks <= 59
+        # log_info(model.ticks,a.id,2,"AFT Routing Msg $(msg) --- $(msg.in_port)----    flout_out: $(flow[1].params[1][1]) --- all ports: $(get_port_edge_list(a))")
+        # end
         
         if flow[1].action == OFS_Output
             if flow[1].params[1][1] != 0
@@ -189,9 +189,9 @@ end
 Processes msgs to SimNE
 """
 function process_msg!(sne::SimNE,msg::OFMessage,model)
-    if model.ticks >= 56 && model.ticks <= 58
-        log_info(model.ticks,sne.id,2,msg)
-    end
+    # if model.ticks >= 56 && model.ticks <= 58
+    #     log_info(model.ticks,sne.id,2,msg)
+    # end
     @match msg.reason begin
         Ofp_Protocol(1) =>  
                         begin

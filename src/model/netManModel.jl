@@ -152,7 +152,8 @@ end
 """
 function model_step!(model)
     init_step_state!(model)
-    log_info(model.ticks,"==========")
+    # log_info(model.ticks,"==========")
+    log_info(".")
     for a in allagents(model)
         init_state!(a)
         # if typeof(a) == SimNE 

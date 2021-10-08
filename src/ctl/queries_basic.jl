@@ -21,7 +21,7 @@ function do_query!(msg::OFMessage,a::Agent,model)
                 
         path = do_query(query_time,query,query_graph,query_paths)
         
-        log_info(model.ticks,a.id,"query: $(query) ----path found: $path ----> in precalc paths: $(query_paths)")
+        # log_info(model.ticks,a.id,"query: $(query) ----path found: $path ----> in precalc paths: $(query_paths)")
         
         # For no centralised control topo
         if model.ctrl_model != GraphModel(1) # ¬ centralised
@@ -58,7 +58,7 @@ end
     Query by neighbour control agent after receiving AGMessage
 """
 function do_query!(msg::AGMessage,a::Agent,model)
-    log_info(model.ticks,a.id,"query msg is: $msg")
+    # log_info(model.ticks,a.id,"query msg is: $msg")
 
     if !is_ignore_query(a,msg,model)
 
