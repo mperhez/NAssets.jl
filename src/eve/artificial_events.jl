@@ -1,7 +1,30 @@
 """
+return the times when random assets will fail
+according to total sim time (N), quantity (q) of
+assets and proportion. It receives also random 
+"""
+function get_dropping_times(seed,stabilisation_period,drop_proportion,q,N)
+    Random.seed!(seed)
+    #events 
+    k = Int(round(q * drop_proportion))
+    #rate events happening within time horizon 
+    λ = k / (N - 2*stabilisation_period) # stabilisation period is substracted twice, so the disruption comes after this period and also allows for the same time to fix before simulation ends.
+    #events happen randomly folling Poisson process with 
+    # λ, after stabilisation_period
+    
+    event_times = Int.(round.(sort(stabilisation_period .+ next_event_time.(rand(k),[λ]))))
+
+    #For testing
+    #event_times = [30,50]#,70]
+
+    log_info("Dropping times are: $event_times")
+    return event_times
+end
+
+"""
 Triggers random failures on active nodes
 """
-function trigger_random_node_drops!(model)
+function trigger_random_node_drops!(model::ABM)
     #-1 pick node to remove
     #0 on_switch event
     #1remove from network
@@ -16,12 +39,19 @@ function trigger_random_node_drops!(model)
         dpn_id = !isempty(active_ids) ? rand(active_ids) : rand(get_live_snes(model))
 
         #for testing only
-        dpns_test = [5,9]#[3,10,13]
-        dpn_id = rand([ sid for sid in dpns_test if get_state(getindex(model,sid)).up  ])
+        # dpns_test = [5,9]#[3,10,13]
+        # dpn_id = rand([ sid for sid in dpns_test if get_state(getindex(model,sid)).up  ])
 
         log_info(model.ticks,"Removing ntw node: $dpn_id...")
         dpn_ag = getindex(model,dpn_id)
-        drop_node!(dpn_ag,model)        
+        drop_node!(dpn_ag,model)
+        
+
+        dpn_ctl_ag = getindex(model,abs(get_control_agent(dpn_id,model)))
+        schedule_event!(dpn_ctl_ag,CTL_Event(2),model.ticks+1,[dpn_id])
+        schedule_event!(dpn_ctl_ag,CTL_Event(1),model.ticks+1,[-1*dpn_id])
+
+
     end
     
 end

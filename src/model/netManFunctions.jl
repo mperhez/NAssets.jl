@@ -207,30 +207,6 @@ function next_event_time(rn,λ)
 end
 
 """
-return the times when random assets will fail
-according to total sim time (N), quantity (q) of
-assets and proportion. It receives also random 
-"""
-function get_dropping_times(seed,stabilisation_period,drop_proportion,q,N)
-    Random.seed!(seed)
-    #events 
-    k = Int(round(q * drop_proportion))
-    #rate events happening within time horizon 
-    λ = k / (N - 2*stabilisation_period) # stabilisation period is substracted twice, so the disruption comes after this period and also allows for the same time to fix before simulation ends.
-    #events happen randomly folling Poisson process with 
-    # λ, after stabilisation_period
-    
-    event_times = Int.(round.(sort(stabilisation_period .+ next_event_time.(rand(k),[λ]))))
-
-    #For testing
-    event_times = [30,50]#,70]
-
-    log_info("Dropping times are: $event_times")
-    return event_times
-end
-
-
-"""
 Clears cache of control agent
 # TODO Opportunity to investigate ways to store relevant cache rather than clearing all
 """

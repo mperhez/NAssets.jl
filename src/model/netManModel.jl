@@ -68,9 +68,9 @@ function create_sim_asset_agents!(model)
         # @show i
         
         mnt = @match model.mnt_policy begin
-            1 => MaintenanceInfoPreventive(model.rul_deterioration,model)
-            2 => MaintenanceInfoPredictive(rul_deterioration,model)
-            _ => MaintenanceInfoCorrective(rul_deterioration,model)
+            1 => MaintenanceInfoPreventive(model.deterioration,model)
+            2 => MaintenanceInfoPredictive(deterioration,model)
+            _ => MaintenanceInfoCorrective(deterioration,model)
         end
         # if id == 9
         #     mnt.deterioration_parameter = 2. 
@@ -185,7 +185,7 @@ function model_step!(model)
             do_agent_step!(a,model)
         end
     end
-    #trigger_random_node_drops(model)
+    trigger_random_node_drops!(model)
     for a in allagents(model)
         pending_pkt_handler(a,model)
         clear_cache!(a,model)

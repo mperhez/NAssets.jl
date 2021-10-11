@@ -137,7 +137,6 @@ function single_run(config)
     args[:N]=config.n_steps
     ntw_graph = load_network_graph(get_graph(config.seed,config.size,config.ntw_topo;k=config.k,Β=config.Β,custom_topo=config.custom_topo))
     args[:ntw_graph]=ntw_graph
-    # args[:dropping_nodes]= get_dropping_nodes(config.drop_proportion)
     args[:ctrl_model] = config.ctl_model
     args[:ntw_model] = config.ntw_topo
 
@@ -154,7 +153,7 @@ function single_run(config)
     args[:traffic_dist_params] = config.traffic_dist_params #traffic distribution parameters
     args[:data_dir] = config.data_dir
     args[:plots_dir] = config.plots_dir
-    args[:rul_deterioration] = 0.2 #default rul deterioration
+    args[:deterioration] = config.deterioration 
 
     q_ctl_agents = 0
     run_label = get_run_label(config)
@@ -171,7 +170,7 @@ function single_run(config)
     q_agents = nv(ntw_graph)+q_ctl_agents
     args[:q]=q_agents
     # seed, stabilisation_time,proportion_dropping,q,N
-    args[:dropping_times] = get_dropping_times(config.seed,30,0.2,nv(ntw_graph),config.n_steps)
+    args[:dropping_times] = get_dropping_times(config.seed,config.drop_stabilisation,config.drop_proportion,nv(ntw_graph),config.n_steps)
     adata = [get_state_trj]
     mdata = [:mapping_ctl_ntw,get_state_trj]
     result_agents,result_model = run_model(config.n_steps,args; agent_data = adata, model_data = mdata)
