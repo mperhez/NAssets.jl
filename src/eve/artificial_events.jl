@@ -22,7 +22,7 @@ function get_dropping_times(seed,stabilisation_period,drop_proportion,q,N)
 end
 
 """
-Triggers random failures on active nodes
+Triggers random failures on active nodes. This function is coupled to the model as it detects nodes that are active and make sure disruption happen to some of those nodes. If decoupled, cleaner, but then requires to know in advance what paths are used at every time, to make sure that dropping nodes are always active. 
 """
 function trigger_random_node_drops!(model::ABM)
     #-1 pick node to remove
