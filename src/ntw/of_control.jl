@@ -88,8 +88,6 @@ end
 
 function process_msg!(a::Agent,msg::OFMessage,model)
 
-    # log_info(model.ticks,a.id,"===>Message from sne: $(msg)")
-  
     @match msg.reason begin
         Ofp_Protocol(1) =>  
                         begin

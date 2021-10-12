@@ -17,7 +17,6 @@ function initialize(user_props;grid_dims=(3,3),seed=0)
         :mapping_ctl_ntw => Dict{Int64,Int64}(), # mapping between (Ctl) Agent and SimNE
         :mapping_ntw_sne => Dict{Int64,Int64}(), #mapping btwn the underlying network and the corresponding simNE agent 
         :pkt_size => 1,#0.065, # (in MB) pkt size  IP between 21 is 65536 bytes Ref: Internet Core Protocols: The Definitive Guide by Eric Hall
-        :freq => 30, # frequency of monitoring # used?
         :ntw_links_msgs=>Dict{Tuple{Int,Int},Vector{Vector{OFMessage}}}(),
         :ntw_links_delays =>Dict{Tuple{Int,Int},Int}(),
         :state_trj => Vector{ModelState}(),
@@ -27,9 +26,7 @@ function initialize(user_props;grid_dims=(3,3),seed=0)
         # are able to process. Check references e.g. Nokia SR 7750.
         :max_queue_ne => 300,#700 #This indicates how many pkts/msgs can be stored in tick to be processed the next tick
         :max_cache_paths => 2,
-        :clear_cache_graph_freq => 25,#25, # How often the ntw graph is cleared to initial state, 0: no cache. A value of 10, is not enough in a 16 mesh network to find paths when queries are not repeated, prob_eq_query. Carefully, this should be higher than query cycle when prob_eq_queries_cycle = 0.
-        :query_cycle => 10,#10,# # how long the max_eq_queries_cycle applies for
-        :prob_eq_queries_cycle => 1,#0.7,#0.1,#1,#0.7, #base probability of processing equal queries within the same :query_cycle. 0 means won't process the same query within the query_cycle, 1: means will process always repeated queries regardless of query_cycle
+        :clear_cache_graph_freq => 50,#25, # How often the ntw graph is cleared to initial state, 0: no cache. A value of 10, is not enough in a 16 mesh network to find paths when queries are not repeated, prob_eq_query. 
         :base_ntw_graph => user_props[:ntw_graph]
     )
     #For G6: 
@@ -299,7 +296,6 @@ function init_agent!(a::Agent,model)
         a.ntw_graph = model.ntw_graph
         a.base_ntw_graph = model.ntw_graph
     end
-    a.params[:last_cache_graph] = 0 #Last time cache was cleared
 
     ##
     if a.maintenance.policy !=  CorrectiveM

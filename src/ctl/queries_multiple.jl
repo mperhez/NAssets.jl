@@ -5,7 +5,7 @@ function do_query!(msg::OFMessage,a::Agent,model)
     # If asset's network does not have any edge, there is no way to transport packets 
     ignore = ne(a.ntw_graph) > 0 ? false : true
     path=[]
-    # log_info(model.ticks, a.id, "querying local... $(msg)===> ignore: $ignore ====> paths: $(a.paths)")
+    
     if !ignore
         # src (from this sne) to dst
         query = (msg.dpid,msg.data.dst)       
@@ -35,7 +35,8 @@ function do_query!(msg::OFMessage,a::Agent,model)
             if isempty(path)
                 #should always query nbs even if has already queried with no reply?
                 sent_to = query_nbs!(a,msg,query_graph,query,[a.id],model)
-                record_pending_query!(a,model.ticks,sent_to,msg)
+                record_pending_query!(a,model.ticks,sent_to,query)
+                push!(a.pending,(model.ticks,msg,false)) #false:not reprocess next time
             else
                 clear_pending_query!(a,query)
             end
@@ -60,7 +61,7 @@ end
 function do_query!(msg::AGMessage,a::Agent,model)
     # log_info(model.ticks,a.id,"query msg is: $msg")
 
-    if !is_ignore_query(a,msg,model)
+    
 
         # visited control ag
         trace = deepcopy(msg.body[:trace])
@@ -92,14 +93,14 @@ function do_query!(msg::AGMessage,a::Agent,model)
 
 
             #query
-            # log_info(model.ticks,a.id,[20],"starting query ==> $(a.paths)")
+
             path = do_query(query_time,query,query_graph,query_paths)
-            # log_info(model.ticks,a.id,[20],"ending query")        
+            
 
             if isempty(path)
                 if !haskey(a.previous_queries,query)
                     sent_to = query_nbs!(a,msg,jg,query,trace,model)
-                    a.previous_queries[query] = (model.ticks,sent_to)
+                    record_pending_query!(a,model.ticks,sent_to,query)
                 end
             else
                 do_match!(path,msg,a,model)
@@ -114,7 +115,7 @@ function do_query!(msg::AGMessage,a::Agent,model)
         else
             fw_query_nbs!(a,msg,trace,model)
         end
-    end
+    
 
 end
 
@@ -154,7 +155,6 @@ function do_query(time::Int64,query::Tuple{Int64,Int64},lg::MetaGraph,paths::Dic
         #path in cache paths and local graph
         (_::Float64,_::Float64) => first(cp_paths)[3] < first(lg_paths)[3] ? first(cp_paths) : first(lg_paths) ##lower is better
     end
-    # log_info(time," reaches END: $(path_state.paths)")       
     return path
 end
 
@@ -184,26 +184,10 @@ function fw_query_nbs!(a::Agent,msg::AGMessage,trace::Array{Int64},model::ABM)
 end
 
 """
-    Determines whether or not an agent should ignore a query
-"""
-function is_ignore_query(a::Agent,msg::AGMessage,model::ABM)
-    ignore = false 
-    if haskey(a.previous_queries,msg.body[:query]) 
-        if model.ticks - first(a.previous_queries[msg.body[:query]]) < model.query_cycle
-            bdst = Binomial(1,model.prob_eq_queries_cycle)
-            ignore = ~Bool(first(rand(bdst,1)))
-        end
-    end 
-    return ignore
-end
-
-"""
 records when control ag send a query to other control ags
 """
 
-function record_pending_query!(a::Agent,time::Int64,sent_to::Array{Int64},msg::OFMessage)
-    query = (msg.dpid,msg.data.dst)
-    push!(a.pending,(time,msg,false)) #false:not reprocess next time
+function record_pending_query!(a::Agent,time::Int64,sent_to::Array{Int64},query::Tuple{Int64,Int64})
     #track query sent, if not previously tracked
     if !haskey(a.previous_queries,query)
         a.previous_queries[query] = (time,sent_to)

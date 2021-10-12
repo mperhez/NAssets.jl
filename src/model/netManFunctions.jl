@@ -211,9 +211,10 @@ Clears cache of control agent
 # TODO Opportunity to investigate ways to store relevant cache rather than clearing all
 """
 function clear_cache!(a::Agent,model::ABM)
-    if model.ticks - a.params[:last_cache_graph] == model.clear_cache_graph_freq
+    if model.ticks - a.last_cache_cleared == model.clear_cache_graph_freq
         a.ntw_graph = a.base_ntw_graph
-        a.params[:last_cache_graph] = model.ticks
+        a.last_cache_cleared = model.ticks
+        a.previous_queries = Dict()
         a.paths = Dict()
     end
 

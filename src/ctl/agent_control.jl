@@ -30,8 +30,7 @@ function send_to_nbs!(msg_template::AGMessage,a::Agent,model)::Array{Int64}
     random_nbs = rand(Binomial(1,model.prob_random_walks),length(gid_nbs))
     random_nbs = [rnb for rnb in random_nbs .* gid_nbs if rnb > 0]
     msgs_sent::Array{Int64} = []
-    # log_info(model.ticks,a.id,"sending msg: $msg_template  to $(length(gid_nbs)) nbs: $(gid_nbs)")
-    
+        
     #disable msgs
     for nb in random_nbs
         if ~(nb in msg_template.body[:trace])
@@ -41,8 +40,6 @@ function send_to_nbs!(msg_template::AGMessage,a::Agent,model)::Array{Int64}
             push!(msgs_sent,nb)
         end
     end
-
-    # log_info(model.ticks,a.id,"msgs sent: $(msgs_sent)")
 
     return msgs_sent
 
@@ -104,6 +101,7 @@ function do_match!(msg::AGMessage,a::Agent,model)
                 end
             end
             mark_reprocess_of_msg!(a,msg)
+            clear_pending_query!(a,query)
             # log_info(model.ticks,a.id,"new path ENDING do_match: => $(a.paths) ++++++++===> $(a.pending)")
         else # This agent is not the original requester of the path
             #continue back propagation of msg
@@ -137,11 +135,6 @@ end
 
 
 function process_msg!(a::Agent,msg::AGMessage,model)
-    #log_info(model.ticks,a.id,18,"->processing $(msg)")
-    
-    # if model.ticks >= 41
-        #  log_info(model.ticks,a.id,"--> is_up? $(get_state(a).up) -- > Processing AG msg: $msg ")
-    # end
 
     @match msg.reason begin
         AG_Protocol(1) => 
@@ -415,7 +408,7 @@ function do_update_flows_from_changes!(a::Agent,ntw_changes::Vector{Int64},model
             path = do_query(query_time,query,query_graph,query_paths)
             
             if isempty(path)
-                 log_info(model.ticks,a.id,"Not path found")
+                 log_info(model.ticks,a.id,"No path found")
             #     # if !haskey(a.previous_queries,query)
             #     #     sent_to = query_nbs!(a,msg,jg,query,trace,model)
             #     #     a.previous_queries[query] = (model.ticks,sent_to)

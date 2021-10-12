@@ -26,11 +26,9 @@ end
 logs only for a given agent
 """
 function log_info(t,aid,only_id,msg)
-    # if t > 50
         if aid in only_id
             @info "[$(t)]($(aid)) $msg"
         end
-    # end
 end
 
 """
