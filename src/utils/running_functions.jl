@@ -154,7 +154,7 @@ function single_run(config)
     args[:data_dir] = config.data_dir
     args[:plots_dir] = config.plots_dir
     args[:deterioration] = config.deterioration 
-
+    args[:clear_cache_graph_freq] = config.clear_cache_graph_freq
     q_ctl_agents = 0
     run_label = get_run_label(config)
     args[:run_label] = run_label

@@ -26,7 +26,6 @@ function initialize(user_props;grid_dims=(3,3),seed=0)
         # are able to process. Check references e.g. Nokia SR 7750.
         :max_queue_ne => 300,#700 #This indicates how many pkts/msgs can be stored in tick to be processed the next tick
         :max_cache_paths => 2,
-        :clear_cache_graph_freq => 50,#25, # How often the ntw graph is cleared to initial state, 0: no cache. A value of 10, is not enough in a 16 mesh network to find paths when queries are not repeated, prob_eq_query. 
         :base_ntw_graph => user_props[:ntw_graph]
     )
     #For G6: 
