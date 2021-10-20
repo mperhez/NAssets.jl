@@ -151,10 +151,17 @@ function single_run(config)
     args[:mnt_wc_cost] = config.mnt_wc_cost
     args[:mnt_bc_cost] = config.mnt_bc_cost #best case cost
     args[:traffic_dist_params] = config.traffic_dist_params #traffic distribution parameters
+    args[:traffic_proportion] = config.traffic_proportion
     args[:data_dir] = config.data_dir
     args[:plots_dir] = config.plots_dir
     args[:deterioration] = config.deterioration 
     args[:clear_cache_graph_freq] = config.clear_cache_graph_freq
+    args[:interval_tpt] = config.interval_tpt
+    args[:pkt_size] = config.pkt_size
+    args[:pkt_per_tick] = config.pkt_per_tick
+    args[:max_queue_ne] = config.max_queue_ne
+    args[:ofmsg_reattempt] = config.ofmsg_reattempt
+    args[:max_cache_paths] = config.max_cache_paths
     q_ctl_agents = 0
     run_label = get_run_label(config)
     args[:run_label] = run_label

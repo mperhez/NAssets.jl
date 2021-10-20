@@ -13,19 +13,11 @@ function initialize(user_props;grid_dims=(3,3),seed=0)
         :pkt_id => 0,
         :amsg_id =>0,
         :ofmsg_id=>0,
-        :ofmsg_reattempt=>10,#4,# greater number to avoid duplicated install flows
         :mapping_ctl_ntw => Dict{Int64,Int64}(), # mapping between (Ctl) Agent and SimNE
         :mapping_ntw_sne => Dict{Int64,Int64}(), #mapping btwn the underlying network and the corresponding simNE agent 
-        :pkt_size => 1,#0.065, # (in MB) pkt size  IP between 21 is 65536 bytes Ref: Internet Core Protocols: The Definitive Guide by Eric Hall
         :ntw_links_msgs=>Dict{Tuple{Int,Int},Vector{Vector{OFMessage}}}(),
         :ntw_links_delays =>Dict{Tuple{Int,Int},Int}(),
         :state_trj => Vector{ModelState}(),
-        :interval_tpt => 10, #interval used to calculate tpt
-        :pkt_per_tick => 2000,#0, # How many packets are processsed per tick. #TODO which number is reasonable?
-        # I am setting this to 2000 as the expectations is nes
-        # are able to process. Check references e.g. Nokia SR 7750.
-        :max_queue_ne => 300,#700 #This indicates how many pkts/msgs can be stored in tick to be processed the next tick
-        :max_cache_paths => 2,
         :base_ntw_graph => user_props[:ntw_graph]
     )
     #For G6: 

@@ -161,7 +161,7 @@ end
 
 ## main functions
 
-new_config(seed,ctl_model,ntw_topo,size,n_steps,drop_proportion,prob_random_walks,benchmark, animation,k,Β,ctl_k,ctl_Β,mnt_policy,ntw_services,mnt_wc_duration,mnt_bc_duration,mnt_wc_cost,mnt_bc_cost,traffic_dist_params) =
+new_config(seed,ctl_model,ntw_topo,size,n_steps,drop_proportion,prob_random_walks,benchmark, animation,k,Β,ctl_k,ctl_Β,mnt_policy,ntw_services,mnt_wc_duration,mnt_bc_duration,mnt_wc_cost,mnt_bc_cost,traffic_dist_params,traffic_proportion,clear_cache_graph_freq,interval_tpt,pkt_size,pkt_per_tick,max_queue_ne,ofmsg_reattempt, max_cache_paths) =
     return ( seed = seed
             ,ctl_model=ctl_model
             ,ntw_topo = ntw_topo
@@ -184,6 +184,14 @@ new_config(seed,ctl_model,ntw_topo,size,n_steps,drop_proportion,prob_random_walk
             ,mnt_wc_cost = mnt_wc_cost
             ,mnt_bc_cost = mnt_bc_cost
             ,traffic_dist_params = traffic_dist_params
+            ,traffic_proportion = traffic_proportion
+            ,clear_cache_graph_freq = clear_cache_graph_freq
+            ,interval_tpt = interval_tpt
+            ,pkt_size = pkt_size
+            ,pkt_per_tick = pkt_per_tick
+            ,max_queue_ne = max_queue_ne
+            ,ofmsg_reattempt = ofmsg_reattempt
+            ,max_cache_paths = max_cache_paths
             )
 
 function get_dropping_nodes(drop_proportion)
