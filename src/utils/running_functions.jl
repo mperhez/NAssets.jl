@@ -48,16 +48,16 @@ function load_run_configs()
                             ntw_topo == GraphModel(7) ? [4] : [0]
                         ctl_ks = ctl_model == GraphModel(6) ||
                                 ctl_model == GraphModel(7) ? [4] : [0]
-                        Βs = ntw_topo == GraphModel(6) ||
+                        Bs = ntw_topo == GraphModel(6) ||
                                 ntw_topo == GraphModel(7) ? [0.8] : [0.0]
-                        ctl_Βs = ctl_model == GraphModel(6) ||
+                        ctl_Bs = ctl_model == GraphModel(6) ||
                                     ctl_model == GraphModel(7) ? [0.8] : [0.0]
                         
                         for k in ks
-                            for Β in Βs
+                            for B in Bs
                                 for ctl_k in ctl_ks
-                                    for ctl_Β in ctl_Βs
-                                        push!(configs,new_config(seed,ctl_model,ntw_topo,size,100,drop_proportion,1.0,false,false,k,Β,ctl_k,ctl_Β,2,[(1,7),(4,1),(5,14),(12,8)],20,10,150.,100.,[1,0.05]))
+                                    for ctl_B in ctl_Bs
+                                        push!(configs,new_config(seed,ctl_model,ntw_topo,size,100,drop_proportion,1.0,false,false,k,B,ctl_k,ctl_B,2,[(1,7),(4,1),(5,14),(12,8)],20,10,150.,100.,[1,0.05]))
                                     end
                                 end
                             end
@@ -82,16 +82,16 @@ function load_run_configs(g_size,m_policy,services,steps)
                             ntw_topo == GraphModel(7) ? [4] : [0]
                         ctl_ks = ctl_model == GraphModel(6) ||
                                 ctl_model == GraphModel(7) ? [4] : [0]
-                        Βs = ntw_topo == GraphModel(6) ||
+                        Bs = ntw_topo == GraphModel(6) ||
                                 ntw_topo == GraphModel(7) ? [0.8] : [0.0]
-                        ctl_Βs = ctl_model == GraphModel(6) ||
+                        ctl_Bs = ctl_model == GraphModel(6) ||
                                     ctl_model == GraphModel(7) ? [0.8] : [0.0]
                         
                         for k in ks
-                            for Β in Βs
+                            for B in Bs
                                 for ctl_k in ctl_ks
-                                    for ctl_Β in ctl_Βs
-                                        push!(configs,new_config(seed,ctl_model,ntw_topo,size,steps,drop_proportion,1.0,false,false,k,Β,ctl_k,ctl_Β,m_policy,services,20,10,150.,100.,[1,0.05]))
+                                    for ctl_B in ctl_Bs
+                                        push!(configs,new_config(seed,ctl_model,ntw_topo,size,steps,drop_proportion,1.0,false,false,k,B,ctl_k,ctl_B,m_policy,services,20,10,150.,100.,[1,0.05]))
                                     end
                                 end
                             end
@@ -111,14 +111,14 @@ function get_run_label(config)
     base_label = "$(config.ntw_topo)"
     if config.ntw_topo == GraphModel(6) ||
     config.ntw_topo == GraphModel(7)
-        base_label = base_label * "_$(config.k)_$(replace(string(config.Β),"."=>""))"
+        base_label = base_label * "_$(config.k)_$(replace(string(config.B),"."=>""))"
     end
 
     base_label = base_label * "_$(config.ctl_model)"
 
     if config.ctl_model == GraphModel(6) ||
         config.ctl_model == GraphModel(7)
-        base_label = base_label * "_$(config.ctl_k)_$(replace(string(config.ctl_Β),"."=>""))"
+        base_label = base_label * "_$(config.ctl_k)_$(replace(string(config.ctl_B),"."=>""))"
     end
    
     run_label = base_label * "_$(config.size)_$(config.seed)_$(replace(string(config.prob_random_walks),"."=>""))"
