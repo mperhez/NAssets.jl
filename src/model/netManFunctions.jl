@@ -172,9 +172,9 @@ new_config(seed,ctl_model,ntw_topo,size,n_steps,drop_proportion,prob_random_walk
             ,benchmark = benchmark
             ,animation = animation
             ,k=k
-            ,Β = Β
+            ,B = B
             ,ctl_k=ctl_k
-            ,ctl_Β = ctl_Β
+            ,ctl_B = ctl_B
             ,custom_topo = nothing
             ,ctl_custom_topo = nothing
             ,mnt_policy = mnt_policy

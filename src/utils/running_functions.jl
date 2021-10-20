@@ -135,7 +135,7 @@ function single_run(config)
     Random.seed!(config.seed)
     args= Dict()
     args[:N]=config.n_steps
-    ntw_graph = load_network_graph(get_graph(config.seed,config.size,config.ntw_topo;k=config.k,Β=config.Β,custom_topo=config.custom_topo))
+    ntw_graph = load_network_graph(get_graph(config.seed,config.size,config.ntw_topo;k=config.k,B=config.B,custom_topo=config.custom_topo))
     args[:ntw_graph]=ntw_graph
     args[:ctrl_model] = config.ctl_model
     args[:ntw_model] = config.ntw_topo
@@ -169,7 +169,7 @@ function single_run(config)
         args[:ctl_graph] = MetaGraph()
         q_ctl_agents = 1
     else
-        ctl_graph = get_graph(config.seed,config.size,config.ctl_model;k=config.ctl_k,Β=config.ctl_Β,custom_topo=config.ctl_custom_topo)
+        ctl_graph = get_graph(config.seed,config.size,config.ctl_model;k=config.ctl_k,B=config.ctl_B,custom_topo=config.ctl_custom_topo)
         args[:ctl_graph]=ctl_graph
         q_ctl_agents = nv(ctl_graph)
     end

@@ -13,9 +13,9 @@ config = ( seed = 43608
             ,benchmark = false
             ,animation = false
             ,k=2
-            ,Β = 0.5
+            ,B = 0.5
             ,ctl_k=2
-            ,ctl_Β = 0.5
+            ,ctl_B = 0.5
             ,custom_topo = nothing
             ,ctl_custom_topo = nothing
             ,mnt_policy = 1
