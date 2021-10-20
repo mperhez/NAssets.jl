@@ -1,7 +1,7 @@
 import Pkg
 
 Pkg.add("Agents")
-Pkg.add("MetaGraphs")
+Pkg.add("MetaGraphs",v"0.6.7")
 Pkg.add("AgentsPlots")
 Pkg.add("Plots")
 Pkg.add("LightGraphs")

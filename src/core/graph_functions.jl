@@ -242,7 +242,7 @@ function get_graph(seed,size,topo;k=0,B=0,custom_topo=nothing)
         # GraphModel(0)=> load_custom_backbone(csv_custom_nodes,csv_custom_links)#custom_topo
         GraphModel(0)=> load_custom_regional_metro("","")#custom_topo
         GraphModel(2) => MetaGraph( [Int(i) for i in ring_graph(size)])
-        GraphModel(3) => MetaGraph(complete_graph(size))
+        GraphModel(3) => MetaGraph(LightGraphs.complete_graph(size))
         GraphModel(4) => MetaGraph( [Int(i) for i in grid2(Int(sqrt(size)))])
         GraphModel(5) => MetaGraph( [Int(i) for i in Laplacians.star_graph(size)] )
         GraphModel(6) => MetaGraph(barabasi_albert(size,k,seed=seed))
