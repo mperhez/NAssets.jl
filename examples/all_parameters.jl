@@ -1,8 +1,8 @@
 using NAssets
 
 config = ( seed = 43608
-            ,ctl_model= GraphModel(6) #NAssets.GraphModel(4)
-            ,ntw_topo = GraphModel(6) #NAssets.GraphModel(4)
+            ,ctl_model= NAssets.GraphModel(6)
+            ,ntw_topo = NAssets.GraphModel(6)
             ,size=100
             ,n_steps=100
             ,deterioration = 0. # physical deterioration parameter. 0: switched off.
@@ -33,7 +33,7 @@ config = ( seed = 43608
             # are able to process. Check references e.g. Nokia SR 7750.
             ,max_queue_ne = 300#700 #This indicates how many pkts/msgs can be stored in tick to be processed the next tick
             ,ofmsg_reattempt=10#4,# greater number to avoid duplicated install flows
-            ,max_cache_paths => 2
+            ,max_cache_paths = 2
             ,data_dir = "data/testing/"
             ,plots_dir = "plots/testing/"
             # ,ntw_services = [(1,7),(4,1),(5,14),(12,8)]
