@@ -45,7 +45,7 @@ function route_traffic!(a::SimNE,msg::OFMessage,model)
 
                 #OFPR_NO_MATCH: here used to tell other SNE that packet couldn't reach destination.
                 if flow[1].params[1] == msg.in_port 
-                    log_info(model.ticks,a.id,"Forward NO MATCH to ($dst.id) ")
+                    log_info(model.ticks,a.id,"Forward NO MATCH to $(dst.id) ")
                     forward!(msg,a,dst,OFPR_NO_MATCH,model)
                     ftype = msg.data.src == a.id ? msg.data.dst == dst_id ? Flow_Type(-2) : Flow_Type(-1) : msg.data.dst == dst_id ? Flow_Type(1) : Flow_Type(0)
                     record_active_flow!(model,a.id,dst_id,ftype)
@@ -430,14 +430,14 @@ function clear_pending_query!(sne::SimNE,flow::Flow,qid::Int64)
     #clear requested queries
     query = (flow.dpid,parse(Int64,flow.match_rule.dst))
     new_rq_ctl = Dict()
-    log_info(sne.id," BEFORE Cleared: $(sne.requested_ctl)")
+    # log_info(sne.id," BEFORE Cleared: $(sne.requested_ctl)")
     for k in keys(sne.requested_ctl)
         if k != query
             new_rq_ctl[k] = sne.requested_ctl[k]
         end
     end
     sne.requested_ctl = new_rq_ctl
-    log_info(sne.id," AFTER Cleared: $(sne.requested_ctl)")
+    # log_info(sne.id," AFTER Cleared: $(sne.requested_ctl)")
 end
 
 
