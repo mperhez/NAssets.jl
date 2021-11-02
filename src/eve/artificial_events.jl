@@ -7,13 +7,14 @@ function get_dropping_times(seed,stabilisation_period,drop_proportion,q,N)
     Random.seed!(seed)
     #events 
     k = Int(round(q * drop_proportion))
-    #rate events happening within time horizon 
-    λ = k / (N - 2*stabilisation_period) # stabilisation period is substracted twice, so the disruption comes after this period and also allows for the same time to fix before simulation ends.
-    #events happen randomly folling Poisson process with 
-    # λ, after stabilisation_period
+    # k = 30
+    @show k
     
-    event_times = Int.(round.(sort(stabilisation_period .+ next_event_time.(rand(k),[λ]))))
+    time_btwn_events = Int.(ceil.(first([ rand(Exponential(1/k),k) .* (N - (2 * stabilisation_period)* 1.7)]))) # Normalise time-btwn-events over the 1.7 of the observation period (assuming that we substract stabilisation at the beginning and at the end) to make sure it falls within the simulation time.
 
+    @show time_btwn_events
+    event_times =  stabilisation_period .+ cumsum(time_btwn_events[1:k])
+    
     #For testing
     #event_times = [30,50]#,70]
 
