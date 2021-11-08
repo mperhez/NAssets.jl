@@ -246,7 +246,7 @@ function get_graph(seed,size,topo;k=0,B=0,custom_topo=nothing)
         GraphModel(4) => MetaGraph( [Int(i) for i in grid2(Int(sqrt(size)))])
         GraphModel(5) => MetaGraph( [Int(i) for i in Laplacians.star_graph(size)] )
         GraphModel(6) => MetaGraph(barabasi_albert(size,k,seed=seed))
-        GraphModel(7) => MetaGraph(watts_strogatz(size,k,B))
+        GraphModel(7) => MetaGraph(watts_strogatz(size,k,B,seed=seed))
         #GraphModel(8) => MetaGraph(stochastic_block_model())
     end
 end

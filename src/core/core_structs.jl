@@ -136,7 +136,7 @@ abstract type CTLMessage end
 
 mutable struct OFMessage <: CTLMessage
     id::Int64
-    ticks::Int
+    ticks::Int # ticks when msg was created. Note on forwarding new msgs are created.
     dpid::Int # sender of msg,  aka SimNE.id aka switch.id
     in_port::Int # (Optional) sender's input port, in SimNE to ControlAg comm, this is the port where the packet was received
     reason::Ofp_Protocol
@@ -180,6 +180,7 @@ mutable struct NetworkAssetState <: State
     on_maintenance::Bool
     port_edge_list::Vector{Tuple{Int64,String}}
     in_pkt::Int64
+    q_size::Int64
     out_pkt::Int64
     drop_pkt::Int64
     flow_table::Vector{Flow}
@@ -327,7 +328,7 @@ end
 
 
 function NetworkAssetState(ne_id::Int)
-    NetworkAssetState(ne_id,true,false,Vector{Tuple{Int64,String}}(),0,0,0,Vector{Flow}(),Dict(),Array{Float64,1}(),0.0,0.0,0)
+    NetworkAssetState(ne_id,true,false,Vector{Tuple{Int64,String}}(),0,0,0,0,Vector{Flow}(),Dict(),Array{Float64,1}(),0.0,0.0,0)
 end
 
 

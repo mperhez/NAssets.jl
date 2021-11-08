@@ -18,7 +18,8 @@ function initialize(user_props;grid_dims=(3,3),seed=0)
         :ntw_links_msgs=>Dict{Tuple{Int,Int},Vector{Vector{OFMessage}}}(),
         :ntw_links_delays =>Dict{Tuple{Int,Int},Int}(),
         :state_trj => Vector{ModelState}(),
-        :base_ntw_graph => user_props[:ntw_graph]
+        :base_ntw_graph => user_props[:ntw_graph],
+        :dropped_nodes => Vector{Tuple{Int,Int}}()
     )
     #For G6: 
     #prob_eq_queries_cycle: 0.2
@@ -173,13 +174,14 @@ function model_step!(model)
             do_agent_step!(a,model)
         end
     end
-    trigger_random_node_drops!(model)
     for a in allagents(model)
         pending_pkt_handler(a,model)
         clear_cache!(a,model)
         calculate_metrics_step!(a,model)
     end
+    trigger_random_node_drops!(model)
     #log_info(model.ticks,"aflows: $(get_state(model).active_flows)")
+    # log_info(model.ticks,": $()")
     
 end
 
@@ -428,6 +430,10 @@ function ntw_link_step!(l::Tuple{Int,Int},model)
         to_deliver = first(msgs)
         in_pkt_count = 0
 
+        if model.ticks >= 65 && model.ticks <= 86
+             log_info(model.ticks," link ($(l)) -> $(msgs)")
+        end
+
         if !isempty(to_deliver)
             if length(msgs) > 1
                 msgs = msgs[begin+1:end]
@@ -446,7 +452,6 @@ function ntw_link_step!(l::Tuple{Int,Int},model)
                     in_pkt_count = get_state(dst).in_pkt + 1
                     set_in_pkt!(dst,in_pkt_count)
                 else
-                    # log_info(model.ticks,dst.id, "unable to deliver packet")
                     s = get_state(dst)
                     s.drop_pkt += 1
                     set_state!(dst,s)

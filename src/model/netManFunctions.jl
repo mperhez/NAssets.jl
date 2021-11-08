@@ -75,6 +75,7 @@ end
 function do_agent_step!(a::SimNE,model)
     #Process OF messages (packet data traffic)
     # log_info(model.ticks,a.id, "start step! $(get_state(a).up) ==> $(get_state(a).rul)")
+    log_info(model.ticks,a.id,12, "====> ports: $(get_port_edge_list(a))<====")
     is_up(a) && is_ready(a) ? in_packet_processing(a,model) : nothing 
     
     # log_info(model.ticks,a.id,"rqsted: $(a.requested_ctl)")

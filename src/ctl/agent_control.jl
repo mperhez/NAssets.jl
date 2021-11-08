@@ -408,7 +408,7 @@ function do_update_flows_from_changes!(a::Agent,ntw_changes::Vector{Int64},model
             path = do_query(query_time,query,query_graph,query_paths)
             
             if isempty(path)
-                 log_info(model.ticks,a.id,"No path found")
+                 log_info(model.ticks,a.id,"No path found => $query")
             #     # if !haskey(a.previous_queries,query)
             #     #     sent_to = query_nbs!(a,msg,jg,query,trace,model)
             #     #     a.previous_queries[query] = (model.ticks,sent_to)
@@ -431,7 +431,7 @@ Update flows of the snes controlled by the agent a and for the path given,
 """
 function do_update_flows_from_path!(a::Agent,path::Array{Int64,1},model::ABM)
     msg = OFMessage(-1, model.ticks,-1,0,OFPR_ADD_FLOW,[])
-    
+    log_info(model.ticks,a.id,"active path: $path")
     install_flow!(a,path,model,msg)
     if length(path) > 1
         k = (first(path),last(path))

@@ -17,6 +17,7 @@ function drop_node!(sne::SimNE,model::ABM)
 
     #soft remove 
     model.ntw_graph = soft_remove_vertex(g,get_address(sne.id,g))
+    push!(model.dropped_nodes,(model.ticks,sne.id))
 end
 
 """

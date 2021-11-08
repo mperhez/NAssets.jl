@@ -162,6 +162,7 @@ function single_run(config)
     args[:max_queue_ne] = config.max_queue_ne
     args[:ofmsg_reattempt] = config.ofmsg_reattempt
     args[:max_cache_paths] = config.max_cache_paths
+    args[:max_msg_live] = config.max_msg_live
     q_ctl_agents = 0
     run_label = get_run_label(config)
     args[:run_label] = run_label

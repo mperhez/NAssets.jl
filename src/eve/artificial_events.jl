@@ -8,11 +8,11 @@ function get_dropping_times(seed,stabilisation_period,drop_proportion,q,N)
     #events 
     k = Int(round(q * drop_proportion))
     # k = 30
-    @show k
+    # @show k
     
     time_btwn_events = Int.(ceil.(first([ rand(Exponential(1/k),k) .* (N - (2 * stabilisation_period)* 1.7)]))) # Normalise time-btwn-events over the 1.7 of the observation period (assuming that we substract stabilisation at the beginning and at the end) to make sure it falls within the simulation time.
 
-    @show time_btwn_events
+    # @show time_btwn_events
     event_times =  stabilisation_period .+ cumsum(time_btwn_events[1:k])
     
     #For testing
@@ -36,8 +36,11 @@ function trigger_random_node_drops!(model::ABM)
         #get ids of nodes that are part of active flows
         active_ids =  unique(vcat([ af[3]==f_S ? [af[2]] : af[3]==f_E ? [af[1]] : [af[1],af[2]] for af in get_state(model).active_flows if af[3]!=f_SE ]...)) 
 
+        #ensure there is no replacement when selecting random node to drop
+        active_always_up = setdiff(active_ids,unique([ last(pair) for pair in model.dropped_nodes]))
+
         #pick one random node
-        dpn_id = !isempty(active_ids) ? rand(active_ids) : rand(get_live_snes(model))
+        dpn_id = !isempty(active_always_up) ? rand(active_always_up) : rand(get_live_snes(model))
 
         #for testing only
         # dpns_test = [5,9]#[3,10,13]

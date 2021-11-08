@@ -11,13 +11,15 @@ function forward!(msg::OFMessage,src::SimNE,model)
 end
 
 function forward!(msg::OFMessage,src::SimNE,dst::SimNE,reason::Ofp_Protocol,model)
-    # if model.ticks >= 53 && model.ticks <= 58 
-    #     log_info(model.ticks,src.id,4," forwarding to $(dst.id) ==> $msg")
-    #     log_info(model.ticks,src.id,3," forwarding to $(dst.id) ==> $msg")
-    #     log_info(model.ticks,src.id,2," forwarding to $(dst.id) ==> $msg")
-    # end
+    if model.ticks >= 64 && model.ticks <= 87 
+        log_info(model.ticks,src.id,4," src forwarding to $(dst.id) ==> $msg")
+        log_info(model.ticks,dst.id,4," dst forwarding from $(src.id) ==> $msg")
+        # log_info(model.ticks,src.id,3," forwarding to $(dst.id) ==> $msg")
+        # log_info(model.ticks,src.id,2," forwarding to $(dst.id) ==> $msg")
+    end
     in_ports = filter(p->p[2]=="s$(src.id)",get_port_edge_list(dst))
     in_port = in_ports[1][1]
+    # Note it creates a new msg even though the pkt (data) is the same
     push_msg!(src,dst,OFMessage(next_ofmid!(model),model.ticks,src.id,in_port,reason,msg.data),model)
     #@show msg out_port
     # Next two lines are inside push_msg!
@@ -45,7 +47,7 @@ function route_traffic!(a::SimNE,msg::OFMessage,model)
 
                 #OFPR_NO_MATCH: here used to tell other SNE that packet couldn't reach destination.
                 if flow[1].params[1] == msg.in_port 
-                    log_info(model.ticks,a.id,"Forward NO MATCH to $(dst.id) ")
+                    log_info(model.ticks,a.id,"Forward NO MATCH to $(dst.id) ; flow: $(flow) --- msg -> $msg")
                     forward!(msg,a,dst,OFPR_NO_MATCH,model)
                     ftype = msg.data.src == a.id ? msg.data.dst == dst_id ? Flow_Type(-2) : Flow_Type(-1) : msg.data.dst == dst_id ? Flow_Type(1) : Flow_Type(0)
                     record_active_flow!(model,a.id,dst_id,ftype)
@@ -128,6 +130,8 @@ function push_msg!(dst::SimNE,msg::OFMessage)
 end
 
 function install_flow!(msg::OFMessage, sne::SimNE,model)
+    log_info(model.ticks,sne.id,24,"Installing flow msg: $msg --- and ports: $(get_port_edge_list(sne))")
+    
     nf = first(msg.data)
     qid = last(msg.data)
     install_flow!(nf,sne,model)   
@@ -157,7 +161,7 @@ function in_packet_processing(a::AbstractAgent,model)
     actions_to_process = []
     
     ppt = a.params[:pkt_per_tick]#get_random_packets_to_process(model.seed,model.ticks+a.id,a.params[:pkt_per_tick])
-
+    log_info(model.ticks,a.id,3,"queue size: $(length(a.queue.data))")
     while is_ready(a)
         msg = take_msg!(a)
 
@@ -187,6 +191,9 @@ function process_msg!(sne::SimNE,msg::OFMessage,model)
     @match msg.reason begin
         Ofp_Protocol(1) =>  
                         begin
+                            if model.ticks >= 60 && model.ticks <= 80
+                                log_info(model.ticks,sne.id,3," msg: $msg")
+                            end
                             route_traffic!(sne,msg,model)
                         end
         Ofp_Protocol(3) => 
@@ -199,6 +206,7 @@ function process_msg!(sne::SimNE,msg::OFMessage,model)
         Ofp_Protocol(4) => 
                         begin
                             log_info(model.ticks,sne.id,"Received NO MATCH ==> $msg")
+                            drop_packet!(sne)
                             delete_flow!(sne,msg.in_port,model)       
                         end
                             
@@ -222,10 +230,11 @@ function pending_pkt_handler(a::SimNE,model)
 
         for msg in a.pending 
             if msg.reason == OFPR_ACTION
-                if(q_i <= model.:max_queue_ne)
+                if q_i <= model.:max_queue_ne && model.ticks - msg.ticks < model.max_msg_live
                     put!(a.queue,msg)
                     q_i+= 1
                 else
+                    log_info(model.ticks,a.id," Dropping pkt => q_i = $(q_i) <= $(model.:max_queue_ne)  and msg.ticks = $(msg.ticks) ==> msg: $msg")
                     drop_packet!(a)
                 end
             else
@@ -233,6 +242,9 @@ function pending_pkt_handler(a::SimNE,model)
             end
         end
        empty_pending!(a)
+       s = get_state(a)
+       s.q_size = length(a.queue.data)
+       set_state!(a,s)
     end
 end
 
@@ -262,6 +274,14 @@ function link_down!(sne::SimNE,dpn_id::Int,model)
         end
     end
     delete_flow!(sne,dpn_port,model)
+    
+    #empty msgs in links
+    if sne.id > dpn_id
+        init_link_msg!((dpn_id,sne.id),model)
+    else
+        init_link_msg!((sne.id,dpn_id),model)
+    end
+
     set_port_edge_list!(sne,new_port_edge_list)
     controller = getindex(model,sne.controller_id)
     # log_info(model.ticks,sne.id,"Triggering event to ag: $(sne.controller_id) for dpn_id: $dpn_id ")
@@ -275,7 +295,7 @@ when the link corresponding to the given rjn_id rejoins. sne is up and node re-j
 """
 function link_up!(sne::SimNE,rjn_id::Int,model)
     #add to the list of ports
-    nbs = all_neighbors(model.ntw_graph,get_address(sne.id,model.ntw_graph))
+    nbs = all_neighbors(model.base_ntw_graph,get_address(sne.id,model.base_ntw_graph))
     #save original port number
     for i in 1:size(nbs,1)
         if nbs[i] == rjn_id
@@ -354,7 +374,18 @@ function set_down!(sne::SimNE)
     state.flow_table = []
     state.in_pkt = 0
     state.out_pkt  = 0
+    state.drop_pkt  = 0
     state.port_edge_list = []
+    
+    #empty msg queue
+    while isready(sne.queue)
+        msg = take!(sne.queue)
+        #add drop count if msg was pkt related
+        if msg.reason == Ofp_Protocol(1)
+            state.drop_pkt += 1
+        end
+    end
+    state.q_size = length(sne.queue.data)
     set_state!(sne,state)
 end
 
@@ -540,7 +571,7 @@ function delete_flow!(sne::SimNE,out_port::Int64,model::ABM)
     new_flow_table::Vector{Flow} = []
     
     for f in get_flow_table(sne)
-        # log_info(model.ticks,sne.id,"Existing flow: $f --> $out_port ---> $(f.params) ---> all ports: $(get_port_edge_list(sne))")
+        log_info(model.ticks,sne.id,"Existing flow: $f --> $out_port ---> $(f.params) ---> all ports: $(get_port_edge_list(sne))")
         if  ~(out_port in f.params)
             push!(new_flow_table,f)
         end    

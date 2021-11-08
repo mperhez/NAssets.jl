@@ -101,7 +101,6 @@ end
     Traffic generation per tick
 """
 function generate_traffic!(model)
-    # log_info("[$(model.ticks)] - generating traffic")
     #random pkts
     traffic_μ = first(model.traffic_dist_params)
     traffic_sd = last(model.traffic_dist_params)
@@ -113,7 +112,7 @@ function generate_traffic!(model)
     #fixed pkts
     #q_pkts = 5 
     # pairs =[(5,14)]
-
+    # println("$(model.seed)-->[$(model.ticks)] - generating traffic btwn $pairs")
     for p in pairs
         src,dst = p
         sne_src = getindex(model,src)
@@ -121,7 +120,10 @@ function generate_traffic!(model)
         if is_up(sne_src) && is_up(sne_dst)
             for i =1:q_pkts
                 pkt = create_pkt(src,dst,model)
-                # log_info(model.ticks, "Sending src: $src - dst: $dst -> q_pkts: $q_pkts ==> $pkt packets ")
+                if model.ticks >= 60 && model.ticks <= 80 
+                    log_info(model.ticks, "Sending src: $src - dst: $dst -> q_pkts: $q_pkts ==> $pkt packets ")
+                end
+                
                 push_msg!(sne_src,OFMessage(next_ofmid!(model), model.ticks,src,0,pkt)) # always from port 0
             end
         end
@@ -169,12 +171,16 @@ function rejoin_node!(model,rjn_id::Int64)
    set_up!(rjn_ag)
    
    #re init ports
-   nbs = all_neighbors(model.ntw_graph,get_address(rjn_ag.id,model.ntw_graph))
-    
+   nbs = all_neighbors(model.base_ntw_graph,get_address(rjn_ag.id,model.base_ntw_graph))
+   
+   
    push_ep_entry!(rjn_ag,(0,"h$(rjn_ag.id)")) # link to a host of the same id
    
+   # creates entries for all nb from current ntw?
    for i in 1:size(nbs,1)
-       push_ep_entry!(rjn_ag,(i,"s$(nbs[i])"))
+       if is_up(getindex(model,nbs[i]))
+          push_ep_entry!(rjn_ag,(i,"s$(nbs[i])"))
+       end
    end
 
    #it simulates control detects sne up:
