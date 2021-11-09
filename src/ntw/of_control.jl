@@ -15,7 +15,7 @@ function send_msg!(receiver::Int64,msg::OFMessage,model)
     ag = getindex(model,receiver)
     #TODO implement links and get delay of link in ticks
     queue = typeof(ag) == SimNE ? ag.queue : ag.queue
-    # log_info("Sent to $receiver msg: $msg")
+    # log_info(model.ticks,msg.dpid,4,"Sent to $receiver msg: $msg")
     put!(queue,msg)
 end 
 
@@ -251,6 +251,9 @@ function port_delete_handler(a::Agent,msg::OFMessage,model)
 #flows involving this NE should have been deleted at NE 
 end
 
+"""
+It handles msg from sne when a neighbor sne has rejoined the underlying network. 
+"""
 function node_rejoin_handler(a,msg,model)
    #update local graph
     src = first(msg.data)
@@ -278,8 +281,8 @@ function node_rejoin_handler(a,msg,model)
     end
 
     #trigger update paths
-log_info(model.ticks,a.id,"Existing paths: $(a.paths)")
-log_info(model.ticks,a.id,"rejoin msg received: $(msg)")
+# log_info(model.ticks,a.id,"Existing paths: $(a.paths)")
+# log_info(model.ticks,a.id,"rejoin msg received: $(msg)")
 end
 
 

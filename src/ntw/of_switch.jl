@@ -1,7 +1,7 @@
 #export NetworkAssetState, ModelState, ControlAgentState
 function forward!(msg::OFMessage,src::SimNE,model)
     out_pkt_count = get_state(src).out_pkt + 1
-    # log_info(model.ticks,msg.data.dst,1, "Packet from $(msg.data.src) delivered -> out pkts count: $(out_pkt_count)")
+    # log_info(model.ticks,msg.data.dst, "Packet from $(msg.data.src) delivered -> out pkts count: $(out_pkt_count)")
     set_out_pkt!(src,out_pkt_count)
 
     if !haskey(src.one_way_time_pkt,msg.data.src)
@@ -11,12 +11,12 @@ function forward!(msg::OFMessage,src::SimNE,model)
 end
 
 function forward!(msg::OFMessage,src::SimNE,dst::SimNE,reason::Ofp_Protocol,model)
-    if model.ticks >= 64 && model.ticks <= 87 
-        log_info(model.ticks,src.id,4," src forwarding to $(dst.id) ==> $msg")
-        log_info(model.ticks,dst.id,4," dst forwarding from $(src.id) ==> $msg")
-        # log_info(model.ticks,src.id,3," forwarding to $(dst.id) ==> $msg")
-        # log_info(model.ticks,src.id,2," forwarding to $(dst.id) ==> $msg")
-    end
+    # if model.ticks >= 87 
+    #     log_info(model.ticks,src.id,7," src forwarding to $(dst.id) ==> $msg")
+    #     log_info(model.ticks,dst.id,60," dst forwarding from $(src.id) ==> $msg")
+    #     # log_info(model.ticks,src.id,3," forwarding to $(dst.id) ==> $msg")
+    #     # log_info(model.ticks,src.id,2," forwarding to $(dst.id) ==> $msg")
+    # end
     in_ports = filter(p->p[2]=="s$(src.id)",get_port_edge_list(dst))
     in_port = in_ports[1][1]
     # Note it creates a new msg even though the pkt (data) is the same
@@ -28,14 +28,20 @@ function forward!(msg::OFMessage,src::SimNE,dst::SimNE,reason::Ofp_Protocol,mode
 end
 
 function route_traffic!(a::SimNE,msg::OFMessage,model)
-    
+    # if model.ticks > 86
+    #     log_info(model.ticks,a.id,7,"Trying to route traffic: $(msg)")
+    #     # log_info(model.ticks,a.id,1,"Trying to route traffic: $(msg)")
+    # end
+
     out_pkt_count = 0
     flow = filter(fw -> 
                             ( fw.match_rule.src == string(msg.data.src) || fw.match_rule.src == "*" )
                            # && (fw.match_rule.in_port == string(msg.in_port) || fw.match_rule.in_port == "*" )
                             && (fw.match_rule.dst == string(msg.data.dst) || fw.match_rule.dst == "*")
                             , get_flow_table(a))
-                            
+    # if model.ticks > 86
+    #     log_info(model.ticks,a.id,7,"found flow: $(flow) ")
+    # end           
     if !isempty(flow)
         
         
@@ -77,7 +83,10 @@ function route_traffic!(a::SimNE,msg::OFMessage,model)
         end
     else
         query = (a.id,msg.data.dst)
-               
+        # if model.ticks > 86
+        #     log_info(model.ticks,a.id,7,"requested_ctl: $(a.requested_ctl) ")
+        #     log_info(model.ticks,a.id,1,"requested_ctl: $(a.requested_ctl) ")
+        # end           
         if !haskey(a.requested_ctl,query) 
             of_qid = next_ofmid!(model)
             ctl_msg = OFMessage(of_qid,model.ticks,a.id,msg.in_port,msg.data)
@@ -130,7 +139,7 @@ function push_msg!(dst::SimNE,msg::OFMessage)
 end
 
 function install_flow!(msg::OFMessage, sne::SimNE,model)
-    log_info(model.ticks,sne.id,24,"Installing flow msg: $msg --- and ports: $(get_port_edge_list(sne))")
+    # log_info(model.ticks,sne.id,4,"Installing flow msg: $msg --- and ports: $(get_port_edge_list(sne))")
     
     nf = first(msg.data)
     qid = last(msg.data)
@@ -161,7 +170,7 @@ function in_packet_processing(a::AbstractAgent,model)
     actions_to_process = []
     
     ppt = a.params[:pkt_per_tick]#get_random_packets_to_process(model.seed,model.ticks+a.id,a.params[:pkt_per_tick])
-    log_info(model.ticks,a.id,3,"queue size: $(length(a.queue.data))")
+    # log_info(model.ticks,a.id,3,"queue size: $(length(a.queue.data))")
     while is_ready(a)
         msg = take_msg!(a)
 
@@ -191,9 +200,9 @@ function process_msg!(sne::SimNE,msg::OFMessage,model)
     @match msg.reason begin
         Ofp_Protocol(1) =>  
                         begin
-                            if model.ticks >= 60 && model.ticks <= 80
-                                log_info(model.ticks,sne.id,3," msg: $msg")
-                            end
+                            # if model.ticks >= 60 && model.ticks <= 80
+                            #     log_info(model.ticks,sne.id,3," msg: $msg")
+                            # end
                             route_traffic!(sne,msg,model)
                         end
         Ofp_Protocol(3) => 
@@ -234,7 +243,7 @@ function pending_pkt_handler(a::SimNE,model)
                     put!(a.queue,msg)
                     q_i+= 1
                 else
-                    log_info(model.ticks,a.id," Dropping pkt => q_i = $(q_i) <= $(model.:max_queue_ne)  and msg.ticks = $(msg.ticks) ==> msg: $msg")
+                    # log_info(model.ticks,a.id," Dropping pkt => q_i = $(q_i) <= $(model.:max_queue_ne)  and msg.ticks = $(msg.ticks) ==> msg: $msg")
                     drop_packet!(a)
                 end
             else
@@ -571,7 +580,8 @@ function delete_flow!(sne::SimNE,out_port::Int64,model::ABM)
     new_flow_table::Vector{Flow} = []
     
     for f in get_flow_table(sne)
-        log_info(model.ticks,sne.id,"Existing flow: $f --> $out_port ---> $(f.params) ---> all ports: $(get_port_edge_list(sne))")
+        # log_info(model.ticks,sne.id,"requested_ctl done: $(sne.requested_ctl)")
+        # log_info(model.ticks,sne.id,"Existing flow: $f --> $out_port ---> $(f.params) ---> all ports: $(get_port_edge_list(sne))")
         if  ~(out_port in f.params)
             push!(new_flow_table,f)
         end    

@@ -211,10 +211,25 @@ function clear_pending_query!(a::Agent,query::Tuple{Int64,Int64})
 end
 
 """
+clear queries requested by sne to controller that have expired, so the same query can be requested after some time model.ofmsg_reattempt
+"""
+function clear_pending_query!(a::SimNE,model::ABM)
+    #no need to clear pending?
+    new_requested_ctl = Dict()
+    #path found, need to remove potential pending queries
+    for k in keys(a.requested_ctl)
+        if model.ticks - a.requested_ctl[k] < model.ofmsg_reattempt #
+            new_requested_ctl[k] = a.requested_ctl[k]
+        end
+    end
+    a.requested_ctl = new_requested_ctl
+end
+
+
+"""
 When a solution is received for a query it marks the pending msg
 so it can be reprocessed in the next tick
 """
-
 function mark_reprocess_of_msg!(a::Agent,msg::AGMessage)
     #reprocess of msg right after, to do local query with new path found
     new_pending = []

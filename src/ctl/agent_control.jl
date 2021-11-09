@@ -314,7 +314,7 @@ end
     It removes a dropped sne node from local paths and graph
 """
 function remove_drop_sne!(a::Agent,dpid::Int64,drop_time::Int64)
-    log_info(drop_time,a.id,"Existing paths: $(a.paths)")
+    # log_info(drop_time,a.id,"Existing paths: $(a.paths)")
     new_paths_dict = Dict()
     #delete pre-computed paths containing dropping node
     for path_k in keys(a.paths)
@@ -431,7 +431,7 @@ Update flows of the snes controlled by the agent a and for the path given,
 """
 function do_update_flows_from_path!(a::Agent,path::Array{Int64,1},model::ABM)
     msg = OFMessage(-1, model.ticks,-1,0,OFPR_ADD_FLOW,[])
-    log_info(model.ticks,a.id,"active path: $path")
+    # log_info(model.ticks,a.id,"active path: $path")
     install_flow!(a,path,model,msg)
     if length(path) > 1
         k = (first(path),last(path))

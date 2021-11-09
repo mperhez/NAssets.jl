@@ -9,7 +9,10 @@ function drop_node!(sne::SimNE,model::ABM)
        sne_nb = getindex(model,get_eid(nb,model))
        link_down!(sne_nb,sne.id,model)
     end
-       
+    
+    #delete pending queries to control
+    sne.requested_ctl = Dict()
+
     #it simulates control detects sne down:
     aid = get_control_agent(sne.id,model)
     a = getindex(model,abs(aid))

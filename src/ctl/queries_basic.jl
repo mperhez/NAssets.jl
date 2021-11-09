@@ -226,6 +226,22 @@ function clear_pending_query!(a::Agent,query::Tuple{Int64,Int64})
     a.previous_queries = new_previous_queries
 end
 
+
+"""
+clear queries requested by sne to controller, so they same query can be requested after some time model.ofmsg_reattempt
+"""
+function clear_pending_query!(a::SNE,query::Tuple{Int64,Int64})
+    #no need to clear pending?
+    new_requested_ctl = Dict()
+    #path found, need to remove potential pending queries
+    for k in keys(a.requested_ctl)
+        if k != query #exclude current query as path has been found
+            new_requested_ctl[k] = a.requested_ctl[k]
+        end
+    end
+    a.requested_ctl = new_requested_ctl
+end
+
 """
 When a solution is received for a query it marks the pending msg
 so it can be reprocessed in the next tick

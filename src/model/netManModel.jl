@@ -430,9 +430,9 @@ function ntw_link_step!(l::Tuple{Int,Int},model)
         to_deliver = first(msgs)
         in_pkt_count = 0
 
-        if model.ticks >= 65 && model.ticks <= 86
-             log_info(model.ticks," link ($(l)) -> $(msgs)")
-        end
+        # if model.ticks >= 65 && model.ticks <= 86
+        #      log_info(model.ticks," link ($(l)) -> $(msgs)")
+        # end
 
         if !isempty(to_deliver)
             if length(msgs) > 1

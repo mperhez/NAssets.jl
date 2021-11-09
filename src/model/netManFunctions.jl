@@ -75,9 +75,9 @@ end
 function do_agent_step!(a::SimNE,model)
     #Process OF messages (packet data traffic)
     # log_info(model.ticks,a.id, "start step! $(get_state(a).up) ==> $(get_state(a).rul)")
-    log_info(model.ticks,a.id,12, "====> ports: $(get_port_edge_list(a))<====")
+    # log_info(model.ticks,a.id,12, "====> ports: $(get_port_edge_list(a))<====")
     is_up(a) && is_ready(a) ? in_packet_processing(a,model) : nothing 
-    
+    clear_pending_query!(a,model)
     # log_info(model.ticks,a.id,"rqsted: $(a.requested_ctl)")
     # @debug("[$(model.ticks)]($(a.id)) end step")
     # if model.ticks == 100
@@ -101,6 +101,7 @@ function do_agent_step!(a::Agent,model)
         do_receive_messages(a,model)
 
         do_events_step!(a,model)
+        # log_info(model.ticks,a.id,"ctl_agent step: $(neighbors(a.ntw_graph,4))")
     end
 
     # log_info(model.ticks,a.id,25,"pending msgs: $(length(a.
