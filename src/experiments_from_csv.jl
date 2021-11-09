@@ -130,7 +130,7 @@ function load_base_cfgs(filename)
     return base_cfgs
 end
 
-base_cfgs = load_base_cfgs("configs.csv")
+base_cfgs = load_base_cfgs("data/configs/configs.csv")
 
 configs = []
 for bcfg in base_cfgs
