@@ -100,10 +100,11 @@ function do_agent_step!(a::Agent,model)
         # log_info(model.ticks,a.id,"==> a.paths ==> $(a.paths)")
         do_receive_messages(a,model)
 
-        do_events_step!(a,model)
+        
         # log_info(model.ticks,a.id,"ctl_agent step: $(neighbors(a.ntw_graph,4))")
     end
-
+    #Schedule events regardless of state of ctl agent to make sure that controlled snes are brought back up 
+    do_events_step!(a,model)
     # log_info(model.ticks,a.id,25,"pending msgs: $(length(a.
     # pending)) --> $(a.pending)")
     # log_info(model.ticks,a.id,25,"QUEUE --> $(a.queue.data)")
