@@ -29,3 +29,12 @@ function check_create_dir!(dir_name)
         end
     end
 end
+
+"""
+Helper function to create a csv file template out of a given config object passed
+"""
+function create_csv_template(file_name,config)
+    open(file_name * ".csv","w") do io
+        writedlm(io,vcat(reshape(collect(keys(config)),1,length(config)),reshape(collect(values(config)),1,length(config))),";")
+    end
+end

@@ -163,6 +163,7 @@ function single_run(config)
     args[:ofmsg_reattempt] = config.ofmsg_reattempt
     args[:max_cache_paths] = config.max_cache_paths
     args[:max_msg_live] = config.max_msg_live
+    args[:init_sne_params] = config.init_sne_params
     q_ctl_agents = 0
     run_label = get_run_label(config)
     args[:run_label] = run_label
@@ -231,4 +232,42 @@ function single_run(config)
         writedlm(io,model_data,';') 
     end;
 
+end
+
+
+"""
+It loads the simulation config paramenters from csv file which location and name is passed.
+"""
+function load_base_cfgs(filename)
+    df_c = CSV.File(filename,types=Dict(:deterioration => Float64)) |> DataFrame
+    base_cfgs = []
+    for row in eachrow(df_c)
+        vals = []
+        for nm in names(df_c)
+            val = @match String(nm) begin
+                #parse "special" csv fields
+                "traffic_dist_params" => parse.([Float64],split(row[:traffic_dist_params][2:end-1],","))
+                _ => row[nm]
+            end
+            push!(vals,val)
+        end
+        push!(base_cfgs, (;zip(Tuple(Symbol.(names(df_c))),vals)...))
+    end
+    return base_cfgs
+end
+
+
+"""
+Creates full config, appending services to base config obtained from a csv file.
+"""
+function config(bcfg,ntw_services)
+    config(bcfg,ntw_services,(ids=[],ruls=[]))
+end
+
+
+"""
+Creates full config, appending services to base config obtained from a csv file.
+"""
+function config(bcfg,ntw_services,init_sne_params)
+    NamedTuple{Tuple(vcat([:ctl_model,:ntw_topo,:ntw_services, :init_sne_params],collect(keys(bcfg))))}(vcat([ GraphModel(bcfg.ctl_model_n),GraphModel(bcfg.ntw_topo_n),ntw_services,init_sne_params],collect(values(bcfg))))
 end
