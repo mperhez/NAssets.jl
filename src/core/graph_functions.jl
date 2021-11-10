@@ -236,18 +236,16 @@ end
 """
 Get underlying graph
 """
-function get_graph(seed,size,topo;k=0,B=0,custom_topo=nothing)
+function get_graph(seed,size,topo;k=0,B=0,adj_m_csv=nothing)
     Random.seed!(seed)
     ntw = @match topo begin
-        # GraphModel(0)=> load_custom_backbone(csv_custom_nodes,csv_custom_links)#custom_topo
-        GraphModel(0)=> load_custom_regional_metro("","")#custom_topo
+        GraphModel(0)=> load_graph_from_csv(adj_m_csv)#custom_topo
         GraphModel(2) => MetaGraph( [Int(i) for i in ring_graph(size)])
         GraphModel(3) => MetaGraph(LightGraphs.complete_graph(size))
         GraphModel(4) => MetaGraph( [Int(i) for i in grid2(Int(sqrt(size)))])
         GraphModel(5) => MetaGraph( [Int(i) for i in Laplacians.star_graph(size)] )
         GraphModel(6) => MetaGraph(barabasi_albert(size,k,seed=seed))
         GraphModel(7) => MetaGraph(watts_strogatz(size,k,B,seed=seed))
-        #GraphModel(8) => MetaGraph(stochastic_block_model())
     end
 end
 """

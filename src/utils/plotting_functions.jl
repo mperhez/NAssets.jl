@@ -271,7 +271,7 @@ end
 function plot_geo_network(base_geo_plot,df_net)
     dpi = 300
     size = (400,500)
-	p = @df df_net scatter!(base_geo_plot,:bng_lon,:bng_lat,markersize=1,alpha=0.5,dpi=dpi,markerstrokewidth=0,label="",color=:red,legend=:topright, markershape=:octagon) 
+	p = @df df_net scatter!(base_geo_plot,:lon,:lat,markersize=1,alpha=0.5,dpi=dpi,markerstrokewidth=0,label="",color=:red,legend=:topright, markershape=:octagon) 
     return p
 end
 
@@ -282,8 +282,8 @@ function plot_geo_network(base_geo_plot,g::MetaGraph)
     dpi = 300
     size = (400,500)
     n_v = nv(g)
-    lons = [ get_prop(g,i,:bng_lon) for i=1:n_v]
-    lats = [ get_prop(g,i,:bng_lat) for i=1:n_v]
+    lons = [ get_prop(g,i,:lon) for i=1:n_v]
+    lats = [ get_prop(g,i,:lat) for i=1:n_v]
     p = graphplot!(base_geo_plot,g,x=lons,y=lats,alpha=0.3,dpi=dpi,size=size,nodesize=4.5,aspect_ratio=1,curvature_scalar=0.5,nodecolor="#FDF3C4"
     ,names=collect(1:n_v)
     ,fontsize=3, edgecolor = :green)
@@ -299,8 +299,8 @@ function plot_geo_network_step(base_geo_plot,g::MetaGraph,sne_steps::Vector{Vect
     
     condition_color = cgrad([:red, :yellow, :green],collect(0.01:0.01:1))
 
-    lons = [ get_prop(g,i,:bng_lon) for i=1:nv(g)]
-    lats = [ get_prop(g,i,:bng_lat) for i=1:nv(g)]
+    lons = [ get_prop(g,i,:lon) for i=1:nv(g)]
+    lats = [ get_prop(g,i,:lat) for i=1:nv(g)]
     ruls = [sne_steps[i][step] for i=1:nv(g) ]
 
     p = graphplot!(base_geo_plot,g,x=lons,y=lats,alpha=0.3,dpi=dpi,size=size,nodesize=2,aspect_ratio=1,curvature_scalar=0.5,nodecolor=[ condition_color[i] for i in ruls ])
@@ -316,8 +316,8 @@ function plot_geo_network_step(base_geo_plot,g::MetaGraph,sne_steps::DataFrame,s
     
     condition_color = cgrad([:red, :yellow, :green],collect(0.01:0.01:1))
 
-    lons = [ get_prop(g,i,:bng_lon) for i=1:nv(g)]
-    lats = [ get_prop(g,i,:bng_lat) for i=1:nv(g)]
+    lons = [ get_prop(g,i,:lon) for i=1:nv(g)]
+    lats = [ get_prop(g,i,:lat) for i=1:nv(g)]
     ruls = [ r.rul for r in eachrow(sne_steps[sne_steps[!,:t] .== step,:])]./100
 
     p = graphplot!(base_geo_plot,g,x=lons,y=lats,alpha=0.3,dpi=dpi,size=size,nodesize=2,aspect_ratio=1,curvature_scalar=0.5,nodecolor=[ condition_color[i] for i in ruls ])
@@ -331,8 +331,8 @@ function plot_geo_network_step(base_geo_plot,g::MetaGraph,v_props::Dict{Symbol,S
     v_size = 4.5
     v_shape = :hexagon
     n_v = nv(g)
-    lons = [ get_prop(g,i,:bng_lon) for i=1:n_v]
-    lats = [ get_prop(g,i,:bng_lat) for i=1:n_v]
+    lons = [ get_prop(g,i,:lon) for i=1:n_v]
+    lats = [ get_prop(g,i,:lat) for i=1:n_v]
     e_color,e_width,e_style = get_edge_plot_props_step(g,t,e_props)
     v_color = get_vertex_plot_props_step(g,t,v_props)
     g_plot = graphplot!(
