@@ -67,9 +67,9 @@ function init_condition!(sne::SimNE,model::ABM)
     #randomly initialize condition of sne
     # state.rul = rand((sne.maintenance.eul-30):sne.maintenance.eul,nv(model.ntw_graph))[sne.id]
     
-    state.rul = rand(50:100,nv(model.ntw_graph))[sne.id]
+    # state.rul = rand(50:100,nv(model.ntw_graph))[sne.id]
     #TODO allow for different degradation profiles to be passed by user, e.g. time-dependent where the deterioration function changes at a given time-step
-    # state.rul = sne.id in scenario_2_ids ? scenario_2_ruls[first(indexin(sne.id,scenario_2_ids))] : rand(50:100,nv(model.ntw_graph))[sne.id]
+    state.rul = sne.id in model.init_sne_params.ids ? model.init_sne_params.ruls[first(indexin(sne.id,model.init_sne_params.ids))] : rand(50:100,nv(model.ntw_graph))[sne.id]
 
     #set maitenance due time
     state.maintenance_due = model.ticks + state.rul

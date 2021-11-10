@@ -58,8 +58,8 @@ function create_sim_asset_agents!(model)
         
         mnt = @match model.mnt_policy begin
             1 => MaintenanceInfoPreventive(model.deterioration,model)
-            2 => MaintenanceInfoPredictive(deterioration,model)
-            _ => MaintenanceInfoCorrective(deterioration,model)
+            2 => MaintenanceInfoPredictive(model.deterioration,model)
+            _ => MaintenanceInfoCorrective(model.deterioration,model)
         end
         # if id == 9
         #     mnt.deterioration_parameter = 2. 
@@ -341,10 +341,6 @@ function init_agent!(sne::SimNE,model)
         # install_flow!(Flow(sne.id,MRule("$i","$(nbs[i])","$(sne.id)"),[0],OFS_Action(1)),sne,model)
     end
 
-    
-    
-
-   
     init_condition!(sne,model)
     init_maintenance!(sne,model)
 end
