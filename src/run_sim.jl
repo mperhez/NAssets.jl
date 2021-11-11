@@ -69,14 +69,7 @@ export load_run_configs, single_run_with_logging
 base_cfgs = load_base_cfgs("data/configs/configs.csv")
 #obtain services that provide this coverage of the network
 coverage = 0.95
-configs = []
-for bcfg in base_cfgs
-    ntw_services = get_end_points(bcfg.seed,get_graph(bcfg.seed,bcfg.size,GraphModel(bcfg.ntw_topo_n);k=bcfg.k,adj_m_csv=bcfg.ntw_csv_adj_matrix),coverage)
-    push!(configs,config(bcfg,ntw_services))
-    
-end
+ntw_services = get_end_points(bcfg.seed,get_graph(bcfg.seed,bcfg.size,GraphModel(bcfg.ntw_topo_n);k=bcfg.k,adj_m_csv=bcfg.ntw_csv_adj_matrix),coverage)
 
-
-BenchmarkTools.DEFAULT_PARAMETERS.samples = 100
-
-single_run_with_logging(configs[1])
+cfg = config(base_cfgs[1],ntw_services)
+single_run_with_logging(cfg)
