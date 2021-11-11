@@ -23,7 +23,7 @@ Models are defined in functions following the structure explained [here](structu
 
 1. Define a configuration file with the parameters required in the simulation. An example is found in: ``examples/configs.config.csv``
 
-2. A minimal example of a script for running the simulation based on the config file defined previously is: ``run_sim.jl``
+2. A minimal example of a script for running the simulation based on the config file defined previously is: ``src/run_sim.jl``
 
 # Use Cases
 
