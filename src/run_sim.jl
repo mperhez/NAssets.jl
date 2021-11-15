@@ -66,10 +66,11 @@
 export load_run_configs, single_run_with_logging
 
 
-base_cfgs = load_base_cfgs("data/configs/configs.csv")
+base_cfgs = load_base_cfgs("data/configs/configs_exp5_single.csv")
+bcfg = base_cfgs[1]
 #obtain services that provide this coverage of the network
 coverage = 0.95
 ntw_services = get_end_points(bcfg.seed,get_graph(bcfg.seed,bcfg.size,GraphModel(bcfg.ntw_topo_n);k=bcfg.k,adj_m_csv=bcfg.ntw_csv_adj_matrix),coverage)
 
-cfg = config(base_cfgs[1],ntw_services)
+cfg = config(bcfg,ntw_services)
 single_run_with_logging(cfg)
