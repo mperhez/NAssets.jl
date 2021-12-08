@@ -180,7 +180,7 @@ function model_step!(model)
         calculate_metrics_step!(a,model)
     end
     trigger_random_node_drops!(model)
-    #log_info(model.ticks,"aflows: $(get_state(model).active_flows)")
+    # log_info(model.ticks,"aflows: $(get_state(model).active_flows)")
     # log_info(model.ticks,": $()")
     
 end

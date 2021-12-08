@@ -60,7 +60,7 @@ function generate_traffic!(model)
             for i =1:q_pkts
                 pkt = create_pkt(src,dst,model)
                 # if model.ticks >= 80 
-                #     log_info(model.ticks,src,"Sending src: $src - dst: $dst -> q_pkts: $q_pkts ==> $pkt packets ")
+                    # log_info(model.ticks,src,3,"Sending src: $src - dst: $dst -> q_pkts: $q_pkts ==> $pkt packets ")
                 # end
                 
                 push_msg!(sne_src,OFMessage(next_ofmid!(model), model.ticks,src,0,pkt)) # always from port 0
@@ -112,9 +112,11 @@ function rejoin_node!(model,rjn_id::Int64)
    #re init ports
    nbs = all_neighbors(model.base_ntw_graph,get_address(rjn_ag.id,model.base_ntw_graph))
    
-   
-   push_ep_entry!(rjn_ag,(0,"h$(rjn_ag.id)")) # link to a host of the same id
-   
+   if !in((0,"h$(rjn_ag.id)"),get_state(rjn_ag).port_edge_list)
+        push_ep_entry!(rjn_ag,(0,"h$(rjn_ag.id)")) # link to a host of the same id
+   end
+
+#    log_info(model.ticks,rjn_id," Rejoining adding $(get_state(rjn_ag).port_edge_list)")
    # creates entries for all nb from current ntw?
    for i in 1:size(nbs,1)
        if is_up(getindex(model,nbs[i]))

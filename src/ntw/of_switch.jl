@@ -1,4 +1,8 @@
 #export NetworkAssetState, ModelState, ControlAgentState
+
+"""
+It forwards packet to a host
+"""
 function forward!(msg::OFMessage,src::SimNE,model)
     out_pkt_count = get_state(src).out_pkt + 1
     # log_info(model.ticks,msg.data.dst, "Packet from $(msg.data.src) delivered -> out pkts count: $(out_pkt_count)")
@@ -10,6 +14,9 @@ function forward!(msg::OFMessage,src::SimNE,model)
     push!(src.one_way_time_pkt[msg.data.src],model.ticks - msg.data.time_sent)
 end
 
+"""
+It forwards packet to another sne
+"""
 function forward!(msg::OFMessage,src::SimNE,dst::SimNE,reason::Ofp_Protocol,model)
     # if model.ticks >= 87 
     #     log_info(model.ticks,src.id,7," src forwarding to $(dst.id) ==> $msg")
@@ -28,9 +35,9 @@ function forward!(msg::OFMessage,src::SimNE,dst::SimNE,reason::Ofp_Protocol,mode
 end
 
 function route_traffic!(a::SimNE,msg::OFMessage,model)
-    # if model.ticks > 86
-    #     log_info(model.ticks,a.id,7,"Trying to route traffic: $(msg)")
-    #     # log_info(model.ticks,a.id,1,"Trying to route traffic: $(msg)")
+    # if model.ticks > 72
+    #     log_info(model.ticks,a.id,5,"Trying to route traffic: $(msg)")
+    #     log_info(model.ticks,a.id,5,"rules: $(get_flow_table(a))")
     # end
 
     out_pkt_count = 0
@@ -48,6 +55,7 @@ function route_traffic!(a::SimNE,msg::OFMessage,model)
         if flow[1].action == OFS_Output
             if flow[1].params[1][1] != 0
                 ports = get_port_edge_list(a)
+                # log_info(model.ticks,a.id," ports: $ports")
                 dst_id = parse(Int64,filter(x->x[1]==flow[1].params[1],ports)[1][2][2:end])
                 dst = getindex(model,dst_id)
 
@@ -536,10 +544,6 @@ function get_throughput_trj(state_trj::Vector{NetworkAssetState},t::Int64)
    return [ isempty(st.throughput_out) ? 0. : mean([st.throughput_out[k] for k in keys(st.throughput_out)])  for st in state_trj[1:t]]
 end
 
-# function get_throughput_trj(sne::SimNE)
-#      [ isempty(st.throughput_out) ? 0 : mean([st.throughput_out[k] for k in keys(st.throughput_out)])  for st in sne.state_trj]
-# end
-
 function get_packet_loss_trj(sne::SimNE)
     [ st.drop_pkt  for st in sne.state_trj ]
 end
@@ -609,5 +613,7 @@ function calculate_metrics_step!(sne::SimNE,model::ABM)
 
     end
     set_state!(sne,state)
-    # log_info(model.ticks,sne.id," tpt_trj: $([ st.throughput_out for st in sne.state_trj])")
+    # if model.ticks == 200
+    #     log_info(model.ticks,sne.id,41," tpt_trj: $([ st.throughput_out for st in sne.state_trj])")
+    # end
 end

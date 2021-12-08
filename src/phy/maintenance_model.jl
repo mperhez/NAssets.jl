@@ -62,7 +62,9 @@ function start_mnt!(a::Agent,sne::SimNE,model::ABM)
     state.on_maintenance = true
     set_state!(sne,state)
     drop_node!(sne,model)
-    schedule_event!(a,CTL_Event(3),model.ticks + a.maintenance.duration,[sne.id])
+    finish_mnt = model.ticks + a.maintenance.duration
+    # log_info(model.ticks,a.id,"schedulling up of $(sne.id) for... $(finish_mnt)")
+    schedule_event!(a,CTL_Event(3),finish_mnt,[sne.id])
 end
 
 function stop_mnt!(a::Agent,sne::SimNE,model::ABM)
@@ -136,6 +138,7 @@ function schedule_event!(a::Agent,type::CTL_Event,time::Int64,snes::Vector{Int64
     if !haskey(a.events,time)
         a.events[time] = Array{ControlEvent,1}()
     end
+    # log_info(time-1,a.id,"scheduled event $type at t: $time for snes: $(snes)")
     push!(a.events[time],ControlEvent(time,type,snes))
 end
 
@@ -161,16 +164,20 @@ end
 
 function update_maintenance_plan!(a::Agent,mnt_policy::Type{PreventiveM},model::ABM)
     window_size = a.maintenance.prediction_window
+    #use the maintenance window from the end - window size
     ruls = a.rul_predictions[:,size(a.rul_predictions,2)-window_size+1:size(a.rul_predictions,2)]
     #mnt_plan = 
     for i=1:size(ruls,1)
-        threshold_reached = findall(x->x==1,ruls[i,:] .<= a.maintenance.threshold)
-        if !isempty(threshold_reached)
-            #negative indicates i goes down for maintenance
-            #1st reroute traffic out of node
-            schedule_event!(a,CTL_Event(1),model.ticks + minimum(threshold_reached),[-1*i])
-            #2nd perform maintenance
-            schedule_event!(a,CTL_Event(2),model.ticks + minimum(threshold_reached)+2,[-1*i])
+        if !get_state(getindex(model,i)).on_maintenance
+            #sum all where rul is <= threshold, if any > 0, then sum > 0
+            threshold_reached = sum(ruls[i,size(ruls,2)-window_size+1:size(ruls,2)] .<= a.maintenance.threshold) > 0
+            if threshold_reached#!isempty(threshold_reached)
+                #negative indicates i goes down for maintenance
+                #1st reroute traffic out of node
+                schedule_event!(a,CTL_Event(1),model.ticks + minimum(threshold_reached),[-1*i])
+                #2nd perform maintenance
+                schedule_event!(a,CTL_Event(2),model.ticks + minimum(threshold_reached)+2,[-1*i])
+            end
         end
     end
 end
@@ -200,7 +207,7 @@ function process_route!(a::Agent,rw,model::ABM)
     snes = [ getindex(model,Int(sid)) for sid in path ]
     time = maximum([ !is_up(sne) ? sne.maintenance.job_start + sne.maintenance.duration : model.ticks + Int(rw[1]) for sne in snes ])
 
-    log_info(model.ticks,a.id," $(rw[1:3]) event scheduled for t=$(time) ==> path: $path ")
+    # log_info(model.ticks,a.id," $(rw[1:3]) event scheduled for t=$(time) ==> path: $path ")
     schedule_event!(a,CTL_Event(5),time,path)
 end
 
@@ -249,6 +256,7 @@ end
 It processes scheduled events
 """
 function do_events_step!(a::Agent,model::ABM)
+    # log_info(model.ticks,a.id,17,"processing events: $(a.events) ")
     if haskey(a.events,model.ticks)
         evs = a.events[model.ticks]
         ntw_changes = Array{Int64,1}()
