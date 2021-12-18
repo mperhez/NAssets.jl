@@ -56,10 +56,12 @@ function create_sim_asset_agents!(model)
         id = nextid(model)
         # @show i
         
+        deterioration = id in model.init_sne_params.ids ? model.init_sne_params.deterioration[first(indexin(id,model.init_sne_params.ids))] : model.deterioration
+
         mnt = @match model.mnt_policy begin
-            1 => MaintenanceInfoPreventive(model.deterioration,model)
-            2 => MaintenanceInfoPredictive(model.deterioration,model)
-            _ => MaintenanceInfoCorrective(model.deterioration,model)
+            1 => MaintenanceInfoPreventive(deterioration,model)
+            2 => MaintenanceInfoPredictive(deterioration,model)
+            _ => MaintenanceInfoCorrective(deterioration,model)
         end
         # if id == 9
         #     mnt.deterioration_parameter = 2. 
@@ -129,7 +131,7 @@ function create_agents!(model)
     
     create_control_agents!(model)
 
-    log_info("Total agents created: $(length(allagents(model)))")
+    log_info("Total agents created: $(length(allagents(model))), seed: $(model.seed)")
 
     init_agents!(model)
 end
@@ -145,9 +147,9 @@ function model_step!(model)
     log_info(".")
     for a in allagents(model)
         init_state!(a)
-        # if typeof(a) == SimNE 
-        #     log_info("($(a.id)) ==> $(a.queue)")
-        # end
+        if typeof(a) == SimNE && model.ticks == 1
+            log_info("$(a.id), $(get_state(a).rul)")
+        end
     end
     generate_traffic!(model) 
     for e in edges(model.ntw_graph)
