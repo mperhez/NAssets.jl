@@ -34,29 +34,36 @@ function forward!(msg::OFMessage,src::SimNE,dst::SimNE,reason::Ofp_Protocol,mode
     # set_out_pkt!(src,out_pkt_count)
 end
 
+"""
+It routes packets according to installed flow rules. There could be rules that are not valid in the current time step but will be valid later.
+"""
 function route_traffic!(a::SimNE,msg::OFMessage,model)
     # if model.ticks > 72
     #     log_info(model.ticks,a.id,5,"Trying to route traffic: $(msg)")
     #     log_info(model.ticks,a.id,5,"rules: $(get_flow_table(a))")
     # end
-
+    valid_flow = false
     out_pkt_count = 0
     flow = filter(fw -> 
                             ( fw.match_rule.src == string(msg.data.src) || fw.match_rule.src == "*" )
                            # && (fw.match_rule.in_port == string(msg.in_port) || fw.match_rule.in_port == "*" )
                             && (fw.match_rule.dst == string(msg.data.dst) || fw.match_rule.dst == "*")
                             , get_flow_table(a))
-    # if model.ticks > 86
-    #     log_info(model.ticks,a.id,7,"found flow: $(flow) ")
-    # end           
-    if !isempty(flow)
-        
-        
+    # if model.ticks > 51
+    #      log_info(model.ticks,a.id,2,"found flow: $(flow) ")
+    #  end           
+    
+
+     valid_flow = !isempty(flow) ? !isempty(filter(x->x[1]==flow[1].params[1],get_port_edge_list(a))) ? true : false : false
+
+    if valid_flow
         if flow[1].action == OFS_Output
             if flow[1].params[1][1] != 0
                 ports = get_port_edge_list(a)
-                # log_info(model.ticks,a.id," ports: $ports")
-                dst_id = parse(Int64,filter(x->x[1]==flow[1].params[1],ports)[1][2][2:end])
+                # Any rule for destination?
+                rules = filter(x->x[1]==flow[1].params[1],ports)
+                # if !isempty(rules)
+                dst_id = parse(Int64,rules[1][2][2:end])
                 dst = getindex(model,dst_id)
 
                 #OFPR_NO_MATCH: here used to tell other SNE that packet couldn't reach destination.
@@ -70,6 +77,7 @@ function route_traffic!(a::SimNE,msg::OFMessage,model)
                     delete_flow!(a,flow[1].params[1],model)
                     nfw = deepcopy(flow[1])
                     nfw.action = OFS_Drop
+                    # log_info(mode.ticks,a.id,"going to install flow $nfw")
                     install_flow!(nfw,a,model)
 
                 else
@@ -155,16 +163,17 @@ function install_flow!(msg::OFMessage, sne::SimNE,model)
     clear_pending_query!(sne,nf,qid)
 end
 
+"""
+Install the given flow in the sne. I t does not check if the flow is valid (the port is available), as this flow could be installed for the future.
+"""
 function install_flow!(flow::Flow, sne::SimNE,model)
-    # log_info(model.ticks,sne.id," Installing flow: $(sne.id) - $(flow)")
-    ft = get_state(sne).flow_table
-    
-    #Assumes only one flow to a given destination, hence replace existing flows leading towards the same destination
-    nft = [ f for f in ft if f.match_rule.dst != flow.match_rule.dst ]
-    
-    push!(nft,flow) #msg.data[1] = flow, msg.data[2] = query_id:qid
-    set_flow_table!(sne,nft)
-    # log_info(model.ticks,sne.id," Installed flow: $(sne.id) - $(get_state(sne).flow_table)")
+        ft = get_state(sne).flow_table
+        #Assumes only one flow to a given destination, hence replace existing flows leading towards the same destination
+        nft = [ f for f in ft if f.match_rule.dst != flow.match_rule.dst ]
+        
+        push!(nft,flow) #install_flow!msg.data[1] = flow, msg.data[2] = query_id:qid
+        set_flow_table!(sne,nft)
+        # log_info(model.ticks,sne.id," Installed flow: $(sne.id) - $(get_state(sne).flow_table)")
 end
 
 
@@ -215,9 +224,10 @@ function process_msg!(sne::SimNE,msg::OFMessage,model)
                         end
         Ofp_Protocol(3) => 
                         begin
-                            if model.ticks >=54 && model.ticks <= 56
-                                log_info(model.ticks,sne.id,6,"$(msg) -> processing $(msg.reason)")
-                            end
+                            # if model.ticks >=51 
+                            #     # log_info(model.ticks,sne.id,6,"$(msg) -> processing $(msg.reason)")
+                            #     log_info(model.ticks,sne.id,"Installing from here [2]")
+                            # end
                             install_flow!(msg,sne,model)       
                         end
         Ofp_Protocol(4) => 
@@ -280,7 +290,7 @@ when the link corresponding to the given dpn_id goes down. sne is up and node we
 function link_down!(sne::SimNE,dpn_id::Int,model)
     # log_info(model.ticks,sne.id,"BEFORE link down start $dpn_id - all ports: $(get_port_edge_list(sne))")
     #remove from list of ports
-    new_port_edge_list::Vector{Tuple{Int64,String}} = []
+    new_port_edge_list::Vector{Tuple{Int64,String}} = Vector{Tuple{Int64,String}}()
     dpn_port = -1
     ports = get_port_edge_list(sne)
     for p in ports
@@ -290,6 +300,7 @@ function link_down!(sne::SimNE,dpn_id::Int,model)
             dpn_port = p[1]
         end
     end
+    set_port_edge_list!(sne,new_port_edge_list)
     delete_flow!(sne,dpn_port,model)
     
     #empty msgs in links
@@ -299,7 +310,7 @@ function link_down!(sne::SimNE,dpn_id::Int,model)
         init_link_msg!((sne.id,dpn_id),model)
     end
 
-    set_port_edge_list!(sne,new_port_edge_list)
+    
     controller = getindex(model,sne.controller_id)
     # log_info(model.ticks,sne.id,"Triggering event to ag: $(sne.controller_id) for dpn_id: $dpn_id ")
     trigger_of_event!(model.ticks,controller,dpn_id,Ofp_Event(1),model)
@@ -578,10 +589,12 @@ function record_active_flow!(m,src,dst,ftype)
             end
 end
 
-
+"""
+Delete all the flows that output to the given port
+"""
 function delete_flow!(sne::SimNE,out_port::Int64,model::ABM)
 
-    new_flow_table::Vector{Flow} = []
+    new_flow_table::Vector{Flow} = Vector{Flow}()
     
     for f in get_flow_table(sne)
         # log_info(model.ticks,sne.id,"requested_ctl done: $(sne.requested_ctl)")
