@@ -87,7 +87,9 @@ function do_agent_step!(a::SimNE,model)
 end
 
 function do_agent_step!(a::Agent,model)
-   
+    #Schedule events regardless of state of ctl agent to make sure that controlled snes are brought back up 
+    #This is the first function to make sure that nodes that are down are recognised by others.
+    do_events_step!(a,model)
     if is_up(a)
         # for sprt in sne_print
         #     log_info(model.ticks,a.id," step!: {$(sprt.id)} $(get_state(sprt).flow_table) ===> all ports: $(get_port_edge_list(sprt)) ===> paths: $(a.paths)")
@@ -103,8 +105,7 @@ function do_agent_step!(a::Agent,model)
         
         # log_info(model.ticks,a.id,"ctl_agent step: $(neighbors(a.ntw_graph,4))")
     end
-    #Schedule events regardless of state of ctl agent to make sure that controlled snes are brought back up 
-    do_events_step!(a,model)
+    
     # log_info(model.ticks,a.id,25,"pending msgs: $(length(a.
     # pending)) --> $(a.pending)")
     # log_info(model.ticks,a.id,25,"QUEUE --> $(a.queue.data)")
