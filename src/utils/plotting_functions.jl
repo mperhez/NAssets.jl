@@ -458,16 +458,19 @@ function plot_graph_step(g::MetaGraph,v_props::Dict{Symbol,Symbol},e_props::Dict
     return g_plot
 end
 
+"""
+It plots throughput and reference for one step of an animation of t timesteps
+"""
 function plot_tpt_step(snes_ts::Vector{Vector{NetworkAssetState}},snes_ref_ts::Vector{Vector{NetworkAssetState}},model_ts::Array{ModelState, 1},t::Int64)
-    max_x = 180
+    max_x = 300
     colors = Dict(1=>:blue,14=>:green,7=>:purple,8=>:orange)
 
     #get end node of each active flow (service)
     end_snes_ts = [[1,7,8,14] for tk=1:t]#[ [f[2] for f in model_ts[t].active_flows if f[3] == f_E || f[3] == f_SE] for t=1:t ]
     sort!(end_snes_ts)
     p = plot(xlims=[0,max_x],ylims=[0,250]
-    #,xlabel="Time",ylabel="Throughput (MB)"
-    ,xticks=false
+    ,xlabel="Time",ylabel="Throughput. (MB)"
+    #,xticks=false
     ,legend=false#:outertop#:outerright
     )
     for end_sne in end_snes_ts[t]
@@ -478,6 +481,39 @@ function plot_tpt_step(snes_ts::Vector{Vector{NetworkAssetState}},snes_ref_ts::V
         tpts = hcat([ get_throughput_trj(snes_ts[sne],t) for sne=1:length(snes_ts) if sne == end_sne ]...)
 
         p = plot!(p,tpts,color=colors[end_sne])
+    end
+    if t == 80
+        print(get_throughput_trj(snes_ts[1],t))
+    end
+    return p
+end
+
+
+"""
+It plots throughput for one step of an animation of t timesteps
+"""
+function plot_tpt_step(snes_ts::Vector{Vector{NetworkAssetState}},end_services::Vector{Tuple{Int64,Int64}},t::Int64)
+    max_x = 300
+    colors = Dict(1=>:blue,14=>:green,7=>:purple,8=>:orange)
+
+    #get end node of each active flow (service)
+    end_snes_ts = [end_services for tk=1:t]#[ [f[2] for f in model_ts[t].active_flows if f[3] == f_E || f[3] == f_SE] for t=1:t ]
+    sort!(end_snes_ts)
+    p = plot(xlims=[0,max_x],ylims=[0,250]
+    ,xlabel="Time",ylabel="Throughput (MB)"
+    #,xticks=false
+    ,legend=:outertop#:outerright
+    )
+    for end_sne in end_snes_ts[t]
+        println("doing $end_sne ...")
+        
+        # tpts = hcat([ get_throughput_trj(snes_ts[sne],t) for sne=1:length(snes_ts) if sne == last(end_sne) ]...)
+
+        tpts = get_throughput_trj(snes_ts[last(end_sne)],t)
+
+        # if last(end_sne) in [8,14]
+            p = plot!(p,tpts,color=colors[last(end_sne)])
+        # end
     end
     if t == 80
         print(get_throughput_trj(snes_ts[1],t))
@@ -529,7 +565,7 @@ function plot_maintenance_cost_step(snes_ts::Vector{Vector{NetworkAssetState}},m
                 costs
                 ,legend = false
                 ,ylims=[0,1000]
-                ,xlims=[0,180]
+                ,xlims=[0,300]
             )
 
 
@@ -539,7 +575,7 @@ end
 
 
 
-function plot_maintenance_cost_step(snes_ts1::Vector{Vector{NetworkAssetState}},snes_ts2::Vector{Vector{NetworkAssetState}},snes_ts3::Vector{Vector{NetworkAssetState}},model_ts::Array{ModelState, 1},t::Int64)
+function plot_maintenance_cost_step(snes_ts1::Vector{Vector{NetworkAssetState}},snes_ts2::Vector{Vector{NetworkAssetState}},snes_ts3::Vector{Vector{NetworkAssetState}},model_ts::Vector{ModelState},t::Int64)
     costs = zeros(3,t)
     
     snes_ts = [snes_ts1,snes_ts2,snes_ts3]
@@ -572,7 +608,7 @@ function plot_maintenance_cost_step(snes_ts1::Vector{Vector{NetworkAssetState}},
                 costs
                 ,legend = false
                 ,ylims=[0,1000]
-                ,xlims=[0,180]
+                ,xlims=[0,300]
             )
 
 
@@ -580,3 +616,129 @@ function plot_maintenance_cost_step(snes_ts1::Vector{Vector{NetworkAssetState}},
 
 end
 
+"""
+Function that prepare serialised time series of control agents for plotting
+"""
+function prepare_service_paths(services,ca_ts)
+    t = length(ca_ts)
+    paths = [ collect(values(ca_ts[tk].active_paths)) for tk=1:t ]
+    path_lengths = [ [ (first(path),last(path),length(path)) for path in paths[tk] ] for tk=1:t ] 
+    
+    return hcat([ vcat([ [ p[3] for p in path_lengths[tk] if p[1] == first(s) && p[2] == last(s) ] for tk=1:t ]...) for s in services ]...)
+end
+
+"""
+It loads serialised data for all the runs in the passed directory 
+"""
+function load_run_data(services,data_dir::String)
+
+    run_data = []
+    ca_ts = Dict()
+    snes_ts = Dict()
+    model_ts = Dict()
+    root = data_dir
+    sdirs = readdir(root)
+
+    for dir in sdirs
+        println("processing : $dir ...")
+        files = readdir(joinpath(root,dir))
+        for file in files
+            mdsp = split(file,"_steps_model.bin")
+            nesp = split(file,"_steps_nelements.bin")
+            agsp =  split(file,"_steps_ctl_agents.bin")
+            mdata = length(mdsp) > 1 ? deserialize(joinpath(root, dir,file)) : nothing
+
+            if !isnothing(mdata)
+                #key: last of directory + unique run label
+                model_ts[first(mdsp)*"_"*last(split(dir,"_"))] = mdata
+            end
+
+            snedata = length(nesp) > 1 ? deserialize(joinpath(root, dir,file)) : nothing 
+
+            if !isnothing(snedata)
+                snes_ts[first(nesp)*"_"*last(split(dir,"_"))] = snedata
+            end
+
+            ctlagdata = length(agsp) > 1 ? deserialize(joinpath(root, dir, file)) : nothing 
+
+            if !isnothing(ctlagdata)
+                ca_ts[first(agsp)*"_"*last(split(dir,"_"))] = ctlagdata
+            end
+        end
+    end
+
+    for k in keys(model_ts)
+        push!(run_data,
+            (label = k,
+            snes_ts=snes_ts[k]
+            ,ca_ts=ca_ts[k]
+            ,model_ts=model_ts[k]
+            ,ctl_model = split(k,"_")[5]
+            ,fail_prop= last(split(k,"_"))
+            ,seed = length(split(k,"_")) > 11 ? split(k,"_")[10] : split(k,"_")[7]
+            )
+        )
+    end
+
+    return run_data
+end
+
+
+"""
+It plots cost for three time series at a time
+"""
+
+function plot_maintenance_cost_step(snes_ts1::Vector{Vector{NetworkAssetState}},snes_ts2::Vector{Vector{NetworkAssetState}},snes_ts3::Vector{Vector{NetworkAssetState}},model_ts1::Array{ModelState, 1},model_ts2::Array{ModelState, 1},model_ts3::Array{ModelState, 1},t::Int64)
+    costs = []#zeros(3,t)
+    
+    snes_ts = [snes_ts1,snes_ts2,snes_ts3]
+    model_ts = [model_ts1,model_ts2,model_ts3]
+
+    if t > 1
+
+        for sr=1:length(snes_ts)
+            ruls = [  snes_ts[sr][sne][tk].on_maintenance ? snes_ts[sr][sne][tk].rul : -1.0  for sne=1:length(snes_ts[sr]), tk=1:t ]
+
+            is_starts = hcat(Bool.(zeros(1:length(snes_ts[sr]))),[  !snes_ts[sr][sne][tk-1].on_maintenance && snes_ts[sr][sne][tk].on_maintenance ? true : false for sne=1:length(snes_ts[sr]),tk=2:t ])
+
+            is_actives = transpose(hcat([ is_in.(sne,
+                                                [ unique(vcat([ vcat(f[1],f[2]) for f in model_ts[sr][tk].active_flows ]...)) for tk=1:t ]) for sne in collect(1:length(snes_ts[sr])) ]...))
+
+
+
+            push!(costs,cumsum(sum(eachrow(
+                        maintenance_cost.(
+                            ruls,
+                            is_starts,
+                            is_actives,
+                            5, 4, 10, 1
+                        )
+                    ))))
+        end
+        #print(costs[1])    
+    end
+    
+    p = plot(
+        title = "Total Costs"
+        ,title_location = :right
+        ,titlefont = font(8)
+        ,legend = :topleft
+        #,legend = false
+        ,ylims=[0,1500]
+        ,xlims=[0,300]
+        ,legendfontsize=6
+        ,ylabel="£"
+        ,xlabel="Time"
+        ,guidefontsize=6
+        )
+
+    labels = ["Corrective", "Preventive", "Optimal"]
+    colors = [:orange,:purple,:green]
+     for c=1:length(costs)
+         p = plot!(p,costs[c],label=labels[c],color=colors[c])
+     end
+    return p
+
+    # sum_dp = sum(eachrow([  snes_ts[sne][tk].drop_pkt  for sne=1:length(snes_ts), tk=1:t ]))
+
+end
