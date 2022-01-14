@@ -326,10 +326,12 @@ function find_paths_by_seed(seed,g::G,coverage::Float64)where G<: AbstractGraph
             ds = gdistances(g,s)
             sds = sort([(i,ds[i]) for i=1:length(ds) if i in pending_i ],by=last,rev=true)
             d = first(first(sds))
-            
+
             #shortest path between these two nodes
             sp = first(yen_k_shortest_paths(g,s,d).paths)
-            push!(cp, sp)
+            if length(sp) > 2 #only paths with more than 2 nodes
+                push!(cp, sp)
+            end
 
             #remove nodes in the shortest path from pending list
             pending_i = collect(setdiff([ first(p) for p in pending ],Set(sp)))
@@ -344,5 +346,5 @@ end
 Given a set of paths, return the start and end vertices
 """
 function get_end_points(seed,g::G,coverage::Float64)where G<:AbstractGraph
-    return [ (first(p),last(p)) for p in find_paths_by_seed(seed,g,coverage) ]
+    return [ (first(p),last(p)) for p in find_paths_by_seed(seed,g,coverage) if first(p) != last(p) ]
 end
