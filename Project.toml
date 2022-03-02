@@ -2,7 +2,7 @@ name = "NAssets"
 uuid = "9ba2d950-4064-43a0-af49-c7f9e333c13e"
 license = "MIT"
 authors = ["mperhez"]
-version = "0.0.1"
+version = "0.0.2"
 
 [deps]
 Agents = "46ada45e-f475-11e8-01d0-f70cc89e6671"
