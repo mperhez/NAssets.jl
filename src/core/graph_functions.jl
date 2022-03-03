@@ -67,13 +67,14 @@ Search for a path between nodes s and d in the local graph lg
 It assumes property :eid of each vertex is global id of vertex
 """
 
+# function query_paths(lg::SimpleWeightedGraph,s,d)
 function query_paths(lg,s,d)
     ls = to_local_vertex(lg,s)
     ld = to_local_vertex(lg,d)
     paths = []
     scores = []
     result =   LightGraphs.YenState{Float64,Int64}(scores,paths)
-    
+
     if ls > 0 && ld > 0
             #slg = SimpleGraph(lg)
             #return yen_k_shortest_paths(slg,ls,ld, weights(slg),2,Inf)
@@ -94,7 +95,7 @@ function query_paths(lg,s,d)
     end
 
     result =   LightGraphs.YenState{Float64,Int}(scores,paths)
-
+    
     return result
 end
 
@@ -136,7 +137,10 @@ In eqv, every pair has the form: (lv,gv) where lv is the
 local vertex id and gv is the global vertex id.
 """
 function create_subgraph(m,eqv)
+    gw = SimpleWeightedGraph(m)
     g = MetaGraph(m)
+    [ set_prop!(g, r, c, :weight, LightGraphs.weights(gw)[r,c]) for r=1:size(LightGraphs.weights(gw),1),c=1:size(LightGraphs.weights(gw),2) if LightGraphs.weights(gw)[r,c] >0]
+
     for eq in eqv
         set_props!(g,first(eq),Dict(:eid=>last(eq)))
     end
@@ -234,12 +238,14 @@ end
 
 
 """
-Get underlying graph
+get_graph
+
+Get underlying graph, passing the adj matrix and separator.
 """
-function get_graph(seed,size,topo;k=0,B=0,adj_m_csv=nothing)
+function get_graph(seed,size,topo;k=0,B=0,adj_m_csv=nothing,sep=';')
     Random.seed!(seed)
     ntw = @match topo begin
-        GraphModel(0)=> load_graph_from_csv(adj_m_csv)#custom_topo
+        GraphModel(0)=> load_graph_from_csv(adj_m_csv,sep)#custom_topo
         GraphModel(2) => MetaGraph( [Int(i) for i in ring_graph(size)])
         GraphModel(3) => MetaGraph(LightGraphs.complete_graph(size))
         GraphModel(4) => MetaGraph( [Int(i) for i in grid2(Int(sqrt(size)))])
@@ -348,3 +354,5 @@ Given a set of paths, return the start and end vertices
 function get_end_points(seed,g::G,coverage::Float64)where G<:AbstractGraph
     return [ (first(p),last(p)) for p in find_paths_by_seed(seed,g,coverage) if first(p) != last(p) ]
 end
+
+export get_graph
