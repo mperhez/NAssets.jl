@@ -1,13 +1,19 @@
 """
-It loads a graph from csv file containing the adjacency matrix of the graph. The file location and name is passed as argument (location/name.csv).
+*load_graph_from_csv*
+
+This function loads a graph from csv file containing the adjacency matrix of the graph. The file location and name is passed as argument (location/name.csv) together with the separator used in the csv e.g. ';' or ','.
 """
-function load_graph_from_csv(csv_adj_m::String)
+function load_graph_from_csv(csv_adj_m::String;sep::Char=';')
 
     #adjacency matrix
-    am = readdlm(csv_adj_m, ',', Int, '\n')
+    am = readdlm(csv_adj_m, sep, Int, '\n')
     
+    #create weighted graph
+    wg = SimpleWeightedGraph(am)
     #create metagraph
-    g = MetaGraph(SimpleGraph(am))
+    g = MetaGraph(wg)
+
+    [ set_prop!(g, r, c, :weight, SimpleWeightedGraphs.weights(wg)[r,c]) for r=1:size(SimpleWeightedGraphs.weights(wg),1),c=1:size(SimpleWeightedGraphs.weights(wg),2) if SimpleWeightedGraphs.weights(wg)[r,c] >0]
     return g
 end
 
@@ -38,12 +44,13 @@ end
 
 """
 Traffic generation per tick
+#TODO Implement this function as per required
 """
 function generate_traffic!(model)
     #random pkts
     traffic_μ = first(model.traffic_dist_params)
     traffic_sd = last(model.traffic_dist_params)
-    q_pkts = abs(round(model.traffic_proportion*model.pkt_per_tick*get_random(model.seed,model.ticks,Normal(traffic_μ,traffic_sd))))
+    q_pkts = abs(round(model.traffic_packets*get_random(model.seed,model.ticks,Normal(traffic_μ,traffic_sd))))
     # q_pkts: A percentage of the model.pkt_per_tick so NEs are able to process traffic coming from different nodes (NEs)
     #src,dst = samplepair(1:nv(model.ntw_graph)) # can be replaced for random pair
     pairs = model.ntw_services
@@ -51,23 +58,59 @@ function generate_traffic!(model)
     #fixed pkts
     #q_pkts = 5 
     # pairs =[(5,14)]
-    # println("$(model.seed)-->[$(model.ticks)] - generating traffic btwn $pairs")
+    tpkts = 400 
+    println("$(model.seed)-->[$(model.ticks)] - generating traffic btwn $pairs")
     for p in pairs
         src,dst = p
+        #for bipartite sim
+        if src == 13 
+            q_pkts = @match model.traffic_packets begin
+                #model.traffic_packets
+                100 => abs(round(tpkts÷4*get_random(model.seed,model.ticks,Normal(traffic_μ,traffic_sd)))) # 75% drop
+                200 => abs(round(tpkts÷2*get_random(model.seed,model.ticks,Normal(traffic_μ,traffic_sd)))) # 50% drop
+                300 => abs(round((tpkts÷4)*3*get_random(model.seed,model.ticks,Normal(traffic_μ,traffic_sd)))) #25% drop
+
+                400 => abs(round(tpkts*get_random(model.seed,model.ticks,Normal(traffic_μ,traffic_sd)))) #baseline
+                500 => abs(round((tpkts÷4)*get_random(model.seed,model.ticks,Normal(traffic_μ,traffic_sd)))) #25% drop
+                600 => abs(round((tpkts÷2)*get_random(model.seed,model.ticks,Normal(traffic_μ,traffic_sd)))) #50% drop
+                700 => abs(round((tpkts÷4)*3*get_random(model.seed,model.ticks,Normal(traffic_μ,traffic_sd)))) # 75% drop
+                800 => abs(round(tpkts*get_random(model.seed,model.ticks,Normal(traffic_μ,traffic_sd)))) #100% drop
+            end
+
+        elseif src == 7
+
+            q_pkts = @match model.traffic_packets begin
+                100 => abs(round(tpkts*get_random(model.seed,model.ticks,Normal(traffic_μ,traffic_sd)))) #irrelevant
+                200 => abs(round(tpkts*get_random(model.seed,model.ticks,Normal(traffic_μ,traffic_sd)))) #irrelevant
+                300 => abs(round(tpkts*get_random(model.seed,model.ticks,Normal(traffic_μ,traffic_sd)))) #irrelevant
+
+                400 => abs(round(tpkts*get_random(model.seed,model.ticks,Normal(traffic_μ,traffic_sd)))) #baseline
+                500 => abs(round(tpkts*get_random(model.seed,model.ticks,Normal(traffic_μ,traffic_sd)))) #25% drop
+                600 => abs(round(tpkts*get_random(model.seed,model.ticks,Normal(traffic_μ,traffic_sd)))) #50% drop
+                700 => abs(round(tpkts*get_random(model.seed,model.ticks,Normal(traffic_μ,traffic_sd)))) #75% drop
+                800 => abs(round(tpkts*get_random(model.seed,model.ticks,Normal(traffic_μ,traffic_sd)))) #100% drop
+            end
+
+        end
+
         sne_src = getindex(model,src)
         sne_dst = getindex(model,dst)
         if is_up(sne_src) && is_up(sne_dst)
+            # log_info(model.ticks,sne_src.id,"pkts generate: $(q_pkts) --> $(length(sne_src.queue.data))")
+            if q_pkts > sne_src.queue.sz_max - length(sne_src.queue.data)  - Int(round(sne_src.queue.sz_max * .2))
+                log_info(model.ticks,sne_src.id,"Traffic generated in origin ($(q_pkts)) greater than current node queue capacity ($(sne_src.queue.sz_max - sne_src.queue.sz_max - length(sne_src.queue.data))) reducing pkts in origin to max. ")
+                q_pkts = sne_src.queue.sz_max - length(sne_src.queue.data) - Int(round(sne_src.queue.sz_max * .2))
+            end
             for i =1:q_pkts
                 pkt = create_pkt(src,dst,model)
                 # if model.ticks >= 80 
                     # log_info(model.ticks,src,3,"Sending src: $src - dst: $dst -> q_pkts: $q_pkts ==> $pkt packets ")
                 # end
-                
                 push_msg!(sne_src,OFMessage(next_ofmid!(model), model.ticks,src,0,pkt)) # always from port 0
             end
         end
     end
-
+    # log_info(model.ticks,"end generated ==> $(length(getindex(model,17).queue.data))")
    # log_info("[$(model.ticks)] $(q_pkts) pkts generated")
 end
 
@@ -130,3 +173,5 @@ function rejoin_node!(model,rjn_id::Int64)
    a = getindex(model,aid)
    controlled_sne_up!(a,rjn_id,sne_ids,model)
 end
+
+export load_graph_from_csv
