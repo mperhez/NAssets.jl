@@ -1,4 +1,4 @@
-export State
+export State, GraphModel
 """
 Self-organising agent
 """
