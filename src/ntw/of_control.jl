@@ -5,6 +5,9 @@ function push_msg!(a::Agent,msg::OFMessage)
     put!(a.queue,msg)
 end
 
+"""
+It records messages pending to process in a given tick
+"""
 function push_pending!(a::AbstractAgent,msg::OFMessage)
     push!(a.pending,msg)
 end
@@ -12,10 +15,13 @@ end
 
 
 function send_msg!(receiver::Int64,msg::OFMessage,model)
+    # log_info(model.ticks,receiver,"==> receiver queue: $(length(getindex(model,receiver).queue.data)) ===> max $(getindex(model,receiver).queue.sz_max)")
     ag = getindex(model,receiver)
     #TODO implement links and get delay of link in ticks
     queue = typeof(ag) == SimNE ? ag.queue : ag.queue
-    # log_info(model.ticks,msg.dpid,4,"Sent to $receiver msg: $msg")
+    # if model.ticks >= 30
+        # log_info(model.ticks,msg.dpid,"Sent to $receiver msg: $msg ==> max: $(ag.queue.sz_max) current: $(length(ag.queue.data))")
+    # end
     put!(queue,msg)
 end 
 
