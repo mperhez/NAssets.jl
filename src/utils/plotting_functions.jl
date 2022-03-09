@@ -206,7 +206,7 @@ function plot_packet_loss(model;kwargs...)
     for i=1:nv(model.ntw_graph)
         sne = getindex(model,get_eid(i,model))
         pktl_v = get_packet_loss_trj(sne)
-        log_info(model.ticks,sne.id,"==> pktl_trj: $pktl_v")
+
         pktl_p = Plots.plot!(pktl_p,pktl_v
         ,xlims=[0,model.N]
         , linealpha=0.5
@@ -711,7 +711,7 @@ function plot_maintenance_cost_step(snes_ts1::Vector{Vector{NetworkAssetState}},
                             ruls,
                             is_starts,
                             is_actives,
-                            5, 4, 10, 1
+                            5, 4, 10, 1 #coeficients for dt, l, p & r costs (see function docs)
                         )
                     ))))
         end
