@@ -1,7 +1,7 @@
 TOK_FILE=.git_token
 GIT_TOK=$(shell cat $(TOK_FILE))
 IMG=mperhez/ntwctl-abm:latest
-CONTAINER_WD=/network-fleet-abm
+CONTAINER_WD=/NAssets.jl
 
 all: build run
 
