@@ -8,7 +8,6 @@ function get_dropping_times(seed,stabilisation_period,drop_proportion,q,N)
     #events 
     k = Int(round(q * drop_proportion))
     # k = 30
-    # @show k
     
     time_btwn_events = Int.(ceil.(first([ rand(Exponential(1/k),k) .* (N - (2 * stabilisation_period)* 1.7)]))) # Normalise time-btwn-events over the 1.7 of the observation period (assuming that we substract stabilisation at the beginning and at the end) to make sure it falls within the simulation time.
 
