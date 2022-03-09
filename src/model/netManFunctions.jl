@@ -90,22 +90,19 @@ function do_agent_step!(a::Agent,model)
     #Schedule events regardless of state of ctl agent to make sure that controlled snes are brought back up 
     #This is the first function to make sure that nodes that are down are recognised by others.
     do_events_step!(a,model)
-    if is_up(a)
+    if is_up(a) && length(a.queue.data) > 0
         # for sprt in sne_print
         #     log_info(model.ticks,a.id," step!: {$(sprt.id)} $(get_state(sprt).flow_table) ===> all ports: $(get_port_edge_list(sprt)) ===> paths: $(a.paths)")
         # end        
 
         ## Process OF Messages (SimNE to (sdn) control messages)
-        is_ready(a) ? in_packet_processing(a,model) : nothing #log_info("queue of $(a.id) is empty")
-
+        is_ready(a) ? in_packet_processing(a,model) : log_info("queue of $(a.id) is empty")
         # Process inter-agent messages
         # log_info(model.ticks,a.id,"==> a.paths ==> $(a.paths)")
         do_receive_messages(a,model)
-
         
         # log_info(model.ticks,a.id,"ctl_agent step: $(neighbors(a.ntw_graph,4))")
     end
-    
     # log_info(model.ticks,a.id,25,"pending msgs: $(length(a.
     # pending)) --> $(a.pending)")
     # log_info(model.ticks,a.id,25,"QUEUE --> $(a.queue.data)")
@@ -136,17 +133,6 @@ function do_receive_messages(a::Agent,model)
     end
 end
 
-function do_send_messages(a::Agent,model)
-    g = a.ctl_graph
-    # In this graph a is always node 1
-    nbs = neighbors(g,1)
-
-    for nb in nbs
-        rid = get_prop(g,nb,:aid)
-        send_msg!(a.id,rid,msg)
-    end
-
-end
 """
 Records benchmark for a query
 """
@@ -188,7 +174,8 @@ new_config(seed,ctl_model,ntw_topo,size,n_steps,drop_proportion,prob_random_walk
             ,mnt_wc_cost = mnt_wc_cost
             ,mnt_bc_cost = mnt_bc_cost
             ,traffic_dist_params = traffic_dist_params
-            ,traffic_proportion = traffic_proportion
+            ,traffic_packets = traffic_packets
+            ,link_capacity = link_capacity
             ,clear_cache_graph_freq = clear_cache_graph_freq
             ,interval_tpt = interval_tpt
             ,pkt_size = pkt_size
