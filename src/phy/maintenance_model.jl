@@ -64,7 +64,9 @@ function start_mnt!(a::Agent,sne::SimNE,model::ABM)
     drop_node!(sne,model)
     finish_mnt = model.ticks + a.maintenance.duration
     # log_info(model.ticks,a.id,"schedulling up of $(sne.id) for... $(finish_mnt)")
-    schedule_event!(a,CTL_Event(3),finish_mnt,[sne.id])
+    if sne.id != 15
+        schedule_event!(a,CTL_Event(3),finish_mnt,[sne.id])
+    end
 end
 
 function stop_mnt!(a::Agent,sne::SimNE,model::ABM)
@@ -215,38 +217,51 @@ end
 function update_maintenance_plan!(a::Agent,mnt_policy::Type{PredictiveM},model::ABM)
     window_size = a.maintenance.prediction_window * 2
     ruls = a.rul_predictions[:,size(a.rul_predictions,2)-window_size+1:size(a.rul_predictions,2)]
-    #data conversion to py, minus 1 as indexes in py start in 0
-    services_py = np.matrix(model.ntw_services) .- 1
-    ruls_py = np.matrix(ruls)
-    #pycall to optimisation function
-    log_info(model.ticks,a.id,"srvs=>$(services_py)")
-    log_info(model.ticks,a.id,"ruls_py=>$(ruls_py)")
-    mnt_plan, routes = opt_run.maintenance_planning(model.ticks,services_py, ruls_py)
     
-    #when necessary, convert routes output to matrix, where size(ruls,1) + 2 is length of each routes matrix row.
-    if size(routes,2) != size(ruls,1) + 2
-        routes = transpose(reshape(routes,size(ruls,1) + 2,:))
-    end
-    
-    log_info(model.ticks,a.id," From Alena's algo PLAN: $(mnt_plan)")
-    log_info(model.ticks,a.id," From Alena's algo=> ROUTES: $(routes)")
-    
-    #convert routes from py to julia indexes
-    routes = routes .+ 1
-
-    if size(routes,2) > 1
-        for rw in eachrow(routes)
-            process_route!(a,rw,model)
+    #optimal plan is precomputed offline for large networks
+    if nv(model.ntw_graph) > 90
+        if model.ticks == 10 # It only does this one time as the plans and routes are precomputed
+            mnt_plan, routes = ln_mnt_plan, ln_routes
+        else
+            mnt_plan, routes = [],[]
         end
-    elseif size(routes,2) == 1
-        process_route!(a,routes,model)
+
+    else
+        #data conversion to py, minus 1 as indexes in py start in 0
+        services_py = np.matrix(model.ntw_services) .- 1
+        ruls_py = np.matrix(ruls)
+        #pycall to optimisation function
+        log_info(model.ticks,a.id,"srvs=>$(services_py)")
+        log_info(model.ticks,a.id,"ruls_py=>$(ruls_py)")
+        mnt_plan, routes = opt_run.maintenance_planning(model.ticks,services_py, ruls_py)
     end
 
-    for sne_id in 1:length(mnt_plan) 
-        if mnt_plan[sne_id] > 0
-            # negative indicates that sne_id goes down for maintenance
-            log_info(model.ticks,a.id," event for: $(mnt_plan[sne_id])")
-            schedule_event!(a,CTL_Event(2),Int(model.ticks+mnt_plan[sne_id]),[sne_id])
+    if !isempty(routes) && !isempty(mnt_plan)
+        #when necessary, convert routes output to matrix, where size(ruls,1) + 2 is length of each routes matrix row.
+        if size(routes,2) != size(ruls,1) + 2
+            routes = transpose(reshape(routes,size(ruls,1) + 2,:))
+        end
+        
+        log_info(model.ticks,a.id," From Alena's algo PLAN: $(mnt_plan)")
+        log_info(model.ticks,a.id," From Alena's algo=> ROUTES: $(routes)")
+        
+        #convert routes from py to julia indexes
+        routes = routes .+ 1
+
+        if size(routes,2) > 1
+            for rw in eachrow(routes)
+                process_route!(a,rw,model)
+            end
+        elseif size(routes,2) == 1
+            process_route!(a,routes,model)
+        end
+
+        for sne_id in 1:length(mnt_plan) 
+            if mnt_plan[sne_id] > 0
+                # negative indicates that sne_id goes down for maintenance
+                log_info(model.ticks,a.id," event for: $(mnt_plan[sne_id])")
+                schedule_event!(a,CTL_Event(2),Int(model.ticks+mnt_plan[sne_id]),[sne_id])
+            end
         end
     end
 end
@@ -439,7 +454,6 @@ p_cost: parts costs for maintenance regardless of the time it takes, time-indepe
 
 r_cost: cost of loss of remaining life. Added when preventive maintenance. 
 """
-
 function maintenance_cost(rul_mnt,is_start,is_active,dt_cost,l_cost,p_cost,r_cost)
 
     #parts costs
