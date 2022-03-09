@@ -19,7 +19,7 @@ It forwards packet to another sne
 """
 function forward!(msg::OFMessage,src::SimNE,dst::SimNE,reason::Ofp_Protocol,model)
     # if model.ticks >= 87 
-    #     log_info(model.ticks,src.id,7," src forwarding to $(dst.id) ==> $msg")
+        #  log_info(model.ticks,src.id,8," src forwarding to $(dst.id) ==> $msg")
     #     log_info(model.ticks,dst.id,60," dst forwarding from $(src.id) ==> $msg")
     #     # log_info(model.ticks,src.id,3," forwarding to $(dst.id) ==> $msg")
     #     # log_info(model.ticks,src.id,2," forwarding to $(dst.id) ==> $msg")
@@ -127,18 +127,21 @@ function push_msg!(src::SimNE,dst::SimNE,msg::OFMessage,model)
     l = (get_address(src.id,model.ntw_graph),get_address(dst.id,model.ntw_graph))
     l = l[1] < l[2] ? l : (l[2],l[1])
     if !haskey(model.ntw_links_msgs,l)
+        # log_info(model.ticks,"Creating link: $(l)")        
         init_link_msg!(l,model)
     end
     link_queue = last(model.ntw_links_msgs[l])
-    push!(link_queue,msg)
-    links_load = get_state(model).links_load
-    current_load = haskey(links_load,l) ? links_load[l] : 0
-
-    links_load[l] = current_load + 1    
-    
-
-    out_pkt_count = get_state(src).out_pkt + 1
-    set_out_pkt!(src,out_pkt_count)
+    link_capacity = src.id < dst.id ? model.ntw_links_capacity[(src.id,dst.id)] : model.ntw_links_capacity[(dst.id,src.id)]#model.link_capacity
+    if length(link_queue) <= link_capacity  
+        push!(link_queue,msg)
+        links_load = get_state(model).links_load
+        current_load = haskey(links_load,l) ? links_load[l] : 0
+        links_load[l] = current_load + 1    
+        out_pkt_count = get_state(src).out_pkt + 1
+        set_out_pkt!(src,out_pkt_count)
+    else
+        drop_packet!(src)
+    end
     # if model.ticks > 45 && model.ticks < 60 
     #      log_info(model.ticks,src.id,5,"AFTER push msgs: $(model.ntw_links_msgs)")
     #      log_info(model.ticks,src.id,9,"AFTER push msgs: $(model.ntw_links_msgs)")
@@ -186,8 +189,9 @@ function in_packet_processing(a::AbstractAgent,model)
     processed_tick = 0
     actions_to_process = []
     
-    ppt = a.params[:pkt_per_tick]#get_random_packets_to_process(model.seed,model.ticks+a.id,a.params[:pkt_per_tick])
-    # log_info(model.ticks,a.id,3,"queue size: $(length(a.queue.data))")
+    #ppt = a.params[:pkt_per_tick]#
+    ppt = get_random_packets_to_process(model.seed,model.ticks+a.id,a.params[:pkt_per_tick])
+    
     while is_ready(a)
         msg = take_msg!(a)
 
@@ -217,17 +221,10 @@ function process_msg!(sne::SimNE,msg::OFMessage,model)
     @match msg.reason begin
         Ofp_Protocol(1) =>  
                         begin
-                            # if model.ticks >= 60 && model.ticks <= 80
-                            #     log_info(model.ticks,sne.id,3," msg: $msg")
-                            # end
                             route_traffic!(sne,msg,model)
                         end
         Ofp_Protocol(3) => 
                         begin
-                            # if model.ticks >=51 
-                            #     # log_info(model.ticks,sne.id,6,"$(msg) -> processing $(msg.reason)")
-                            #     log_info(model.ticks,sne.id,"Installing from here [2]")
-                            # end
                             install_flow!(msg,sne,model)       
                         end
         Ofp_Protocol(4) => 
@@ -247,21 +244,15 @@ end
     It enqueues packets that were not processed in 
     previous time steps. It discard packets according to defined size of the queue.
 """
-
 function pending_pkt_handler(a::SimNE,model)
-    # if model.ticks in 80:1:90 && a.id == 10
-    # end
     q_i = 0
     if !isempty(a.pending)
-        # log_info("[$(model.ticks)]($(a.id)) pending: $(length(a.pending))")
-
         for msg in a.pending 
             if msg.reason == OFPR_ACTION
-                if q_i <= model.:max_queue_ne && model.ticks - msg.ticks < model.max_msg_live
+                if q_i <= a.queue.sz_max - 10 && model.ticks - msg.ticks < model.max_msg_live
                     put!(a.queue,msg)
                     q_i+= 1
                 else
-                    # log_info(model.ticks,a.id," Dropping pkt => q_i = $(q_i) <= $(model.:max_queue_ne)  and msg.ticks = $(msg.ticks) ==> msg: $msg")
                     drop_packet!(a)
                 end
             else
@@ -279,7 +270,6 @@ end
 function throughput(bytes₋₁,bytes₀, τ₋₁,τ₀)
     Δτ = τ₀ - τ₋₁
     Δbytes = bytes₀ - bytes₋₁
-    #log_info("Δbytes: $(bytes₀)  - $(bytes₋₁) / Δτ: $(Δτ)")
     return Δτ > 0 && Δbytes >= 0 ? Δbytes / Δτ : 0
 end
 
@@ -288,7 +278,6 @@ It simulates operations happening in a network asset
 when the link corresponding to the given dpn_id goes down. sne is up and node went down is dpn_id.
 """
 function link_down!(sne::SimNE,dpn_id::Int,model)
-    # log_info(model.ticks,sne.id,"BEFORE link down start $dpn_id - all ports: $(get_port_edge_list(sne))")
     #remove from list of ports
     new_port_edge_list::Vector{Tuple{Int64,String}} = Vector{Tuple{Int64,String}}()
     dpn_port = -1
@@ -312,9 +301,7 @@ function link_down!(sne::SimNE,dpn_id::Int,model)
 
     
     controller = getindex(model,sne.controller_id)
-    # log_info(model.ticks,sne.id,"Triggering event to ag: $(sne.controller_id) for dpn_id: $dpn_id ")
     trigger_of_event!(model.ticks,controller,dpn_id,Ofp_Event(1),model)
-    # log_info(model.ticks,sne.id,"AFTER link down start $dpn_id - all ports: $(get_port_edge_list(sne))")
 end
 
 """
@@ -348,12 +335,6 @@ function trigger_of_event!(ticks::Int,a::Agent,ev_data,ev_type::Ofp_Event,model)
     
     push_msg!(a,msg)
 end
-
-# #Controller method to handle changes in port switches
-# function port_status_handler(a::Agent,event::Ofp_Event)
-
-# end
-
 
 function get_state(sme::SimNE)::State
     return last(sme.state_trj)
@@ -410,7 +391,7 @@ function set_down!(sne::SimNE)
         msg = take!(sne.queue)
         #add drop count if msg was pkt related
         if msg.reason == Ofp_Protocol(1)
-            state.drop_pkt += 1
+            drop_packet!(sne)
         end
     end
     state.q_size = length(sne.queue.data)
@@ -445,8 +426,6 @@ function push_flow!(sne::SimNE,flow::Flow)
     push!(state.flow_table,flow)
     set_state!(sne,state)
 end
-
-
 
 function set_in_pkt!(sne::SimNE,in_pkt::Int)
     state = get_state(sne)
@@ -526,13 +505,6 @@ function get_throughput(pb_trj::Array{Float64,1},interval::Int)
     if length(pb_trj) >= interval
          acc_pb = vcat(acc_pb[1:end-1],rolling(mean,pb_trj,interval))
     end
-
-    # b_1 = zeros(Float64,min(interval,length(pkt_trj)))
-    # b_2 = pkt_trj[1:end-interval]
-    # b = vcat(b_1,b_2)
-    # log_info("calculating tpt......-> $(a) -- $(b_1) -- $(b_2) -- $b ")
-    # result = get_throughput.(a,b,[interval]) 
-    # log_info("result of tpt is $result")
     return acc_pb
 
 end
@@ -597,17 +569,16 @@ function delete_flow!(sne::SimNE,out_port::Int64,model::ABM)
     new_flow_table::Vector{Flow} = Vector{Flow}()
     
     for f in get_flow_table(sne)
-        # log_info(model.ticks,sne.id,"requested_ctl done: $(sne.requested_ctl)")
-        # log_info(model.ticks,sne.id,"Existing flow: $f --> $out_port ---> $(f.params) ---> all ports: $(get_port_edge_list(sne))")
         if  ~(out_port in f.params)
             push!(new_flow_table,f)
         end    
     end
     set_flow_table!(sne,new_flow_table)
-    
-    # log_info(model.ticks,sne.id,"New flow table AFTER DELETE: $new_flow_table ---> all ports: $(get_port_edge_list(sne))")
 end
 
+"""
+Add to the count of dropped packets for the given sne
+"""
 function drop_packet!(sne::SimNE)
     s = get_state(sne)
     s.drop_pkt += 1
@@ -626,7 +597,4 @@ function calculate_metrics_step!(sne::SimNE,model::ABM)
 
     end
     set_state!(sne,state)
-    # if model.ticks == 200
-    #     log_info(model.ticks,sne.id,41," tpt_trj: $([ st.throughput_out for st in sne.state_trj])")
-    # end
 end
