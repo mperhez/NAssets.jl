@@ -17,6 +17,7 @@ function initialize(user_props;grid_dims=(3,3),seed=0)
         :mapping_ntw_sne => Dict{Int64,Int64}(), #mapping btwn the underlying network and the corresponding simNE agent 
         :ntw_links_msgs=>Dict{Tuple{Int,Int},Vector{Vector{OFMessage}}}(),
         :ntw_links_delays =>Dict{Tuple{Int,Int},Int}(),
+        :ntw_links_capacity=>Dict{Tuple{Int,Int},Int}(),
         :state_trj => Vector{ModelState}(),
         :base_ntw_graph => user_props[:ntw_graph],
         :dropped_nodes => Vector{Tuple{Int,Int}}()
@@ -49,12 +50,12 @@ end
     Create simulated asset agents
 """
 function create_sim_asset_agents!(model)
-    a_params = Dict(:pkt_per_tick=>model.pkt_per_tick)    
+    a_params = Dict()
+    
     # create SimNE
     for i in 1:nv(model.properties[:ntw_graph])
         #next_fire = rand(0:0.2:model.:Τ)
         id = nextid(model)
-        # @show i
         
         deterioration = id in model.init_sne_params.ids ? model.init_sne_params.deterioration[first(indexin(id,model.init_sne_params.ids))] : model.deterioration
 
@@ -63,15 +64,17 @@ function create_sim_asset_agents!(model)
             2 => MaintenanceInfoPredictive(deterioration,model)
             _ => MaintenanceInfoCorrective(deterioration,model)
         end
-        # if id == 9
-        #     mnt.deterioration_parameter = 2. 
-        # end
-        # if id in scenario_2_ids
-        #     mnt.deterioration_parameter = 1. 
-        # end
 
+        #for bipartite simulation
+        #TODO move this as parameters.. If node is 19, then capacity is 5x than other nodes which is 1.2x. .2 extra is to have always room for management msgs/pkts.
+        capacity_factor =  id == 19 ? 5 : 1.2 #10
+        processing_factor = id == 19 ? 5 : 1.2 #10
+        a_params[:pkt_per_tick]=processing_factor * 500 #model.pkt_per_tick
+
+        max_q_capacity =  capacity_factor * 500 #a_params[:pkt_per_tick]
+        
         a = add_agent_pos!(
-                SimNE(id,i,a_params,10*model.pkt_per_tick,mnt),model
+                SimNE(id,i,a_params,max_q_capacity,mnt),model
             )
         
         set_prop!(model.ntw_graph, id, :eid, id )
@@ -105,7 +108,6 @@ function create_control_agents!(model::ABM)
             set_control_agent!(j,id,model)
         end
     else
-        # log_info(" Nodes CTL: $(nv(model.properties[:ctl_graph]))")
         for i in 1:nv(model.properties[:ctl_graph])
             id = nextid(model)
             a = add_agent_pos!(
@@ -147,32 +149,23 @@ function model_step!(model)
     log_info(".")
     for a in allagents(model)
         init_state!(a)
-        if typeof(a) == SimNE && model.ticks == 1
-            log_info("$(a.id), $(get_state(a).rul)")
-        end
     end
     generate_traffic!(model) 
     for e in edges(model.ntw_graph)
         ntw_link_step!((e.src,e.dst),model)
     end
     ctl_links_step!(model)
-
+    
     # Run controllers first
     for a in allagents(model) 
         if typeof(a) == Agent
-            # log_info(model.ticks,a.id,"---------")
-            # log_info(model.ticks,a.id,"links: $(a.msgs_links)")
-            # log_info(model.ticks,a.id," known graph: $(collect(edges(a.ntw_graph)))")
-            kn = [ a.ntw_graph[i,:eid] for i=1:nv(a.ntw_graph) ]
-            # log_info(model.ticks,a.id," known nodes: $(kn)")
-            #log_info(model.ticks,a.id,"ctl_paths: $(a.ctl_paths)")
+            # kn = [ a.ntw_graph[i,:eid] for i=1:nv(a.ntw_graph) ]
             do_agent_step!(a,model)
         end
     end
     #Then run SimNEs
     for a in allagents(model) 
         if typeof(a) == SimNE
-            #log_info(model.ticks,a.id,"---------")
             do_agent_step!(a,model)
         end
     end
@@ -182,9 +175,6 @@ function model_step!(model)
         calculate_metrics_step!(a,model)
     end
     trigger_random_node_drops!(model)
-    # log_info(model.ticks,"aflows: $(get_state(model).active_flows)")
-    # log_info(model.ticks,": $()")
-    
 end
 
 """
@@ -272,13 +262,11 @@ Initialise control agents
 """
 function init_agent!(a::Agent,model)
 
-    # log_info("Starting Agent $(a.id)")
-    
     if model.ctrl_model != GraphModel(1)
         #Calculate sub graphs and init msg channels among agents
         nodes = [get_controlled_assets(a.id,model)...]
         sub_g = get_subgraph(model.ntw_graph,nodes,:eid)
-        # log_info("Asset Network size $(nv(sub_g))")
+
         nodes = [a.id]
         ctl_sub_g = get_subgraph(model.ctl_graph,nodes,:aid)       
         a.ntw_graph = sub_g
@@ -298,13 +286,10 @@ function init_agent!(a::Agent,model)
         if a.maintenance.policy ==  PredictiveM
             #conversion to py
             ajm_py = np.matrix(adjacency_matrix(a.ntw_graph))
-            log_info(model.ticks,"adj=> $ajm_py")
             opt_init.optimisation_initialisation( ajm_py,
             model.traffic_dist_params
             #[1,0.05]
             , model.mnt_bc_cost, model.mnt_bc_duration, model.mnt_wc_cost, model.mnt_wc_duration)
-
-            log_info(model.ticks,"H2=> $(opt_init.H2)")
         end
     end
 end
@@ -395,21 +380,17 @@ function set_state!(m::ABM,new_state::ModelState)
 end
 
 function init_model!(m::ABM)
-    #all delays equal initially
     for e in edges(m.ntw_graph)
-        #log_info("[$(m.ticks)] edge: $((e.src,e.dst))")
+        #all delays equal initially
         m.ntw_links_delays[(e.src,e.dst)] = 1
+        #set capacity for each link, checking if any init param was passed for the links
+        if (e.src,e.dst) in m.init_link_params.ids
+            idx = first([i for i=1:length(m.init_link_params.ids) if m.init_link_params.ids[i] == (e.src,e.dst) ])
+            m.ntw_links_capacity[(e.src,e.dst)] = m.init_link_params.capacities[idx] 
+        else
+            m.ntw_links_capacity[(e.src,e.dst)] = m.link_capacity
+        end
     end
-
-    #init link msgs
-    # for e in edges(m.ntw_graph)
-    #     link_queue = Vector{Vector{OFMessage}}()
-    #     for q=1:m.ntw_links_delays[(e.src,e.dst)]
-    #         push!(link_queue,Vector{OFMessage}())
-    #     end
-    #     m.ntw_links_msgs[(e.src,e.dst)] = link_queue
-    # end
-
 end
 
 function init_link_msg!(l::Tuple{Int,Int},m::ABM)
@@ -420,17 +401,16 @@ function init_link_msg!(l::Tuple{Int,Int},m::ABM)
     m.ntw_links_msgs[l] = link_queue
 end
 
-
+"""
+This function progresses one step each link of the sne network.
+"""
 function ntw_link_step!(l::Tuple{Int,Int},model)
+    # Done for each registered link
     if haskey(model.ntw_links_msgs,l)
         
         msgs = model.ntw_links_msgs[l]
         to_deliver = first(msgs)
         in_pkt_count = 0
-
-        # if model.ticks >= 65 && model.ticks <= 86
-        #      log_info(model.ticks," link ($(l)) -> $(msgs)")
-        # end
 
         if !isempty(to_deliver)
             if length(msgs) > 1
@@ -441,18 +421,22 @@ function ntw_link_step!(l::Tuple{Int,Int},model)
             end
             model.ntw_links_msgs[l] = msgs
 
+            
+
             for msg in to_deliver
                 #Does it need to check address?, I don't think so
                 dst = msg.dpid == l[1] ? getindex(model,l[2]) : getindex(model,l[1])
-                if length(dst.queue.data) < dst.queue.sz_max
+
+                if length(dst.queue.data) < dst.queue.sz_max - Int(round(dst.queue.sz_max * .2))
+
+                     #TODO make % a parameter. This the gap for OF control msgs.
                     
                     put!(dst.queue,msg)
                     in_pkt_count = get_state(dst).in_pkt + 1
                     set_in_pkt!(dst,in_pkt_count)
                 else
-                    s = get_state(dst)
-                    s.drop_pkt += 1
-                    set_state!(dst,s)
+                    #if destination queue is full the msg/pkt is dropped
+                    drop_packet!(dst)
                 end
             end
         end
@@ -472,19 +456,16 @@ end
 function ctl_links_step!(model)
     if model.ctrl_model != GraphModel(1)
         ctl_ags = filter(a->typeof(a) == Agent,Set(allagents(model)))
-        #log_info(ctl_ags)
         ctl_link_step!.(ctl_ags)
     end
 
 end
 
 function ctl_link_step!(a::Agent)
-    #log_info("=== START Processing links of Ag: $(a.id) => $(a.msgs_links) -- $(a.msgs_in) ===")
     #Merge msgs from all senders to be processed
     a.msgs_in = vcat(a.msgs_links[1,:]...)
     a.msgs_links[1,:] = init_array_vectors(AGMessage,size(a.msgs_links,2),1)
     a.msgs_links = circshift(a.msgs_links,1)
-    #log_info("=== END Processing links of Ag: $(a.id) => $(a.msgs_links) -- $(a.msgs_in) ===")
 end
     
 function get_state_trj(m::ABM)::Vector{ModelState}
@@ -495,12 +476,10 @@ end
 Return total of control messages exchanged by agents
 """
 function get_ag_msg(model)
-    #log_info([ [ s.in_ag_msg for s in a.state_trj ] for a in allagents(model) if typeof(a) == Agent ])
     return cumsum(sum.(eachcol([ [ s.in_ag_msg for s in a.state_trj ] for a in allagents(model) if typeof(a) == Agent ]))...)    
 end
 
 function is_active_flow(f::Tuple{Int,Int},model)
     v = !isempty(filter(af->(af[1],af[2]) == f || (af[2],af[1]) == f  ,get_state(model).active_flows))
-    # log_info(model.ticks,"$f ==> $v")
     return v
 end
