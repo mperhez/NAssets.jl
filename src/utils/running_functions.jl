@@ -151,7 +151,8 @@ function single_run(config)
     args[:mnt_wc_cost] = config.mnt_wc_cost
     args[:mnt_bc_cost] = config.mnt_bc_cost #best case cost
     args[:traffic_dist_params] = config.traffic_dist_params #traffic distribution parameters
-    args[:traffic_proportion] = config.traffic_proportion
+    args[:traffic_packets] = config.traffic_packets #magnitude No. of packets for traffic generation
+    args[:link_capacity] = config.link_capacity
     args[:data_dir] = config.data_dir
     args[:plots_dir] = config.plots_dir
     args[:deterioration] = config.deterioration 
@@ -164,6 +165,7 @@ function single_run(config)
     args[:max_cache_paths] = config.max_cache_paths
     args[:max_msg_live] = config.max_msg_live
     args[:init_sne_params] = config.init_sne_params
+    args[:init_link_params] = config.init_link_params
     q_ctl_agents = 0
     run_label = get_run_label(config)
     args[:run_label] = run_label
@@ -236,17 +238,19 @@ end
 
 
 """
-It loads the simulation config paramenters from csv file which location and name is passed.
+load_base_cfgs
+
+It loads the simulation config parameters from csv file which location and name is passed. I passes a list with delimiters (delims) used in the file from outer, to inner. Default=[';',',']
 """
-function load_base_cfgs(filename)
-    df_c = CSV.File(filename,types=Dict(:deterioration => Float64)) |> DataFrame
+function load_base_cfgs(filename;delims=[';',','])
+    df_c = CSV.File(filename,types=Dict(:deterioration => Float64),delim=delims[1]) |> DataFrame
     base_cfgs = []
     for row in eachrow(df_c)
         vals = []
         for nm in names(df_c)
             val = @match String(nm) begin
                 #parse "special" csv fields
-                "traffic_dist_params" => parse.([Float64],split(row[:traffic_dist_params][2:end-1],","))
+                "traffic_dist_params" => parse.([Float64],split(row[:traffic_dist_params][2:end-1],delims[2]))
                 _ => row[nm]
             end
             push!(vals,val)
@@ -270,4 +274,13 @@ Creates full config, appending services to base config obtained from a csv file.
 """
 function config(bcfg,ntw_services,init_sne_params)
     NamedTuple{Tuple(vcat([:ctl_model,:ntw_topo,:ntw_services, :init_sne_params],collect(keys(bcfg))))}(vcat([ GraphModel(bcfg.ctl_model_n),GraphModel(bcfg.ntw_topo_n),ntw_services,init_sne_params],collect(values(bcfg))))
+end
+
+"""
+config(bcfg,ntw_services,init_sne_params,init_link_params)
+
+Creates full config, appending services to base config obtained from a csv file. It passes custom init sne and link params.
+"""
+function config(bcfg,ntw_services,init_sne_params,init_link_params)
+    NamedTuple{Tuple(vcat([:ctl_model,:ntw_topo,:ntw_services, :init_sne_params, :init_link_params],collect(keys(bcfg))))}(vcat([ GraphModel(bcfg.ctl_model_n),GraphModel(bcfg.ntw_topo_n),ntw_services,init_sne_params,init_link_params],collect(values(bcfg))))
 end
