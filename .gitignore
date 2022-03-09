@@ -437,6 +437,10 @@ $RECYCLE.BIN/
 *.mp4
 *.mkv
 *.pptx
+*.pdf
+*.png
+*.bin
 demo/*
 data/*
+out/*
 *.zip
