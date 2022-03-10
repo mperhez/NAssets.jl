@@ -2,8 +2,8 @@ module NAssets
 using Agents
 using Plots
 using MetaGraphs
-using MetaGraphs: nv
-using LightGraphs,SimpleWeightedGraphs
+# using MetaGraphs: nv
+using Graphs,SimpleWeightedGraphs
 using GraphPlot, GraphRecipes, NetworkLayout
 using AgentsPlots
 using Tables, DataFrames
@@ -17,7 +17,6 @@ using StatsBase
 using Distributions
 using StatsPlots
 using SparseArrays
-using Laplacians
 using DataStructures
 using RollingFunctions
 using BenchmarkTools

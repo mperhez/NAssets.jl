@@ -294,7 +294,7 @@ function init_agent!(a::Agent,model)
     end
 end
 
-function label_paths(time::Int64,paths::Array{LightGraphs.YenState{Float64,Int64},1})
+function label_paths(time::Int64,paths::Array{Graphs.YenState{Float64,Int64},1})
     npaths = Dict()
     if !isempty(paths)
         for path in paths 
