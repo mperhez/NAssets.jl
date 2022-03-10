@@ -2,6 +2,7 @@ module NAssets
 using Agents
 using Plots
 using MetaGraphs
+using MetaGraphs: nv
 using LightGraphs,SimpleWeightedGraphs
 using GraphPlot, GraphRecipes, NetworkLayout
 using AgentsPlots
