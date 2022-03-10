@@ -2,7 +2,6 @@ module NAssets
 using Agents
 using Plots
 using MetaGraphs
-# using MetaGraphs: nv
 using Graphs,SimpleWeightedGraphs
 using GraphPlot, GraphRecipes, NetworkLayout
 using AgentsPlots
@@ -14,7 +13,6 @@ using Random
 using Match
 using LinearAlgebra
 using StatsBase
-using Distributions
 using StatsPlots
 using SparseArrays
 using DataStructures
