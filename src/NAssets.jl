@@ -22,7 +22,7 @@ using BenchmarkTools
 using Statistics
 using Logging,LoggingExtras, LoggingFacilities
 using Dates,TimeZones
-using Distributions: Exponential
+using Distributions: Exponential, Uniform
 
 
 #Core structures
