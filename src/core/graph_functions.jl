@@ -73,7 +73,7 @@ function query_paths(lg,s,d)
     ld = to_local_vertex(lg,d)
     paths = []
     scores = []
-    result =   LightGraphs.YenState{Float64,Int64}(scores,paths)
+    result =   YenState{Float64,Int64}(scores,paths)
 
     if ls > 0 && ld > 0
             #slg = SimpleGraph(lg)
@@ -94,7 +94,7 @@ function query_paths(lg,s,d)
         push!(scores,score_path(cpath))
     end
 
-    result =   LightGraphs.YenState{Float64,Int}(scores,paths)
+    result =   YenState{Float64,Int}(scores,paths)
     
     return result
 end
@@ -139,7 +139,7 @@ local vertex id and gv is the global vertex id.
 function create_subgraph(m,eqv)
     gw = SimpleWeightedGraph(m)
     g = MetaGraph(m)
-    [ set_prop!(g, r, c, :weight, LightGraphs.weights(gw)[r,c]) for r=1:size(LightGraphs.weights(gw),1),c=1:size(LightGraphs.weights(gw),2) if LightGraphs.weights(gw)[r,c] >0]
+    [ set_prop!(g, r, c, :weight, weights(gw)[r,c]) for r=1:size(weights(gw),1),c=1:size(weights(gw),2) if weights(gw)[r,c] >0]
 
     for eq in eqv
         set_props!(g,first(eq),Dict(:eid=>last(eq)))
@@ -247,7 +247,7 @@ function get_graph(seed,size,topo;k=0,B=0,adj_m_csv=nothing,sep=';')
     ntw = @match topo begin
         GraphModel(0)=> load_graph_from_csv(adj_m_csv;sep=sep)#custom_topo
         GraphModel(2) => MetaGraph( [Int(i) for i in ring_graph(size)])
-        GraphModel(3) => MetaGraph(LightGraphs.complete_graph(size))
+        GraphModel(3) => MetaGraph(complete_graph(size))
         GraphModel(4) => MetaGraph( [Int(i) for i in grid2(Int(sqrt(size)))])
         GraphModel(5) => MetaGraph( [Int(i) for i in Laplacians.star_graph(size)] )
         GraphModel(6) => MetaGraph(barabasi_albert(size,k,seed=seed))

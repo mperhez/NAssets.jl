@@ -2,9 +2,10 @@ module NAssets
 using Agents
 using Plots
 using MetaGraphs
-using Graphs,SimpleWeightedGraphs
+using LightGraphs,SimpleWeightedGraphs
+using LightGraphs: YenState, weights, complete_graph, add_edge!
 using GraphPlot, GraphRecipes, NetworkLayout
-using AgentsPlots
+# using AgentsPlots
 using Tables, DataFrames
 using CSV, JSON, Serialization, DelimitedFiles
 using BritishNationalGrid
