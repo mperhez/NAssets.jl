@@ -47,7 +47,7 @@ ZipFile = "a5390f91-8eb1-5f08-bee0-b1d1ffed6cea"
 [compat]
 julia = "1.5.3"
 LightGraphs = "1.3.5"
-MetaGraphs = "0.6.6"
+MetaGraphs = "0.6.1"
 SimpleWeightedGraphs = "1.1.1"
 GraphRecipes = "0.5.7"
 GraphPlot = "0.4.4"
