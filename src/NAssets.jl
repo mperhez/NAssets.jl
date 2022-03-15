@@ -3,7 +3,7 @@ using Agents
 using Plots
 using MetaGraphs
 using LightGraphs,SimpleWeightedGraphs
-using LightGraphs: YenState, weights, complete_graph, add_edge!
+using LightGraphs: YenState, complete_graph, add_edge!
 using GraphPlot, GraphRecipes, NetworkLayout
 # using AgentsPlots
 using Tables, DataFrames
