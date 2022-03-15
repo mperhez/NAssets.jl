@@ -11,7 +11,7 @@ function load_graph_from_csv(csv_adj_m::String;sep::Char=';')
     #create weighted graph
     wg = SimpleWeightedGraph(am)
     #create metagraph
-    g = MetaGraph(wg)
+    g = MetaGraph(am)
 
     [ set_prop!(g, r, c, :weight, SimpleWeightedGraphs.weights(wg)[r,c]) for r=1:size(SimpleWeightedGraphs.weights(wg),1),c=1:size(SimpleWeightedGraphs.weights(wg),2) if SimpleWeightedGraphs.weights(wg)[r,c] >0]
     return g

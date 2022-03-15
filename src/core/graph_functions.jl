@@ -139,7 +139,7 @@ local vertex id and gv is the global vertex id.
 function create_subgraph(m,eqv)
     gw = SimpleWeightedGraph(m)
     g = MetaGraph(m)
-    [ set_prop!(g, r, c, :weight, weights(gw)[r,c]) for r=1:size(weights(gw),1),c=1:size(weights(gw),2) if weights(gw)[r,c] >0]
+    [ set_prop!(g, r, c, :weight, SimpleWeightedGraphs.weights(gw)[r,c]) for r=1:size(SimpleWeightedGraphs.weights(gw),1),c=1:size(SimpleWeightedGraphs.weights(gw),2) if SimpleWeightedGraph.weights(gw)[r,c] >0]
 
     for eq in eqv
         set_props!(g,first(eq),Dict(:eid=>last(eq)))
