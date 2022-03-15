@@ -19,10 +19,9 @@ version = "3.3.3"
 
 [[Agents]]
 deps = ["CSV", "DataFrames", "DataStructures", "Distributed", "GraphRecipes", "JLD2", "LightGraphs", "LinearAlgebra", "OpenStreetMapX", "ProgressMeter", "Random", "RecipesBase", "Requires", "Scratch", "StatsBase"]
-git-tree-sha1 = "6531b4f565021519149bdbc44e744ec8696ef902"
-pinned = true
+git-tree-sha1 = "7a94d64cc5608a6c23de7cbfe8b27de0dc4566f0"
 uuid = "46ada45e-f475-11e8-01d0-f70cc89e6671"
-version = "4.5.1"
+version = "4.5.7"
 
 [[ArgTools]]
 uuid = "0dad84c5-d112-42e6-8d28-ef12dabb789f"
@@ -699,7 +698,6 @@ version = "0.3.1"
 [[MetaGraphs]]
 deps = ["JLD2", "LightGraphs", "Random"]
 git-tree-sha1 = "9cc756ced4fc5ecfff62605462c1001eec1cf324"
-pinned = true
 uuid = "626554b9-1ddb-594c-aa3c-2596fe9399a5"
 version = "0.6.7"
 
