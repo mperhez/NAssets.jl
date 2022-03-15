@@ -500,10 +500,10 @@ uuid = "82899510-4779-5014-852e-03e436cf321d"
 version = "1.0.0"
 
 [[JLD2]]
-deps = ["CodecZlib", "DataStructures", "MacroTools", "Mmap", "Pkg", "Printf", "Requires", "UUIDs"]
-git-tree-sha1 = "1b8168c14939e43c7c4d2c9e8f0ddd8718965430"
+deps = ["CodecZlib", "DataStructures", "FileIO", "Mmap", "Pkg", "Printf", "UUIDs"]
+git-tree-sha1 = "9353b717ee4e27beab4e902c92a06bb5f160d2cf"
 uuid = "033835bb-8acc-5ee8-8aae-3f567f8a3819"
-version = "0.2.4"
+version = "0.1.14"
 
 [[JLLWrappers]]
 deps = ["Preferences"]
@@ -703,10 +703,10 @@ uuid = "442fdcdd-2543-5da2-b0f3-8c86c306513e"
 version = "0.3.1"
 
 [[MetaGraphs]]
-deps = ["JLD2", "LightGraphs", "Random"]
-git-tree-sha1 = "df1706b656e11e7bcf5997a51501e40fab84f567"
+deps = ["Base64", "JLD2", "LightGraphs", "Random", "Test"]
+git-tree-sha1 = "da4cee2e6e22ff3b44087db96b27a4a094259112"
 uuid = "626554b9-1ddb-594c-aa3c-2596fe9399a5"
-version = "0.6.6"
+version = "0.6.1"
 
 [[Missings]]
 deps = ["DataAPI"]
