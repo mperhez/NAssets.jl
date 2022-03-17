@@ -1,4 +1,4 @@
-export State, GraphModel, ControlAgentState, NetworkAssetState, ModelState, Flow, Flow_Type
+export State, GraphModel, ControlAgentState, NetworkAssetState, ModelState, Flow, Flow_Type, MRule
 """
 Self-organising agent
 """
