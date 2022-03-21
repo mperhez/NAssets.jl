@@ -13,6 +13,7 @@ function initialize(user_props;grid_dims=(3,3),seed=0)
         :pkt_id => 0,
         :amsg_id =>0,
         :ofmsg_id=>0,
+        :capacity_factor=>1.2, #default capacity factor of pkts processed per tick (.2 extra is to have always room for management msgs/pkts.)
         :mapping_ctl_ntw => Dict{Int64,Int64}(), # mapping between (Ctl) Agent and SimNE
         :mapping_ntw_sne => Dict{Int64,Int64}(), #mapping btwn the underlying network and the corresponding simNE agent 
         :ntw_links_msgs=>Dict{Tuple{Int,Int},Vector{Vector{OFMessage}}}(),
@@ -65,14 +66,9 @@ function create_sim_asset_agents!(model)
             _ => MaintenanceInfoCorrective(deterioration,model)
         end
 
-        #for bipartite simulation
-        #TODO move this as parameters.. If node is 19, then capacity is 5x than other nodes which is 1.2x. .2 extra is to have always room for management msgs/pkts.
-        capacity_factor =  id == 19 ? 5 : 1.2 #10
-        processing_factor = id == 19 ? 5 : 1.2 #10
-        a_params[:pkt_per_tick]=processing_factor * 500 #model.pkt_per_tick
-
-        max_q_capacity =  capacity_factor * 500 #a_params[:pkt_per_tick]
-        
+        capacity_factor =  id in model.init_sne_params.ids ? model.init_sne_params.capacity_factor[first(indexin(id,model.init_sne_params.ids))] : model.capacity_factor
+        max_q_capacity =  capacity_factor * model.pkt_per_tick
+        a_params[:pkt_per_tick] = max_q_capacity
         a = add_agent_pos!(
                 SimNE(id,i,a_params,max_q_capacity,mnt),model
             )
