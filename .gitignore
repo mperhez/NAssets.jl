@@ -420,7 +420,8 @@ $RECYCLE.BIN/
 #### Python integration
 
 *.pyc
-
+*.py
+pyopt/*
 #### token
 
 *.git_token
