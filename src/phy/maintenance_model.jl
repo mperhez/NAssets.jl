@@ -228,12 +228,12 @@ function update_maintenance_plan!(a::Agent,mnt_policy::Type{PredictiveM},model::
 
     else
         #data conversion to py, minus 1 as indexes in py start in 0
-        services_py = np.matrix(model.ntw_services) .- 1
-        ruls_py = np.matrix(ruls)
+        services_py = model.py_integration.np.matrix(model.ntw_services) .- 1
+        ruls_py = model.py_integration.np.matrix(ruls)
         #pycall to optimisation function
         log_info(model.ticks,a.id,"srvs=>$(services_py)")
         log_info(model.ticks,a.id,"ruls_py=>$(ruls_py)")
-        mnt_plan, routes = opt_run.maintenance_planning(model.ticks,services_py, ruls_py)
+        mnt_plan, routes = model.py_integration.opt_run.maintenance_planning(model.ticks,services_py, ruls_py)
     end
 
     if !isempty(routes) && !isempty(mnt_plan)

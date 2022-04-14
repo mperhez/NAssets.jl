@@ -280,12 +280,14 @@ function init_agent!(a::Agent,model)
     if a.maintenance.policy !=  CorrectiveM
         schedule_event!(a,CTL_Event(4),a.maintenance.predictive_freq,Array{Int64,1}())
         if a.maintenance.policy ==  PredictiveM
-            #conversion to py
-            ajm_py = np.matrix(adjacency_matrix(a.ntw_graph))
-            opt_init.optimisation_initialisation( ajm_py,
-            model.traffic_dist_params
-            #[1,0.05]
-            , model.mnt_bc_cost, model.mnt_bc_duration, model.mnt_wc_cost, model.mnt_wc_duration)
+            if Symbol("py_integration") in keys(model.properties)
+                #conversion to py
+                ajm_py =  model.py_integration.np.matrix(adjacency_matrix(a.ntw_graph))
+                model.py_integration.opt_init.optimisation_initialisation( ajm_py,
+                model.traffic_dist_params
+                #[1,0.05]
+                , model.mnt_bc_cost, model.mnt_bc_duration, model.mnt_wc_cost, model.mnt_wc_duration)
+            end
         end
     end
 end
