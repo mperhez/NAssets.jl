@@ -165,7 +165,8 @@ function single_run(config)
     args[:max_cache_paths] = config.max_cache_paths
     args[:max_msg_live] = config.max_msg_live
     args[:init_sne_params] = config.init_sne_params
-    args[:init_link_params] = config.init_link_params
+    args[:init_link_params] = Symbol("init_link_params") in keys(config) ? config.init_link_params : ()
+    args[:py_integration] = Symbol("py_integration") in keys(config) ? config.py_integration : ()
     q_ctl_agents = 0
     run_label = get_run_label(config)
     args[:run_label] = run_label
@@ -264,8 +265,27 @@ end
 """
 Creates full config, appending services to base config obtained from a csv file.
 """
-function config(bcfg,ntw_services)
-    config(bcfg,ntw_services,(ids=[],ruls=[]))
+function config(bcfg,ntw_services::Vector{Tuple{Int64, Int64}})
+    config(
+         bcfg
+        ,ntw_services
+        ,(ids=[],ruls=[])
+        ,(ids=[],capacities=[])
+    )
+end
+
+"""
+Creates full config, appending services to base config obtained from a csv file.
+Last parameter is when py_integration is in place for maintenance.
+"""
+function config(bcfg,ntw_services,py_integration::NamedTuple{(:np,:opt_init,:opt_run),Tuple{PyCall.PyObject,PyCall.PyObject,PyCall.PyObject}})
+    config(
+         bcfg
+        ,ntw_services
+        ,(ids=[],ruls=[])
+        ,(ids=[],capacities=[])
+        ,py_integration
+    )
 end
 
 
@@ -273,7 +293,25 @@ end
 Creates full config, appending services to base config obtained from a csv file.
 """
 function config(bcfg,ntw_services,init_sne_params)
-    NamedTuple{Tuple(vcat([:ctl_model,:ntw_topo,:ntw_services, :init_sne_params],collect(keys(bcfg))))}(vcat([ GraphModel(bcfg.ctl_model_n),GraphModel(bcfg.ntw_topo_n),ntw_services,init_sne_params],collect(values(bcfg))))
+    config(
+        bcfg
+       ,ntw_services
+       ,init_sne_params
+       ,(ids=[],capacities=[])
+    )
+end
+
+"""
+Creates full config, appending services to base config obtained from a csv file.
+"""
+function config(bcfg,ntw_services::Vector{Tuple{Int64, Int64}},init_sne_params,py_integration::NamedTuple{(:np,:opt_init,:opt_run),Tuple{PyCall.PyObject,PyCall.PyObject,PyCall.PyObject}})
+    config(
+        bcfg
+       ,ntw_services
+       ,init_sne_params
+       ,(ids=[],capacities=[])
+       ,py_integration
+   )
 end
 
 """
@@ -282,5 +320,34 @@ config(bcfg,ntw_services,init_sne_params,init_link_params)
 Creates full config, appending services to base config obtained from a csv file. It passes custom init sne and link params.
 """
 function config(bcfg,ntw_services,init_sne_params,init_link_params)
-    NamedTuple{Tuple(vcat([:ctl_model,:ntw_topo,:ntw_services, :init_sne_params, :init_link_params],collect(keys(bcfg))))}(vcat([ GraphModel(bcfg.ctl_model_n),GraphModel(bcfg.ntw_topo_n),ntw_services,init_sne_params,init_link_params],collect(values(bcfg))))
+    NamedTuple{Tuple(vcat([:ctl_model,:ntw_topo,:ntw_services, :init_sne_params, :init_link_params],collect(keys(bcfg))))}(
+        vcat(
+                [GraphModel(bcfg.ctl_model_n)
+                ,GraphModel(bcfg.ntw_topo_n)
+                ,ntw_services
+                ,init_sne_params
+                ,init_link_params
+                ]
+                ,collect(values(bcfg))
+                )
+        )
+end
+
+"""
+config(bcfg,ntw_services,init_sne_params,init_link_params,py_interface,py_integration)
+
+Creates full config, appending services to base config obtained from a csv file. It passes custom init sne, link params and py_integration.
+"""
+function config(bcfg,ntw_services,init_sne_params,init_link_params,py_integration::NamedTuple{(:np,:opt_init,:opt_run),Tuple{PyCall.PyObject,PyCall.PyObject,PyCall.PyObject}})
+    NamedTuple{Tuple(vcat([:ctl_model,:ntw_topo,:ntw_services, :init_sne_params, :init_link_params,:py_integration],collect(keys(bcfg))))}(
+        vcat(
+                [GraphModel(bcfg.ctl_model_n)
+                ,GraphModel(bcfg.ntw_topo_n)
+                ,ntw_services
+                ,init_sne_params
+                ,init_link_params
+                ,py_integration]
+                ,collect(values(bcfg))
+                )
+        )
 end
