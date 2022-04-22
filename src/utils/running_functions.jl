@@ -135,7 +135,8 @@ function single_run(config)
     Random.seed!(config.seed)
     args= Dict()
     args[:N]=config.n_steps
-    ntw_graph = load_network_graph(get_graph(config.seed,config.size,config.ntw_topo;k=config.k,B=config.B,adj_m_csv=config.ntw_csv_adj_matrix))
+    g = get_graph(config.seed,config.size,config.ntw_topo;k=config.k,B=config.B,adj_m_csv=config.ntw_csv_adj_matrix)
+    ntw_graph = load_network_graph(g)
     args[:ntw_graph]=ntw_graph
     args[:ctrl_model] = config.ctl_model
     args[:ntw_model] = config.ntw_topo
@@ -218,15 +219,17 @@ function single_run(config)
     model_data = last(result_model)["get_state_trj"]
     model_data = [ (m.tick,m.links_load) for m in model_data ]
 
-    
+    nelements_header = reshape(vcat(["tick"],string.([i for i in fieldnames(NetworkAssetState)])),1,length(fieldnames(NetworkAssetState))+1)
+
     open(sdir * run_label * "_steps_nelements.csv", "w") do io
-        writedlm(io,reshape(vcat(["tick"],string.([i for i in fieldnames(NetworkAssetState)])),1,length(fieldnames(NetworkAssetState))+1),';')
+        writedlm(io,nelements_header,';')
         writedlm(io,nes_1,';') 
     end;
     
+    ctl_header = reshape(vcat(["tick"],string.([i for i in fieldnames(ControlAgentState)])),1,length(fieldnames(ControlAgentState))+1)
 
     open(sdir * run_label * "_steps_ctl_agents.csv", "w") do io
-        writedlm(io,reshape(vcat(["tick"],string.([i for i in fieldnames(ControlAgentState)])),1,length(fieldnames(ControlAgentState))+1),';')
+        writedlm(io,ctl_header,';')
         writedlm(io,ctl_ags_1,';') 
     end;
 
@@ -234,6 +237,8 @@ function single_run(config)
     open(sdir * run_label * "_steps_model.csv", "w") do io
         writedlm(io,model_data,';') 
     end;
+
+    ctl_ags, vnes, modbin
 
 end
 
