@@ -246,10 +246,10 @@ function get_graph(seed,size,topo;k=0,B=0,adj_m_csv=nothing,sep=';')
     Random.seed!(seed)
     ntw = @match topo begin
         GraphModel(0)=> load_graph_from_csv(adj_m_csv;sep=sep)#custom_topo
-        GraphModel(2) => MetaGraph( [Int(i) for i in ring_graph(size)])
+        GraphModel(2) => MetaGraph( [Int(i) for i in LightGraphs.watts_strogatz(size,2,0)])
         GraphModel(3) => MetaGraph(complete_graph(size))
         GraphModel(4) => MetaGraph( [Int(i) for i in grid2(Int(sqrt(size)))])
-        GraphModel(5) => MetaGraph( [Int(i) for i in Laplacians.star_graph(size)] )
+        GraphModel(5) => MetaGraph( SimpleGraph(Int.(hcat(vcat(zeros(1),ones(size-1)),vcat(transpose(ones(size-1)),zeros(size-1,size-1))))) )
         GraphModel(6) => MetaGraph(barabasi_albert(size,k,seed=seed))
         GraphModel(7) => MetaGraph(watts_strogatz(size,k,B,seed=seed))
     end
