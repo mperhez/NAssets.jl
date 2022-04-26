@@ -1,123 +1,49 @@
-function single_run_with_logging(config)
-    run_label = get_run_label(config)
-    io = stdout
-    logger = MessageOnlyLogger(io,Logging.Info)
-    with_logger(logger) do
-        start_time = now()
-        log_info("$start_time: start $run_label")
-        single_run(config)
-        end_time = now()
-        log_info("$end_time: end $run_label. Elapsed: $((end_time - start_time))")
-    end
-end
+"""
 
-function single_run_with_file_logging(config)
-    
+`single_run(config) -> ctl_ags,ne_ags,model`
+
+It runs a single simulation with the passed configuration, returning simulation data in `ctl_ags`,`ne_ags`,`model`. Optionally logging to a  file if parameter `log_to_file` set to `true`.
+
+"""
+function single_run(config;log_to_file=false)
     run_label = get_run_label(config)
 
-    io = open( config.data_dir * run_label * "_log.log", "w+")
-    # logger = SimpleLogger(io,Logging.Debug)
-
-    # logger = FormatLogger() do io, args
-    #     log_info(io, args._module, " | ", "[", args.level, "] ", args.message)
-    # end;
-    # logger = MinLevelLogger(FileLogger(run_label* "_testing.log"), Logging.Info) |> simplified_logger
+    io = log_to_file ? open( config.data_dir * run_label * "_log.log", "w+") : stdout
     
-    # logger = OneLineTransformerLogger(MinLevelLogger(FileLogger( data_dir * run_label* ".log"), Logging.Info)#|> OneLineTransformerLogger
-    # logger = SimpleLogger(stdout, Logging.Debug) |> OneLineTransformerLogger
     logger = MessageOnlyLogger(io,Logging.Info)
-    with_logger(logger) do
+    ctl_ags,ne_ags,model = with_logger(logger) do
         start_time = now()
         log_info("$start_time: start $run_label")
-        single_run(config)
+        ctl_ags,ne_ags,model = run_sim(config)
         end_time = now()
         log_info("$end_time: end $run_label. Elapsed: $((end_time - start_time))")
+        ctl_ags,ne_ags,model
     end
-    flush(io)
-    close(io)
+    if log_to_file
+        flush(io)
+        close(io) 
+    end
+    ctl_ags,ne_ags,model
 end
 
-function load_run_configs() 
-    configs = []
-    for ctl_model in [GraphModel(1)]#, ControlModel(4) ] #instances(ControlModel)
-        for ntw_topo in [GraphModel(0)] #4#6
-            for size in [92]#, 50, 100]
-                for drop_proportion in [10]
-                    for seed in [123]
-                        ks = ntw_topo == GraphModel(6) ||
-                            ntw_topo == GraphModel(7) ? [4] : [0]
-                        ctl_ks = ctl_model == GraphModel(6) ||
-                                ctl_model == GraphModel(7) ? [4] : [0]
-                        Bs = ntw_topo == GraphModel(6) ||
-                                ntw_topo == GraphModel(7) ? [0.8] : [0.0]
-                        ctl_Bs = ctl_model == GraphModel(6) ||
-                                    ctl_model == GraphModel(7) ? [0.8] : [0.0]
-                        
-                        for k in ks
-                            for B in Bs
-                                for ctl_k in ctl_ks
-                                    for ctl_B in ctl_Bs
-                                        push!(configs,new_config(seed,ctl_model,ntw_topo,size,100,drop_proportion,1.0,false,false,k,B,ctl_k,ctl_B,2,[(1,7),(4,1),(5,14),(12,8)],20,10,150.,100.,[1,0.05]))
-                                    end
-                                end
-                            end
-                        end
-                    end
-                end
-            end
-        end
-    end
-    return configs
-end
+"""
 
-function load_run_configs(g_size,m_policy,services,steps) 
-    ntw_graph = g_size == 92 ? 0 : 4
-    configs = []
-    for ctl_model in [GraphModel(1)]#, ControlModel(4) ] #instances(ControlModel)
-        for ntw_topo in [GraphModel(ntw_graph)] 
-            for size in [g_size]
-                for drop_proportion in [10]
-                    for seed in [123]
-                        ks = ntw_topo == GraphModel(6) ||
-                            ntw_topo == GraphModel(7) ? [4] : [0]
-                        ctl_ks = ctl_model == GraphModel(6) ||
-                                ctl_model == GraphModel(7) ? [4] : [0]
-                        Bs = ntw_topo == GraphModel(6) ||
-                                ntw_topo == GraphModel(7) ? [0.8] : [0.0]
-                        ctl_Bs = ctl_model == GraphModel(6) ||
-                                    ctl_model == GraphModel(7) ? [0.8] : [0.0]
-                        
-                        for k in ks
-                            for B in Bs
-                                for ctl_k in ctl_ks
-                                    for ctl_B in ctl_Bs
-                                        push!(configs,new_config(seed,ctl_model,ntw_topo,size,steps,drop_proportion,1.0,false,false,k,B,ctl_k,ctl_B,m_policy,services,20,10,150.,100.,[1,0.05]))
-                                    end
-                                end
-                            end
-                        end
-                    end
-                end
-            end
-        end
-    end
-    return configs
-end
+`get_run_label(config)`
 
+It obtains the label for a simulation run based on the configuration parameters: `config`. Label is based on the graph model of the underlying controlled network and the control network, plus the size, seed and maintenance policy.
 
-
-
+"""
 function get_run_label(config)
     base_label = "$(config.ntw_topo)"
-    if config.ntw_topo == GraphModel(6) ||
-    config.ntw_topo == GraphModel(7)
+    if config.ntw_topo == string.(instances(GraphModel))[6+1] ||
+    config.ntw_topo == string.(instances(GraphModel))[7+1]
         base_label = base_label * "_$(config.k)_$(replace(string(config.B),"."=>""))"
     end
 
     base_label = base_label * "_$(config.ctl_model)"
 
-    if config.ctl_model == GraphModel(6) ||
-        config.ctl_model == GraphModel(7)
+    if config.ctl_model == string.(instances(GraphModel))[6+1] ||
+        config.ctl_model == string.(instances(GraphModel))[7+1]
         base_label = base_label * "_$(config.ctl_k)_$(replace(string(config.ctl_B),"."=>""))"
     end
    
@@ -131,15 +57,24 @@ function get_run_label(config)
     return run_label
 end
 
-function single_run(config)
+"""
+
+`run_sim(config)`
+
+Based on `config` parameters received it creates objects required to trigger simulation run. 
+
+"""
+function run_sim(config)
     Random.seed!(config.seed)
     args= Dict()
     args[:N]=config.n_steps
-    g = get_graph(config.seed,config.size,config.ntw_topo;k=config.k,B=config.B,adj_m_csv=config.ntw_csv_adj_matrix)
+    args[:ctrl_model] = Dict(zip(Symbol.(instances(GraphModel)),instances(GraphModel)))[Symbol(config.ctl_model)]
+    args[:ntw_model] = Dict(zip(Symbol.(instances(GraphModel)),instances(GraphModel)))[Symbol(config.ntw_topo)]
+
+    g = get_graph(config.seed,config.size,args[:ntw_model];k=config.k,B=config.B,adj_m_csv=config.ntw_csv_adj_matrix)
     ntw_graph = load_network_graph(g)
     args[:ntw_graph]=ntw_graph
-    args[:ctrl_model] = config.ctl_model
-    args[:ntw_model] = config.ntw_topo
+    
 
     args[:seed] = config.seed
     args[:benchmark] = config.benchmark
@@ -171,11 +106,11 @@ function single_run(config)
     q_ctl_agents = 0
     run_label = get_run_label(config)
     args[:run_label] = run_label
-    if config.ctl_model == GraphModel(1)
+    if args[:ctrl_model] == GraphModel(1)
         args[:ctl_graph] = MetaGraph()
         q_ctl_agents = 1
     else
-        ctl_graph = get_graph(config.seed,config.size,config.ctl_model;k=config.ctl_k,B=config.ctl_B,adj_m_csv=config.ctl_csv_adj_matrix)
+        ctl_graph = get_graph(config.seed,config.size,args[:ctrl_model];k=config.ctl_k,B=config.ctl_B,adj_m_csv=config.ctl_csv_adj_matrix)
         args[:ctl_graph]=ctl_graph
         q_ctl_agents = nv(ctl_graph)
     end
@@ -242,11 +177,12 @@ function single_run(config)
 
 end
 
-
 """
-load_base_cfgs
+
+`load_base_cfgs`
 
 It loads the simulation config parameters from csv file which location and name is passed. I passes a list with delimiters (delims) used in the file from outer, to inner. Default=[';',',']
+
 """
 function load_base_cfgs(filename;delims=[';',','])
     df_c = CSV.File(filename,types=Dict(:deterioration => Float64),delim=delims[1]) |> DataFrame
@@ -266,9 +202,12 @@ function load_base_cfgs(filename;delims=[';',','])
     return base_cfgs
 end
 
-
 """
+
+`config(bcfg,ntw_services)`
+
 Creates full config, appending services to base config obtained from a csv file.
+
 """
 function config(bcfg,ntw_services::Vector{Tuple{Int64, Int64}})
     config(
@@ -280,8 +219,11 @@ function config(bcfg,ntw_services::Vector{Tuple{Int64, Int64}})
 end
 
 """
-Creates full config, appending services to base config obtained from a csv file.
-Last parameter is when py_integration is in place for maintenance.
+
+`config(bcfg,ntw_services,py_integration`
+
+It passes the last parameter (`py_integration`) with python integration objects when required for maintenance.
+
 """
 function config(bcfg,ntw_services,py_integration::NamedTuple{(:np,:opt_init,:opt_run),Tuple{PyCall.PyObject,PyCall.PyObject,PyCall.PyObject}})
     config(
@@ -293,9 +235,12 @@ function config(bcfg,ntw_services,py_integration::NamedTuple{(:np,:opt_init,:opt
     )
 end
 
-
 """
-Creates full config, appending services to base config obtained from a csv file.
+
+`config(bcfg,ntw_services,init_sne_params)`
+
+It passes a vector with initialisation parameters for simulated network elements (snes).
+
 """
 function config(bcfg,ntw_services,init_sne_params)
     config(
@@ -307,7 +252,10 @@ function config(bcfg,ntw_services,init_sne_params)
 end
 
 """
-Creates full config, appending services to base config obtained from a csv file.
+`config(bcfg,ntw_services,init_sne_params,py_integration)`
+
+It passes vector with initialisation parameters and the parameter (`py_integration`) with python integration objects when required for maintenance
+
 """
 function config(bcfg,ntw_services::Vector{Tuple{Int64, Int64}},init_sne_params,py_integration::NamedTuple{(:np,:opt_init,:opt_run),Tuple{PyCall.PyObject,PyCall.PyObject,PyCall.PyObject}})
     config(
@@ -320,9 +268,9 @@ function config(bcfg,ntw_services::Vector{Tuple{Int64, Int64}},init_sne_params,p
 end
 
 """
-config(bcfg,ntw_services,init_sne_params,init_link_params)
+`config(bcfg,ntw_services,init_sne_params,init_link_params)`
 
-Creates full config, appending services to base config obtained from a csv file. It passes custom init sne and link params.
+It passes custom init sne and link params.
 """
 function config(bcfg,ntw_services,init_sne_params,init_link_params)
     NamedTuple{Tuple(vcat([:ctl_model,:ntw_topo,:ntw_services, :init_sne_params, :init_link_params],collect(keys(bcfg))))}(
@@ -339,9 +287,9 @@ function config(bcfg,ntw_services,init_sne_params,init_link_params)
 end
 
 """
-config(bcfg,ntw_services,init_sne_params,init_link_params,py_interface,py_integration)
+`config(bcfg,ntw_services,init_sne_params,init_link_params,py_interface,py_integration)`
 
-Creates full config, appending services to base config obtained from a csv file. It passes custom init sne, link params and py_integration.
+It passes custom init sne, link params and py_integration.
 """
 function config(bcfg,ntw_services,init_sne_params,init_link_params,py_integration::NamedTuple{(:np,:opt_init,:opt_run),Tuple{PyCall.PyObject,PyCall.PyObject,PyCall.PyObject}})
     NamedTuple{Tuple(vcat([:ctl_model,:ntw_topo,:ntw_services, :init_sne_params, :init_link_params,:py_integration],collect(keys(bcfg))))}(
@@ -356,3 +304,6 @@ function config(bcfg,ntw_services,init_sne_params,init_link_params,py_integratio
                 )
         )
 end
+
+
+
