@@ -1,20 +1,22 @@
 """
-Check if vertex has property
+
+`has_prop_vertex(value,g,prop)`
+
+Check if vertex of the given graph `g` has property `prop` with value `value`.
+
 """
 function has_prop_vertex(value,g,prop)
-    gvs = [ g[v,prop] for v in vertices(g) ]
+    gvs = [ get_prop(g,v,prop) for v in vertices(g) ]
     return value in gvs
 end
 
 """
-Ordering tuples of paths 
-1: tick
-2: score
+`isless_paths(a,b)`
+
+Used to compare and ordering tuples of paths where tuples is of the form `(tick,score)`
+
 """
 function isless_paths(a,b)
-    # return @match a,b begin
-    #     a[2] < b[2] 
-    # end
     if a[2] == b[2]
         return a[1] > b[1]
     else
@@ -23,8 +25,12 @@ function isless_paths(a,b)
 end
 
 """
-Join two subgraphs assuming they are both part of a global graph.
+
+`join_subgraphs(g1,g2)`
+
+It joins two subgraphs assuming they are both part of a global graph.
 The id in the global graph is given by property :eid.
+
 """
 function join_subgraphs(g1,g2)
     gt = deepcopy(g1)
@@ -63,11 +69,14 @@ end
 #function (lg, predictions_traffic, predictions_rul)
 
 """
-Search for a path between nodes s and d in the local graph lg
-It assumes property :eid of each vertex is global id of vertex
-"""
 
-# function query_paths(lg::SimpleWeightedGraph,s,d)
+`query_paths(lg,s,d)`
+
+A wrapper of the Julia Graph ecosystem **shortest_paths** functions.
+It searches for a path between nodes with global id (*eid*) `s` and  `d` in the local graph `lg`.
+It assumes property *:eid* of each vertex is global id of vertex
+
+"""
 function query_paths(lg,s,d)
     ls = to_local_vertex(lg,s)
     ld = to_local_vertex(lg,d)
@@ -76,18 +85,11 @@ function query_paths(lg,s,d)
     result =   YenState{Float64,Int64}(scores,paths)
 
     if ls > 0 && ld > 0
-            #slg = SimpleGraph(lg)
             #return yen_k_shortest_paths(slg,ls,ld, weights(slg),2,Inf)
-            result = yen_k_shortest_paths(lg,ls,ld)
+            result = LightGraphs.yen_k_shortest_paths(lg,ls,ld)
     end
     
-    #gvs = [ lg[v,:eid] for v in vertices(lg)]
-    #log_info("network contains: gvs: $gvs")
-    # log_info("query_path:  g v: $(vertices(lg)), s: $(s) - ls: $(ls), d: $d - ld $ld result ==> $(result)")
-    
-    
     for path in result.paths
-        # path = !isempty(path) && typeof(path) == Array{Array{Int64,1},1} ? first(path) : path
         #convert paths to global graph (eids)
         cpath = [ lg[v,:eid] for v in path]
         push!(paths,cpath)
@@ -100,14 +102,22 @@ function query_paths(lg,s,d)
 end
 
 """
-It gives a score to the given path, initially only based on length of path
+
+`score_path(path)`
+
+Wrapper the path score function. It gives a score to the given path, initially only based on length of path
+
 """
 function score_path(path)
     return length(path)
 end
 
 """
-Local search receiving source and destination in a tuple
+
+`query_paths(lg,t)`
+
+Path search in local graph `lg`, receiving source *s* and destination *d* in a tuple `t`, such as `t`:(*s*,*d*).
+
 """
 function query_paths(lg,t)
     query_paths(lg,t...)
@@ -115,15 +125,23 @@ end
 
 
 """
-obtains local id of a vertex given its global id in property :eid
+
+`to_local_vertex(lg,eid)`
+
+It obtains id of vertex in a local graph `lg` given vertex's global `eid` set to property *:eid*
+
 """
-function to_local_vertex(lg,gv)
-    lv = [ x for x=1:nv(lg) if lg[x,:eid] == gv]
-    return isempty(lv) ? 0 : first(lv)
+function to_local_vertex(lg,eid)
+    return to_local_vertex(lg,eid,:eid)
 end
 
 """
-obtains local id of a vertex given its global id in property in gid
+
+`to_local_vertex(lg,gv,gid)`
+
+It obtains the local id of a vertex in graph `lg` given its global `gv` in property in `gid`
+
+
 """
 function to_local_vertex(lg,gv,gid::Symbol)
     lv = [ x for x=1:nv(lg) if lg[x,gid] == gv]
@@ -131,15 +149,19 @@ function to_local_vertex(lg,gv,gid::Symbol)
 end
 
 """
-Creates a subgraph (MetaGraph) for the given 
-adjacency matrix (m) and vector of equivalences (eqv).
-In eqv, every pair has the form: (lv,gv) where lv is the
-local vertex id and gv is the global vertex id.
+
+`create_subgraph(m,eqv)`
+
+Creates a graph *g* (MetaGraph) for the given adjacency matrix `m`, 
+where *g* represents a subgraph of a global graph.
+The vector `eqv`, gives the tuples: (*lv*,*gv*) where *lv* is the
+local vertex id and *gv* is the global vertex id.
+
 """
 function create_subgraph(m,eqv)
     gw = SimpleWeightedGraph(m)
     g = MetaGraph(m)
-    [ set_prop!(g, r, c, :weight, SimpleWeightedGraphs.weights(gw)[r,c]) for r=1:size(SimpleWeightedGraphs.weights(gw),1),c=1:size(SimpleWeightedGraphs.weights(gw),2) if SimpleWeightedGraph.weights(gw)[r,c] >0]
+    [ set_prop!(g, r, c, :weight, SimpleWeightedGraphs.weights(gw)[r,c]) for r=1:size(SimpleWeightedGraphs.weights(gw),1),c=1:size(SimpleWeightedGraphs.weights(gw),2) if SimpleWeightedGraphs.weights(gw)[r,c] >0]
 
     for eq in eqv
         set_props!(g,first(eq),Dict(:eid=>last(eq)))
@@ -149,10 +171,14 @@ function create_subgraph(m,eqv)
 end
 
 """
-Creates a subgraph (MetaGraph) for the given 
-edge list and vector of equivalences (eqv).
-In eqv, every pair has the form: (lv,gv) where lv is the
-local vertex id and gv is the global vertex id.
+
+`create_subgraph(egs,eqv,gid_prop)`
+
+Creates a graph *g* (MetaGraph) for the given 
+edge list `egs`, where *g* represents a subgraph of a global graph.
+In `eqv`, every pair has the form: (*lv*,*gv*) where *lv* is the
+local vertex id and *gv* is the global vertex id. `gid_prop` indicates the property of *g* used to reference *gv*.
+
 """
 function create_subgraph(egs,eqv,gid_prop)
     #log_info("Creating subgraph egs: $(egs) and eqv: $eqv")
@@ -177,6 +203,13 @@ function create_subgraph(egs,eqv,gid_prop)
     return g
 end
 
+"""
+
+`soft_remove_vertex(g::AbstractGraph,dpn_id::Int)`
+
+Given the graph `g`, this function creates a deep copy of `g` and removes all the edges of the vertex whose global id (*eid*) is `dpn_id` and returns the new graph. The vertex whose id is `dpn_id` is only disconnected from the graph.
+
+"""
 function soft_remove_vertex(g::AbstractGraph,dpn_id::Int)
     
     new_g = deepcopy(g)
@@ -189,39 +222,12 @@ function soft_remove_vertex(g::AbstractGraph,dpn_id::Int)
     return new_g#
 end
 
-function remove_vertex(g::AbstractGraph,dpn_id::Int)
-    sm_g = sparse(g)
-    sm_new_g = spzeros((nv(g)-1),(nv(g)-1))
-    for i=1:nv(g)
-        for j=1:nv(g)
-            #log_info(" $i,$j value: $(sparse(ntw)[i,j])")
-                x,y =   i < dpn_id && j < dpn_id ? (i,j) : 
-                        i < dpn_id && j > dpn_id ? (i,j-1) : 
-                        i > dpn_id && j < dpn_id ? (i-1,j) : 
-                        i > dpn_id && j > dpn_id ? (i-1,j-1) : (0,0)
-                
-                if x > 0 && y > 0
-                    sm_new_g[x,y] = sm_g[i,j]
-                    sm_new_g[y,x] = sm_g[j,i]
-                end
-        end
-    end
-    #[i >=dpn_id ? labels[i] = i+1 : labels[i] = i  for i in keys(labels)]
-    return MetaGraph(sm_new_g)
-end
-
-function remove_vertices(g::AbstractGraph,dpn_ids::Array{Int})
-    new_g = g
-    for dpn_id in dpn_ids
-        new_g = remove_vertex!(new_g,dpn_id)
-    end
-    return new_g
-end
-
 """
+`add_edges_gids(g,lv,nbs_gids,gid)`
+
 Add edges between the local vertex lv and the list of gids (global ids passed) using property gid
 """
-function add_edges_gids(g,lv,nbs_gids,gid)
+function add_edges_gids!(g,lv,nbs_gids,gid)
     nb_lvs = []
     for v in vertices(g)
         if g[v,gid] in nbs_gids
@@ -238,9 +244,9 @@ end
 
 
 """
-get_graph
+`get_graph(seed,size,topo;k=0,B=0,adj_m_csv=nothing,sep=';')`
 
-Get underlying graph, passing the adj matrix and separator.
+Helper function to get underlying graph, passing either the `size` and `topo` required or the name `adj_m_csv` of the csv file with the adjacency matrix and the separator.
 """
 function get_graph(seed,size,topo;k=0,B=0,adj_m_csv=nothing,sep=';')
     Random.seed!(seed)
@@ -254,12 +260,15 @@ function get_graph(seed,size,topo;k=0,B=0,adj_m_csv=nothing,sep=';')
         GraphModel(7) => MetaGraph(watts_strogatz(size,k,B,seed=seed))
     end
 end
+
 """
+`get_subgraph(g,nodes,id_prop)`
+
 It generates subgraph for the vector of nodes passed. This is similar to egonet but it keeps custom indexes given in id_prop parameter.
 
-- g: graph
-- It receives vector of controlled assets (nodes)
-- id_prop: :eid (simNE) or :aid (agent)
+- `g`: graph
+- `nodes`: It receives vector of controlled assets (nodes)
+- `id_prop`: could be either :eid (simNE) or :aid (agent)
 """
 function get_subgraph(g,nodes,id_prop)
     # calculate local subgraph for the underlying network
@@ -291,7 +300,9 @@ function get_subgraph(g,nodes,id_prop)
 end
 
 """
-Load the graph of the network to control
+`load_network_graph(graph::MetaGraph)`
+
+It loads (initialise) the graph of the network to control
 """
 function load_network_graph(graph::MetaGraph)
     ntw = deepcopy(graph)
@@ -300,7 +311,9 @@ function load_network_graph(graph::MetaGraph)
 end
 
 """
-Load the graph of the control system
+`load_control_graph(graph::MetaGraph)`
+
+It Loads(initialises) the graph of the control system
 """
 function load_control_graph(graph::MetaGraph)
     ntw = deepcopy(graph)
@@ -310,7 +323,9 @@ function load_control_graph(graph::MetaGraph)
 end
 
 """
-Find a set of paths in the network such as a given coverage of node is ensured. e.g. if 0.95 is the coverage, it means that 95% of vertices of the graph are included in the resulting set of paths.
+`find_paths_by_seed(seed,g::G,coverage::Float64)`
+
+It finds a set of paths in the graph `g` such as a given `coverage` of node is ensured. e.g. if 0.95 is the coverage, it means that 95% of vertices of the graph are included in the resulting set of paths. 
 """
 
 function find_paths_by_seed(seed,g::G,coverage::Float64)where G<: AbstractGraph
@@ -322,7 +337,7 @@ function find_paths_by_seed(seed,g::G,coverage::Float64)where G<: AbstractGraph
     pending = cci 
     cp =[]
 
-        while length(pending) >= (1- coverage) * nv(g)
+        while length(pending) >= (1- coverage) * nv(g) && !isempty(pending)
             pending_i = [ first(p) for p in pending]
             
             #node with the most closeness_centrality
@@ -349,6 +364,8 @@ end
 
 
 """
+`get_end_points(seed,g::G,coverage::Float64)`
+
 Given a set of paths, return the start and end vertices
 """
 function get_end_points(seed,g::G,coverage::Float64)where G<:AbstractGraph

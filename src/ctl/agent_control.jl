@@ -240,8 +240,8 @@ function controlled_sne_up!(a::Agent,rjn_id::Int,live_nbs::Array{Int64},model::A
     # lvb = nv(a.base_ntw_graph)
     # lvc = nv(a.ntw_graph)
 
-    a.base_ntw_graph = add_edges_gids(a.base_ntw_graph,lvb,live_nbs,:eid)
-    a.ntw_graph = add_edges_gids(a.ntw_graph,lvc,live_nbs,:eid)
+    a.base_ntw_graph = add_edges_gids!(a.base_ntw_graph,lvb,live_nbs,:eid)
+    a.ntw_graph = add_edges_gids!(a.ntw_graph,lvc,live_nbs,:eid)
 end
 
 function get_state(a::Agent)::State

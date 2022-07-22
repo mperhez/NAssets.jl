@@ -58,36 +58,3 @@ function trigger_random_node_drops!(model::ABM)
     end
     
 end
-
-
-
-function hard_drop_node(model)
-    #-1 pick node to remove
-    #0 on_switch event
-    #1remove from network
-    #2in controller: update topology and paths
-    #in switch detect path/port not available and ask controller
-
-    dpn_ids = [3] # dropping node id
-    dpt = 80 # dropping time
-
-    if model.ticks == dpt
-
-        for dpn_id in dpn_ids
-            for nb in all_neighbors(model.ntw_graph,get_address(dpn_id,model.ntw_graph))
-                link_down!(get_eid(nb,model),dpn_id,model)
-            end
-            #remove 
-            dpn_ag = getindex(model,dpn_id)
-            #kill_agent!(dpn_ag,model)
-            set_down!(dpn_ag)
-            delete!(model.mapping_ctl_ntw,dpn_id)
-            #remove_vertices!(model.ntw_graph,[get_address(i,model) for i in dpn_ids])
-            model.ntw_graph = remove_vertex(model.ntw_graph,get_address(dpn_id,model.ntw_graph))
-            update_addresses_removal!(dpn_id,model)
-        end
-        
-        
-    end
-    
-end

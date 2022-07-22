@@ -193,7 +193,7 @@ function load_base_cfgs(filename;delims=[';',','])
             val = @match String(nm) begin
                 #parse "special" csv fields
                 "traffic_dist_params" => parse.([Float64],split(row[:traffic_dist_params][2:end-1],delims[2]))
-                _ => row[nm]
+                _ => ismissing(row[nm]) ? "" : row[nm]
             end
             push!(vals,val)
         end
