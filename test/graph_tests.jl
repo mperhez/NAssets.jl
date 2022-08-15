@@ -1,4 +1,6 @@
 #test data
+using NAssets: has_prop_vertex, isless_paths, join_subgraphs, query_paths, score_path, to_local_vertex, create_subgraph, soft_remove_vertex,  add_edges_gids!, get_subgraph, load_network_graph, find_paths_by_seed, get_end_points
+using LightGraphs, MetaGraphs
 @testset "Graph functions" begin 
 
         amg =  [0  1  1  0  0  0  0  0  0;
@@ -134,7 +136,8 @@
 
         # get_graph
         # minimal test as this is helper function calling library functions from elsewhere.
-        mg1_csv = get_graph(123,5,GraphModel(0);adj_m_csv="test/data/test/in/am1_csv.csv",sep=',')
+        @show pwd()
+        mg1_csv = get_graph(123,5,GraphModel(0);adj_m_csv="data/test/in/am1_csv.csv",sep=',')
 
         @test [ v for v in vertices(mg1_csv) ] == [ v[1] for v in mg1_vs ]
         @test [ (src(e),dst(e)) for e in edges(mg1_csv) ] == mg1_es

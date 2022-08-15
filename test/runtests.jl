@@ -1,4 +1,7 @@
-using Test, NAssets#, SimpleGraphs
+using Test
+using NAssets
+using Agents: vertices
+# using MetaGraphs
 
 config = (
             seed = 1 
