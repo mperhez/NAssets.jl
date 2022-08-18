@@ -137,7 +137,7 @@ using LightGraphs, MetaGraphs
         # get_graph
         # minimal test as this is helper function calling library functions from elsewhere.
         @show pwd()
-        mg1_csv = get_graph(123,5,GraphModel(0);adj_m_csv="data/test/in/am1_csv.csv",sep=',')
+        mg1_csv = get_graph(123,5,GraphModel(0);adj_m_csv="data/test/in/am1_csv.csv",sep=';')
 
         @test [ v for v in vertices(mg1_csv) ] == [ v[1] for v in mg1_vs ]
         @test [ (src(e),dst(e)) for e in edges(mg1_csv) ] == mg1_es
