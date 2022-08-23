@@ -60,7 +60,9 @@ function init_condition!(sne::SimNE,model::ABM)
     # sne.condition_ts = generate_sensor_series(ttf,model.N,Δᵩ,0.05,downtime,funs)
     # vrul = generate_rul_series(ttf,Δᵩ,model.N,downtime)
     # sne.rul = vrul#reshape(vrul,length(vrul),1)
-    Random.seed!(model.seed)
+    if model.seed >= 0
+        Random.seed!(model.seed)
+    end
     #get_random(model.seed,1)
     # TODO check heterogenous assets with different expected rul
     state = get_state(sne)

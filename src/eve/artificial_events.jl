@@ -4,7 +4,9 @@ according to total sim time (N), quantity (q) of
 assets and proportion. It receives also random 
 """
 function get_dropping_times(seed,stabilisation_period,drop_proportion,q,N)
-    Random.seed!(seed)
+    if seed >= 0
+        Random.seed!(seed)
+    end
     #events 
     k = Int(round(q * drop_proportion))
     # k = 30

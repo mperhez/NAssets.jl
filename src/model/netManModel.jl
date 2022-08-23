@@ -2,10 +2,7 @@
 Basic initialization
 """
 function initialize(user_props;grid_dims=(3,3),seed=0)
-    # pulses = []
-    # for i in 1:args[:q]
-    #     push!(pulses,[])
-    # end
+  
 
     # Global model props
     default_props = Dict(
@@ -13,7 +10,6 @@ function initialize(user_props;grid_dims=(3,3),seed=0)
         :pkt_id => 0,
         :amsg_id =>0,
         :ofmsg_id=>0,
-        :capacity_factor=>1.2, #default capacity factor of pkts processed per tick (.2 extra is to have always room for management msgs/pkts.)
         :mapping_ctl_ntw => Dict{Int64,Int64}(), # mapping between (Ctl) Agent and SimNE
         :mapping_ntw_sne => Dict{Int64,Int64}(), #mapping btwn the underlying network and the corresponding simNE agent 
         :ntw_links_msgs=>Dict{Tuple{Int,Int},Vector{Vector{OFMessage}}}(),
@@ -33,7 +29,9 @@ function initialize(user_props;grid_dims=(3,3),seed=0)
     #clear_cache_graph_freq: 10
     #query_cycle: 10
 
-    Random.seed!(seed)
+    if seed >= 0 
+        Random.seed!(seed)
+    end
     props = merge(default_props,user_props)
     #space = GridSpace(grid_dims, moore=true)
     space = GraphSpace(props[:ntw_graph])

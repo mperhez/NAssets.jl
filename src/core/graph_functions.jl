@@ -249,7 +249,7 @@ end
 Helper function to get underlying graph, passing either the `size` and `topo` required or the name `adj_m_csv` of the csv file with the adjacency matrix and the separator.
 """
 function get_graph(seed,size,topo;k=0,B=0,adj_m_csv=nothing,sep=';')
-    Random.seed!(seed)
+    if seed >= 0 Random.seed!(seed) end
     ntw = @match topo begin
         GraphModel(0)=> load_graph_from_csv(adj_m_csv;sep=sep)#custom_topo
         GraphModel(2) => MetaGraph( LightGraphs.watts_strogatz(size,2,0))

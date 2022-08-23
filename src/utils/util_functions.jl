@@ -1,5 +1,7 @@
 function get_random(seed,sequence,distribution)
-    Random.seed!(seed)
+    if seed >= 0
+        Random.seed!(seed)
+    end
     return last(rand(distribution,sequence))
 end
 # function get_random(seed,sequence,list)
