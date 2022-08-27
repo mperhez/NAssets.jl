@@ -177,7 +177,6 @@ using LightGraphs, MetaGraphs
 
         # graphplot(mg1_sg, names = [ get_prop(mg1_sg,i,:eid) for i = 1:nv(mg1_sg)])
         # graphplot(mg1, names = [ get_prop(mg1,i,:eid) for i = 1:nv(mg1)])
-p
 end
 
 
