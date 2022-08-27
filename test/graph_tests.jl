@@ -110,7 +110,7 @@ using LightGraphs, MetaGraphs
         dpn_id = 4
         grv1 = soft_remove_vertex(mg1,dpn_id)
         # oe = [(src(e),dst(e)) for e in edges(mg1)]
-        grv1_es = [(1,2),(1,3),(3,5)]
+        grv1_es = [(1,2),(2,4)]
 
         @test [(src(e),dst(e)) for e in edges(grv1)] == grv1_es
         @test [ (i,get_prop(grv1,i,:eid)) for i = 1:nv(grv1) ] == mg1_vs
@@ -177,6 +177,7 @@ using LightGraphs, MetaGraphs
 
         # graphplot(mg1_sg, names = [ get_prop(mg1_sg,i,:eid) for i = 1:nv(mg1_sg)])
         # graphplot(mg1, names = [ get_prop(mg1,i,:eid) for i = 1:nv(mg1)])
+p
 end
 
 
