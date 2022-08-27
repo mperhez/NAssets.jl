@@ -56,15 +56,20 @@ function create_sim_asset_agents!(model)
         #next_fire = rand(0:0.2:model.:Τ)
         id = nextid(model)
         
-        deterioration = id in model.init_sne_params.ids ? model.init_sne_params.deterioration[first(indexin(id,model.init_sne_params.ids))] : model.deterioration
+        deterioration = typeof(model.init_sne_params) <: NamedTuple && id in model.init_sne_params.ids && Symbol("deterioration") in keys(model.init_sne_params) ? model.init_sne_params.deterioration[first(indexin(id,model.init_sne_params.ids))] : model.deterioration
 
-        mnt = @match model.mnt_policy begin
-            1 => MaintenanceInfoPreventive(deterioration,model)
-            2 => MaintenanceInfoPredictive(deterioration,model)
-            _ => MaintenanceInfoCorrective(deterioration,model)
+        prediction = typeof(model.init_sne_params) <: NamedTuple && id in model.init_sne_params.ids && Symbol("prediction") in keys(model.init_sne_params) ? model.init_sne_params.prediction[first(indexin(id,model.init_sne_params.ids))] : model.prediction
+
+        mnt_policy = typeof(model.init_sne_params) <: NamedTuple && id in model.init_sne_params.ids && Symbol("mnt_policy") in keys(model.init_sne_params) ? model.init_sne_params.mnt_policy[first(indexin(id,model.init_sne_params.ids))] : model.mnt_policy
+
+        mnt = @match mnt_policy begin
+            1 => MaintenanceInfoPreventive(deterioration,prediction,model)
+            2 => MaintenanceInfoPredictive(deterioration,prediction,model)
+            _ => MaintenanceInfoCorrective(deterioration,prediction,model)
         end
+        
+        capacity_factor = typeof(model.init_sne_params) <: NamedTuple &&  id in model.init_sne_params.ids && Symbol("capacity_factor") in keys(model.init_sne_params) ? model.init_sne_params.capacity_factor[first(indexin(id,model.init_sne_params.ids))] : model.capacity_factor
 
-        capacity_factor =  id in model.init_sne_params.ids ? model.init_sne_params.capacity_factor[first(indexin(id,model.init_sne_params.ids))] : model.capacity_factor
         max_q_capacity =  capacity_factor * model.pkt_per_tick
         a_params[:pkt_per_tick] = max_q_capacity
         a = add_agent_pos!(

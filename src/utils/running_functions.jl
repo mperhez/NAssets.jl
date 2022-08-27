@@ -104,12 +104,6 @@ function run_sim(config)
         push!(vnes,ne)
     end
 
-    serialize( sdir * config.run_label * "_steps_ctl_agents.bin",ctl_ags)
-    serialize( sdir * config.run_label * "_steps_nelements.bin",vnes)
-    serialize( sdir * config.run_label * "_steps_model.bin",modbin)
-
-
-
     ctl_ags_1 = [ replace.(ctl_ags_1[i]," Dict{Tuple{Int64,Int64},Array{Tuple{Int64,Float64,Array{Int64,N} where N},N} where N}" => "") for i=1:1]
 
     model_data = last(result_model)["get_state_trj"]
@@ -117,22 +111,28 @@ function run_sim(config)
 
     nelements_header = reshape(vcat(["tick"],string.([i for i in fieldnames(NetworkAssetState)])),1,length(fieldnames(NetworkAssetState))+1)
 
-    open(sdir * config.run_label * "_steps_nelements.csv", "w") do io
-        writedlm(io,nelements_header,';')
-        writedlm(io,nes_1,';') 
-    end;
-    
-    ctl_header = reshape(vcat(["tick"],string.([i for i in fieldnames(ControlAgentState)])),1,length(fieldnames(ControlAgentState))+1)
+    if config.out_to_file 
+        serialize( sdir * config.run_label * "_steps_ctl_agents.bin",ctl_ags)
+        serialize( sdir * config.run_label * "_steps_nelements.bin",vnes)
+        serialize( sdir * config.run_label * "_steps_model.bin",modbin)
 
-    open(sdir * config.run_label * "_steps_ctl_agents.csv", "w") do io
-        writedlm(io,ctl_header,';')
-        writedlm(io,ctl_ags_1,';') 
-    end;
+        open(sdir * config.run_label * "_steps_nelements.csv", "w") do io
+            writedlm(io,nelements_header,';')
+            writedlm(io,nes_1,';') 
+        end;
+        
+        ctl_header = reshape(vcat(["tick"],string.([i for i in fieldnames(ControlAgentState)])),1,length(fieldnames(ControlAgentState))+1)
+
+        open(sdir * config.run_label * "_steps_ctl_agents.csv", "w") do io
+            writedlm(io,ctl_header,';')
+            writedlm(io,ctl_ags_1,';') 
+        end;
 
 
-    open(sdir * config.run_label * "_steps_model.csv", "w") do io
-        writedlm(io,model_data,';') 
-    end;
+        open(sdir * config.run_label * "_steps_model.csv", "w") do io
+            writedlm(io,model_data,';') 
+        end;
+    end
 
     ctl_ags, vnes, modbin
 
@@ -193,19 +193,21 @@ function get_default_config()
         ctl_custom_topo = "nothing", # Deprecated. Used to set custom topo for control network.
         benchmark = false, # It activate benchmarks (BenchmarkTools.jl) for the run. Takes longer.
         animation = false, # Deprecated. Produce simple animantion.
-        
+        out_to_file = false, # Sent sim output to a file
         data_dir = "", # Output data dir
         plots_dir = "", # Deprecated. Directory for plot generation.
         
         
         ## Asset Maintenance Params 
-
-        deterioration = 0.0, # deterioration parameters for network assets. This parameter is used by the `deteriorate!` function in the `physical_model` module.
+        
+        deterioration = [ (rul,t,a) -> rul - a 0.0 ], # deterioration parameters for network assets. This parameter is used by the `deteriorate!` function in the `physical_model` module.
+        prediction = [ (rul,t,a) -> rul - a 0.0 ], # Function used to predict rul of the assets. Default equal to deterioration.
         mnt_policy = 0, # Maintenance policy used in the simulation. 0: Corrective, 1: Preventive, 2: Custom/Optimal
         mnt_wc_duration = 0, # Worst case duration of the maintenance operations (ticks)
         mnt_bc_duration = 0, # Best case duration of the maintenance operations (ticks)
         mnt_wc_cost = 0, # Worst case costs of maintenance operations (££)
         mnt_bc_cost = 0, # Best case costs of maintenance operations (££)
+        deterioration_threshold = 0.1, #Threshold for deterioration of assets i.e. assets will drop when RUL reaches this.
 
         ## Underlying Network & Traffic Params
         ntw_services = [], # List of pairs of nodes of the underlying network where the traffic is flowing. e.g. [(3,7),(8,2)] indicates that 2 services are running in the underlying network. First service implies there is traffic flowing between 3 and 7. Second service, traffic flowing between 8 and 2.
@@ -233,7 +235,7 @@ function get_default_config()
 
         ## Further customisation
 
-        init_sne_params = (ids=[],ruls=[]), # List of node ids and their specific initial parameters. e.g. (ids=[15,19],ruls=[1,0.7],deterioration=[0.2,0.001],capacity_factor=[1.2,5]) This indicates that for node 15, the starting RUL (Remaining Useful Life) will be 1, the deterioration parameter is 0.2 and the packet capacity is 1.2x (pkt_per_tick) . Likewise, for node 19, starting RUL is 0.7, deterioration 0.001 and capacity factor 5x (pkt_per_tick).
+        init_sne_params = (ids=[],ruls=[], deterioration=[],capacity_factor=[],mnt_policy=[],prediction=[]), # List of node ids and their specific initial parameters. e.g. (ids=[15,19],ruls=[1,0.7],deterioration=[0.2,0.001],capacity_factor=[1.2,5]) This indicates that for node 15, the starting RUL (Remaining Useful Life) will be 1, the deterioration parameter is 0.2 and the packet capacity is 1.2x (pkt_per_tick) . Likewise, for node 19, starting RUL is 0.7, deterioration 0.001 and capacity factor 5x (pkt_per_tick).
 
         init_link_params = (ids=[],capacities=[]), # List of links (node pairs) and their specific initial parameters. e.g. (ids=[(15,17),(8,9)],capacities=[200,400]). Setting a capacity of 200 packets per tick for link 15-17 and 400 packets per tick for link 8-9.
 
@@ -259,7 +261,6 @@ function config(bconfig)
     for cfg_param in keys(default_config)
         
         k,v = cfg_param in keys(bconfig) ? (cfg_param, bconfig[cfg_param]) : (cfg_param, default_config[cfg_param])
-        @show k,v, cfg_param
         
         config_d[k] = v
 

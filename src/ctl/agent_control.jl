@@ -207,8 +207,8 @@ function controlled_sne_down!(a::Agent,dpn_id::Int,model)
 
     lvb = to_local_vertex(a.base_ntw_graph,dpn_id)
     lvc = to_local_vertex(a.ntw_graph,dpn_id)
-    a.base_ntw_graph = soft_remove_vertex(a.base_ntw_graph,lvb)
-    a.ntw_graph = soft_remove_vertex(a.ntw_graph,lvc)
+    a.base_ntw_graph =  lvb in [ get_prop(a.base_ntw_graph,j,:eid) for j=1:nv(a.base_ntw_graph) ] ? soft_remove_vertex(a.base_ntw_graph,lvb) : a.base_ntw_graph
+    a.ntw_graph = lvc in [ get_prop(a.ntw_graph,j,:eid) for j=1:nv(a.ntw_graph) ] ?  soft_remove_vertex(a.ntw_graph,lvc) : a.ntw_graph
 
     #TODO implement when a control agent is down too
     # do_drop!(msg,a,model)
@@ -339,13 +339,13 @@ function remove_drop_sne!(a::Agent,dpid::Int64,drop_time::Int64)
    lvb = to_local_vertex(a.base_ntw_graph,dpid)
    lvc = to_local_vertex(a.ntw_graph,dpid)
 
-   log_info(drop_time,a.id," Removing dpid: $dpid from local base: $lvb --- local curr: $lvc")
+#    log_info(drop_time,a.id," Removing dpid: $dpid from local base: $lvb --- local curr: $lvc")
 
    if lvb != 0
-    a.base_ntw_graph = soft_remove_vertex(a.base_ntw_graph,lvb)
+    a.base_ntw_graph = lvb in [ get_prop(a.base_ntw_graph,j,:eid) for j=1:nv(a.base_ntw_graph) ]  ? soft_remove_vertex(a.base_ntw_graph,lvb) : a.base_ntw_graph
    end
    if lvc != 0
-        a.ntw_graph = soft_remove_vertex(a.ntw_graph,lvc)
+        a.ntw_graph =  lvc in [ get_prop(a.ntw_graph,j,:eid) for j=1:nv(a.ntw_graph) ]  ? soft_remove_vertex(a.ntw_graph,lvc) : a.ntw_graph
    end
 
    state = get_state(a)
@@ -366,45 +366,82 @@ It deals with prediction of unavailability (for a given time window) of a set of
 """
 function do_update_flows_from_changes!(a::Agent,ntw_changes::Vector{Int64},model::ABM)
     #TODO operation for other than centralised agent
+    
     if get_state(a).up
 
-        log_info(model.ticks,a.id,"Pred_Down: ntw_changes!!!!!! $(ntw_changes)")
+        # log_info(model.ticks,a.id,"Pred_Down: ntw_changes!!!!!! $(ntw_changes)")
 
         joining_nodes = filter(x->x>0,ntw_changes)
         dropping_nodes = -1 * filter(x->x<0,ntw_changes)
         
+        base_g = deepcopy(a.base_ntw_graph)
         query_graph = deepcopy(a.ntw_graph)
         
-        #add nodes
-        for jng_id in joining_nodes
-            query_graph = soft_remove_vertex(query_graph,jng_id)
+        #check graphs consistency
+        ## for each node in G
+        ## check if there is node is up in  model
+        ## if it is not then soft_remove from graph and update
 
-            base_g = a.base_ntw_graph
+        lsnes = get_live_snes(model)
 
-            lv = to_local_vertex(base_g,jng_id)
-            nbs = neighbors(base_g,lv)
+        bg_vs = [ get_prop(base_g,v,:eid) for v in 1:nv(base_g) ]
+        qg_vs = [ get_prop(query_graph,v,:eid) for v in 1:nv(query_graph) ]
 
-            #TODO check if nbs is up?
-
-            for nb_id in nbs
-                add_edge!(query_graph,nb_id,jng_id)
-                add_edge!(query_graph,jng_id,nb_id)
+        for gid in bg_vs 
+            if ~(gid in lsnes)
+                base_g = soft_remove_vertex(base_g,gid)
             end
         end
 
-        #remove nodes
+        for gid in qg_vs 
+            if ~(gid in lsnes)
+                query_graph = soft_remove_vertex(query_graph,gid)
+            end
+        end
+
+        # log_info(model.ticks,a.id,"[A] Base graph:  $([ get_prop(base_g,v,:eid) for v in 1:nv(base_g)]) -- edges: $([e for e in edges(base_g)])")
+        # log_info(model.ticks,a.id,"[A] query graph:  $([ get_prop(query_graph,v,:eid) for v in 1:nv(query_graph)]) -- edges: $([e for e in edges(query_graph)])")
+        # log_info(model.ticks,a.id," jnodes -> $joining_nodes")
+        #add nodes
+        for jng_id in joining_nodes
+
+            #remove node from existing query graph if exists, to refresh with base graph
+            lvq = to_local_vertex(query_graph,jng_id)
+            query_graph = lvq in [ get_prop(query_graph,j,:eid) for j=1:nv(query_graph) ]  ? soft_remove_vertex(query_graph,lvq) : query_graph
+            
+            lv = to_local_vertex(base_g,jng_id)
+            nbs = lv != 0 ? neighbors(base_g,lv) : []
+            # log_info(model.ticks,a.id," jnode_id -> $jng_id -- lv: $lv")
+            #TODO check if nbs is up?
+            #restore links in query_grpah from base ntw_graph
+            # log_info(model.ticks,a.id,"nbs: $nbs")
+            for nb_id in nbs
+                if is_up(getindex(model,nb_id))
+                    add_edge!(query_graph,nb_id,jng_id)
+                    add_edge!(query_graph,jng_id,nb_id)
+                end
+
+            end
+        end
+
+        #remove nodes if present in query graph
         for dpn_id in dropping_nodes
-            query_graph = soft_remove_vertex(query_graph,dpn_id)
+            # log_info(model.ticks,a.id," dnode_id -> $dpn_id")
+            lv = to_local_vertex(query_graph,dpn_id)
+            query_graph = lv in [ get_prop(query_graph,j,:eid) for j=1:nv(query_graph) ]  ? soft_remove_vertex(query_graph,dpn_id) : query_graph
         end
 
         query_time = model.ticks
         
         #Only trigger queries if maintenance policy is not predictive (where routes/flows come from the optimisation algorithm)
         queries = a.maintenance.policy != PredictiveM  ? model.ntw_services : []
-
+        
+        #TODO Why query graph has nodes that are down??
+        # log_info(model.ticks,a.id,"[B] Base graph:  $([ get_prop(base_g,v,:eid) for v in 1:nv(base_g)])")
+        # log_info(model.ticks,a.id,"[B] query graph:  $([ get_prop(query_graph,v,:eid) for v in 1:nv(query_graph)])")
+                    
         for query in queries
-            query_paths = Dict{Tuple{Int64,Int64},Array{Tuple{Int64,Float64,Float64,Array{Int64}}}}()
-
+            query_paths = Dict{Tuple{Int64,Int64},Array{Tuple{Int64,Float64,Float64,Array{Int64}}}}()  
             path = do_query(query_time,query,query_graph,query_paths)
             
             if isempty(path)
@@ -432,7 +469,7 @@ Update flows of the snes controlled by the agent a and for the path given,
 function do_update_flows_from_path!(a::Agent,path::Array{Int64,1},model::ABM)
     msg = OFMessage(-1, model.ticks,-1,0,OFPR_ADD_FLOW,[])
     # log_info(model.ticks,a.id,"active path: $path")
-    install_flow!(a,path,model,msg)
+    # install_flow!(a,path,model,msg)
     if length(path) > 1
         k = (first(path),last(path))
         # log_info(model.ticks,a.id,"key: $(k) ==> Ag Path: $spath")

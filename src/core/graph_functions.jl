@@ -213,11 +213,14 @@ Given the graph `g`, this function creates a deep copy of `g` and removes all th
 function soft_remove_vertex(g::AbstractGraph,dpn_id::Int)
     
     new_g = deepcopy(g)
-    nbs₀ = deepcopy(all_neighbors(new_g,dpn_id))
+    l_dpn_id = to_local_vertex(new_g,dpn_id) # local id of dpn_id
+    
+    # @show [ get_prop(new_g,j,:eid) for j=1:nv(new_g) ] 
+    nbs₀ = deepcopy(all_neighbors(new_g,l_dpn_id))
 
     for nb in nbs₀
-        rem_edge!(new_g,dpn_id,nb)
-        rem_edge!(new_g,nb,dpn_id)
+        rem_edge!(new_g,l_dpn_id,nb)
+        rem_edge!(new_g,nb,l_dpn_id)
     end
     return new_g#
 end

@@ -219,13 +219,16 @@ mutable struct MaintenanceInfo
     duration::Int64
     # Cost of this type of maintenance
     cost::Float64
-    #To trigger preventive maintenance ahead of breakdown
-    threshold::Int64
+    #Threshold for triggering maintenance. 
+    threshold::Float64
+    # prediction function and parameters in an array
+    prediction::Array{Any}
     #How often rul predictions are run
     predictive_freq::Int64 
     # how many steps ahead the prediction is going to be for
     prediction_window::Int64
-    deterioration_parameter::Float64
+    # deterioration function and parameters in an array
+    deterioration::Array{Any}
     #Duration of the corrective maintenance
     reference_duration::Int64 
     #Cost of the corrective maintenance

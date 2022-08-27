@@ -49,12 +49,18 @@ function init_maintenance!(sne::SimNE,model::ABM)
     state = get_state(sne)
     #init with according to factory estimated parameters
     state.rul_e = state.rul
-    state.maintenance_due = state.rul_e - sne.maintenance.threshold
+    state.maintenance_due = state.rul_e - Int(round(sne.maintenance.threshold))
     set_state!(sne,state)
 end
 
+"""
+`start_mnt!(a::Agent,sne::SimNE,model::ABM)`
+
+It simulates start of maintenance.
+
+"""
 function start_mnt!(a::Agent,sne::SimNE,model::ABM)
-    log_info(model.ticks,a.id,"Starting mnt... $(sne.id)")
+    # log_info(model.ticks,a.id,"Starting mnt... $(sne.id)")
     sne.maintenance.job_start = model.ticks
     state = get_state(sne)
     state.up = false
@@ -62,31 +68,36 @@ function start_mnt!(a::Agent,sne::SimNE,model::ABM)
     state.on_maintenance = true
     set_state!(sne,state)
     drop_node!(sne,model)
-    finish_mnt = model.ticks + a.maintenance.duration
+    finish_mnt = model.ticks + sne.maintenance.duration
     # log_info(model.ticks,a.id,"schedulling up of $(sne.id) for... $(finish_mnt)")
-    if sne.id != 15
-        schedule_event!(a,CTL_Event(3),finish_mnt,[sne.id])
-    end
+    schedule_event!(a,CTL_Event(3),finish_mnt,[sne.id])
 end
 
+"""
+`stop_mnt!(a::Agent,sne::SimNE,model::ABM)`
+
+It simulates completion of maintenance, refilling RUL and rejoining asset to the network.
+
+"""
 function stop_mnt!(a::Agent,sne::SimNE,model::ABM)
-    log_info(model.ticks,a.id,"Stopping mnt...$(sne.id)")
+    # log_info(model.ticks,a.id,"Stopping mnt...$(sne.id)---will restore to eul: $(sne.maintenance.eul)")
     state = get_state(sne)
     state.up = true
     state.on_maintenance = false
     state.rul = sne.maintenance.eul
-    state.maintenance_due = sne.maintenance.job_start + sne.maintenance.duration + sne.maintenance.eul - sne.maintenance.threshold
+    state.maintenance_due = sne.maintenance.job_start + sne.maintenance.duration + sne.maintenance.eul - Int(round(sne.maintenance.threshold))
     sne.maintenance.job_start = -1
     set_state!(sne,state)
     rejoin_node!(model,sne.id)
-    #Only if the agent's maintenance policy is corrective
-    if a.maintenance.policy == CorrectiveM
+    #Only if the agent's maintenance policy is corrective??
+    # if sne.maintenance.policy == CorrectiveM
         schedule_event!(a,CTL_Event(1), model.ticks + 2, [sne.id])
-    end
+        # log_info(model.ticks,a.id," Event...$(CTL_Event(1)) scheduled for $(sne.id) at $(model.ticks + 2) ")
+    # end
 end
 
 function start_mnt!(sne::SimNE,time_start::Int64,mnt_policy::Type{CorrectiveM})
-    log_info(time_start,sne.id,"Starting corrective maintenance...")
+    # log_info(time_start,sne.id,"Starting corrective maintenance...")
     
     start_mnt!(sne,time_start)
 
@@ -98,10 +109,10 @@ function start_mnt!(sne::SimNE,time_start::Int64,mnt_policy::Type{PreventiveM})
 end
 
 function stop_mnt!(sne::SimNE,mnt_policy::Type{CorrectiveM},model::ABM)
-    log_info(model.ticks,sne.id,"Stopping corrective maintenance for $(nv(model.ntw_graph))...")
+    # log_info(model.ticks,sne.id,"Stopping corrective maintenance for $(nv(model.ntw_graph))...")
     rejoin_node!(model,sne.id)
     stop_mnt!(sne)
-    log_info(model.ticks,sne.id,"Stopped maintenance for $(nv(model.ntw_graph))...")
+    # log_info(model.ticks,sne.id,"Stopped maintenance for $(nv(model.ntw_graph))...")
 end
 
 function stop_mnt!(sne::SimNE,mnt_policy::Type{PreventiveM},model::ABM)
@@ -111,7 +122,7 @@ end
 
 function get_rul_predictions(sne::SimNE,current_time::Int64,window_size::Int64)::Vector{Float64}
     rul = get_state(sne).rul
-    return [ lineal_d(sne.maintenance.deterioration_parameter,rul,t) for t = 1 : window_size  ]
+    return [ first(sne.maintenance.prediction)(rul,t,last(sne.maintenance.prediction,size(sne.maintenance.prediction,2)-1)...) for t = 1 : window_size  ]
 end
 
 # """
@@ -151,34 +162,36 @@ function schedule_event!(a::Agent,type::CTL_Event,time::Int64)
     schedule_event!(a,type,time,Array{Int64,1}())
 end
 
-# function schedule_maintenance!(a::Agent,mnt_due::Int64,sne_id::Int64)
-#     #sne.id => i, time => mnt_due
-#             #schedule start and stop of maintenance job
-#             if !haskey(a.maintenance.pending_jobs_start,mnt_due)
-#                 a.maintenance.pending_jobs_start[mnt_due] = []
-#             end
-#             if !haskey(a.maintenance.pending_jobs_stop,mnt_due+a.maintenance.duration+1)
-#                 a.maintenance.pending_jobs_stop[mnt_due+a.maintenance.duration+1] = []
-#             end
-#             push!(a.maintenance.pending_jobs_start[mnt_due],sne_id)
-#             push!(a.maintenance.pending_jobs_stop[mnt_due+a.maintenance.duration+1],sne_id)
-# end
 
+"""
+`update_maintenance_plan!(a::Agent,mnt_policy::Type{PreventiveM},model::ABM)`
+
+It schedules maintenance events (start/stop maintenance) for assets under control of `a` that are configured with preventive and predictive `mnt_policy`
+
+"""
 function update_maintenance_plan!(a::Agent,mnt_policy::Type{PreventiveM},model::ABM)
+    # log_info(model.ticks,a.id,"Updating mnt plan for $(a.id) -- controlled snes: $(get_controlled_assets(a.id,model))...")
+    controlled_snes = get_controlled_assets(a.id,model)
+    controlled_snes_pred = [ sne for sne in getindex.([model],controlled_snes) if sne.maintenance.policy != CorrectiveM ]
+    sne_ids_pred = [sne.id for sne in controlled_snes_pred]
     window_size = a.maintenance.prediction_window
     #use the maintenance window from the end - window size
     ruls = a.rul_predictions[:,size(a.rul_predictions,2)-window_size+1:size(a.rul_predictions,2)]
     #mnt_plan = 
+    # log_info(model.ticks,a.id," ruls predicted=> $ruls <==")
     for i=1:size(ruls,1)
-        if !get_state(getindex(model,i)).on_maintenance
+        sne = getindex(model,sne_ids_pred[i])
+
+        if !get_state(sne).on_maintenance && sne.id in sne_ids_pred
             #sum all where rul is <= threshold, if any > 0, then sum > 0
             threshold_reached = sum(ruls[i,size(ruls,2)-window_size+1:size(ruls,2)] .<= a.maintenance.threshold) > 0
             if threshold_reached#!isempty(threshold_reached)
                 #negative indicates i goes down for maintenance
                 #1st reroute traffic out of node
-                schedule_event!(a,CTL_Event(1),model.ticks + minimum(threshold_reached),[-1*i])
+                schedule_event!(a,CTL_Event(1),model.ticks + minimum(threshold_reached),[-1*sne.id])
                 #2nd perform maintenance
-                schedule_event!(a,CTL_Event(2),model.ticks + minimum(threshold_reached)+2,[-1*i])
+                schedule_event!(a,CTL_Event(2),model.ticks + minimum(threshold_reached)+2,[-1*sne.id])
+                # log_info(model.ticks,a.id," Event scheduled for $(a.id) -> $i at $(model.ticks + minimum(threshold_reached)+2)....$([-1*sne.id])")
             end
         end
     end
@@ -213,7 +226,12 @@ function process_route!(a::Agent,rw,model::ABM)
     schedule_event!(a,CTL_Event(5),time,path)
 end
 
+"""
+`update_maintenance_plan!(a::Agent,mnt_policy::Type{PreventiveM},model::ABM)`
 
+It schedules maintenance events (start/stop maintenance) for assets under control of `a` that are configured with predictive `mnt_policy`
+
+"""
 function update_maintenance_plan!(a::Agent,mnt_policy::Type{PredictiveM},model::ABM)
     window_size = a.maintenance.prediction_window * 2
     ruls = a.rul_predictions[:,size(a.rul_predictions,2)-window_size+1:size(a.rul_predictions,2)]
@@ -242,8 +260,8 @@ function update_maintenance_plan!(a::Agent,mnt_policy::Type{PredictiveM},model::
             routes = transpose(reshape(routes,size(ruls,1) + 2,:))
         end
         
-        log_info(model.ticks,a.id," From Alena's algo PLAN: $(mnt_plan)")
-        log_info(model.ticks,a.id," From Alena's algo=> ROUTES: $(routes)")
+        # log_info(model.ticks,a.id," From optimisation algo PLAN: $(mnt_plan)")
+        # log_info(model.ticks,a.id," From optimisation algo=> ROUTES: $(routes)")
         
         #convert routes from py to julia indexes
         routes = routes .+ 1
@@ -271,7 +289,7 @@ end
 It processes scheduled events
 """
 function do_events_step!(a::Agent,model::ABM)
-    # log_info(model.ticks,a.id,17,"processing events: $(a.events) ")
+    # log_info(model.ticks,a.id,"processing events: $(a.events) ")
     if haskey(a.events,model.ticks)
         evs = a.events[model.ticks]
         ntw_changes = Array{Int64,1}()
@@ -318,22 +336,22 @@ Run RUL predictions for the assets controlled by agent ``a``
 """
 function do_rul_predictions!(a::Agent,model::ABM)
     window_size = a.maintenance.prediction_window * 2
-
+    # log_info(model.ticks,a.id,"Running RUL predictions...")
     #sort snes by id, works either for centralised (all assets one control agent or decentralised 1 asset per agent) #TODO decentralised with more than 1 asset per agent.
-    # sne_ids = sort(collect(get_controlled_assets(a.id,model)))
-    sne_ids = collect(1:nv(a.base_ntw_graph))
-
-    snes = getindex.([model],sne_ids)
-    
-    #log_info(model.ticks,a.id,"sne_ids: $(sne_ids)")
+    sne_ids = sort(collect(get_controlled_assets(a.id,model)))
+    #sne_ids = collect(1:nv(a.base_ntw_graph))
+    snes = [ sne for sne in getindex.([model],sne_ids) if sne.maintenance.policy != CorrectiveM ]
+    sne_ids_pred = [sne.id for sne in snes]
+    # log_info(model.ticks,a.id,"sne_ids: $(sne_ids)")
     
     #arrange predictions in a matrix of dims: length(snes) x window_size.
     ruls_pred = permutedims(hcat(get_rul_predictions.(snes,[model.ticks],[window_size])...))
     a.rul_predictions = length(a.rul_predictions) > 0 ? hcat(a.rul_predictions,ruls_pred) : ruls_pred
     # log_info(model.ticks,a.id," length: $(size(a.rul_predictions)) rul pred: $(a.rul_predictions)")
     # log_info(model.ticks,a.id,"Pred Maint=> services: $(model.ntw_services))")
-
-    update_maintenance_plan!(a,a.maintenance.policy,model)
+    if !isempty(sne_ids_pred)
+        update_maintenance_plan!(a,a.maintenance.policy,model)
+    end
     #collect(get_controlled_assets(a.id,model))
     #run next prediction
     schedule_event!(a,CTL_Event(4),model.ticks+a.maintenance.predictive_freq)
@@ -413,24 +431,24 @@ function is_start_mnt(sne::SimNE,mnt_policy::Type{PreventiveM},model::ABM)
     return get_state(sne).maintenance_due == model.ticks
 end
 
-function MaintenanceInfoCorrective(deterioration::Float64,model)
+function MaintenanceInfoCorrective(deterioration::Array{Any},prediction::Array{Any},model)
     # TODO adjust to multiple eul. For time being, always 100. 
-    return MaintenanceInfo(CorrectiveM,100,-1,model.mnt_wc_duration,model.mnt_wc_cost,0,0,0,deterioration,model.mnt_wc_duration,model.mnt_wc_cost)
+    return MaintenanceInfo(CorrectiveM,100,-1,model.mnt_wc_duration,model.mnt_wc_cost,0.1,prediction,0,0,deterioration,model.mnt_wc_duration,model.mnt_wc_cost)
 end
 function MaintenanceInfoCorrective(model)
-    MaintenanceInfoCorrective(1.,model)
+    MaintenanceInfoCorrective([],[],model)
 end
-function MaintenanceInfoPreventive(deteriation::Float64,model)
-    return MaintenanceInfo(PreventiveM,100,-1,model.mnt_bc_duration,model.mnt_bc_cost,10,10,10,deteriation,model.mnt_wc_duration,model.mnt_wc_cost)
+function MaintenanceInfoPreventive(deterioration::Array{Any},prediction::Array{Any},model)
+    return MaintenanceInfo(PreventiveM,100,-1,model.mnt_bc_duration,model.mnt_bc_cost,10.,prediction,10,10,deterioration,model.mnt_bc_duration,model.mnt_bc_cost)
 end
 function MaintenanceInfoPreventive(model)
-    MaintenanceInfoPreventive(1.,model)
+    MaintenanceInfoPreventive([],[],model)
 end
-function MaintenanceInfoPredictive(deterioration::Float64,model)
-    return MaintenanceInfo(PredictiveM,100,-1,model.mnt_bc_duration,model.mnt_bc_cost,20,10,10,deterioration,model.mnt_wc_duration,model.mnt_wc_cost)
+function MaintenanceInfoPredictive(deterioration::Array{Any},prediction::Array{Any},model)
+    return MaintenanceInfo(PredictiveM,100,-1,model.mnt_bc_duration,model.mnt_bc_cost,20.,prediction,10,10,deterioration,model.mnt_bc_duration,model.mnt_bc_cost)
 end
 function MaintenanceInfoPredictive(model)
-    MaintenanceInfoPredictive(1.,model)
+    MaintenanceInfoPredictive([],[],model)
 end
 
 ### TODO REVIEW ##
