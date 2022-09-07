@@ -439,7 +439,7 @@ pyopt/*
 *.mkv
 *.pptx
 *.pdf
-*.png
+#*.png
 *.bin
 demo/*
 data/*
