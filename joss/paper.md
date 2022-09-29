@@ -39,6 +39,7 @@ The simulation of asset condition and performance dynamics has been widely used 
 These challenges are evident as most of the simulation environments used so far for asset management evaluation are ad hoc implementations, focused on the challenges being addressed in given work [TBC].
 
 NAssets.jl can be used as a boilerplate for simulation of individual but specially networked assets dynamics. This way researchers and practitioners can define the characteristics and condition behaviours of a fleet or portfolio of assets where, by default, links among them represent operational flows. Then network-wide behaviour can be analysed for a given network configuration and operational patterns of the individual assets. 
+
 NAssets.jl is contextualised in nationwide telecom networks, integrating a traffic flow management and routing based on Openflow[TBC]. However, asset condition, control and network elements and behaviours are general and can be exploited to analyse networked-assets in different contexts. 
 
 <!-- normally assets are studied individually or in reduced groups, isolating other perspectives than have the potential to influence management decisions. Likewise, evaluation of approaches  -->
