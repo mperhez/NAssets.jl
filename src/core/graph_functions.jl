@@ -257,7 +257,7 @@ function get_graph(seed,size,topo;k=0,B=0,adj_m_csv=nothing,sep=';')
         GraphModel(0)=> load_graph_from_csv(adj_m_csv;sep=sep)#custom_topo
         GraphModel(2) => MetaGraph( LightGraphs.watts_strogatz(size,2,0))
         GraphModel(3) => MetaGraph(LightGraphs.complete_graph(size))
-        GraphModel(4) => MetaGraph( Int.(Laplacians.grid2(Int(sqrt(size)))))
+        GraphModel(4) => MetaGraph( LightGraphs.SimpleGraphs.grid([Int(round(sqrt(size))),Int(round(sqrt(size)))]))
         GraphModel(5) => MetaGraph( SimpleGraph(Int.(hcat(vcat(zeros(1),ones(size-1)),vcat(transpose(ones(size-1)),zeros(size-1,size-1))))) )
         GraphModel(6) => MetaGraph(barabasi_albert(size,k,seed=seed))
         GraphModel(7) => MetaGraph(watts_strogatz(size,k,B,seed=seed))
