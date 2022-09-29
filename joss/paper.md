@@ -23,7 +23,7 @@ affiliations:
    index: 1
  - name: University of Cambridge
    index: 2
-date: 21 June 2022
+date: 29 September 2022
 bibliography: paper.bib
 
 ---
@@ -35,11 +35,11 @@ NAssets.jl is a Julia package that provides an environment for simulation of ass
 
 # Statement of need
 
-The simulation of asset condition and performance dynamics has been widely used by engineering researchers and practitioners as a tool for evaluating prediction algorithms, maintenance strategies and other asset management approaches []. However, there are three key challenges that slow down the evaluation of these approaches: 1) lack of open source asset management reusable simulation tools, 2) individual asset-centred analysis and 3) weak integration of asset's context-specific dynamics. 
-These challenges are evident as most of the simulation environments used so far for asset management evaluation are ad hoc implementations, focused on the challenges being addressed in given work [].
+The simulation of asset condition and performance dynamics has been widely used by engineering researchers and practitioners as a tool for evaluating prediction algorithms, maintenance strategies and other asset management approaches [TBC]. However, there are three key challenges that slow down the evaluation of these approaches: 1) lack of open source asset management reusable simulation tools, 2) individual asset-centred analysis and 3) weak integration of asset's context-specific dynamics. 
+These challenges are evident as most of the simulation environments used so far for asset management evaluation are ad hoc implementations, focused on the challenges being addressed in given work [TBC].
 
 NAssets.jl can be used as a boilerplate for simulation of individual but specially networked assets dynamics. This way researchers and practitioners can define the characteristics and condition behaviours of a fleet or portfolio of assets where, by default, links among them represent operational flows. Then network-wide behaviour can be analysed for a given network configuration and operational patterns of the individual assets. 
-NAssets.jl is contextualised in nationwide telecom networks, integrating a traffic flow management and routing based on Openflow[]. However, asset condition, control and network elements and behaviours are general and can be exploited to analyse networked-assets in different contexts. 
+NAssets.jl is contextualised in nationwide telecom networks, integrating a traffic flow management and routing based on Openflow[TBC]. However, asset condition, control and network elements and behaviours are general and can be exploited to analyse networked-assets in different contexts. 
 
 <!-- normally assets are studied individually or in reduced groups, isolating other perspectives than have the potential to influence management decisions. Likewise, evaluation of approaches  -->
 <!-- Julia is a young language with a neat intuitive syntax, a solid performance and promising library ecosystem. -->
