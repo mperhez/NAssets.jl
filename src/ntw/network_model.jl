@@ -96,9 +96,11 @@ function generate_traffic!(model)
         sne_src = getindex(model,src)
         sne_dst = getindex(model,dst)
         if is_up(sne_src) && is_up(sne_dst)
-            # log_info(model.ticks,sne_src.id,"pkts generate: $(q_pkts) --> $(length(sne_src.queue.data))")
             if q_pkts > sne_src.queue.sz_max - length(sne_src.queue.data)  - Int(round(sne_src.queue.sz_max * .2))
-                log_info(model.ticks,sne_src.id,"Traffic generated in origin ($(q_pkts)) greater than current node queue capacity ($(sne_src.queue.sz_max - sne_src.queue.sz_max - length(sne_src.queue.data))) reducing pkts in origin to max. ")
+                log_info(model.ticks,sne_src.id,"Traffic generated in origin ($(q_pkts)) greater than current node queue capacity ( $( 
+                    sne_src.queue.sz_max - sne_src.queue.sz_max - length(sne_src.queue.data) > 0 ?
+                    sne_src.queue.sz_max - sne_src.queue.sz_max - length(sne_src.queue.data) : 0 
+                    )) reducing pkts in origin to max capacity. ")
                 q_pkts = sne_src.queue.sz_max - length(sne_src.queue.data) - Int(round(sne_src.queue.sz_max * .2))
             end
             for i =1:q_pkts
