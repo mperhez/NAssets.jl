@@ -92,7 +92,9 @@ function do_agent_step!(a::Agent,model)
         # end        
 
         ## Process OF Messages (SimNE to (sdn) control messages)
-        is_ready(a) ? in_packet_processing(a,model) : log_info("queue of $(a.id) is empty")
+        if is_ready(a) 
+             in_packet_processing(a,model)
+        end
         # Process inter-agent messages
         # log_info(model.ticks,a.id,"==> a.paths ==> $(a.paths) ===> $(a.msgs_in) <==")
         do_receive_messages(a,model)
