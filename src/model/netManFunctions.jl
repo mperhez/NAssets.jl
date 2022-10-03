@@ -75,14 +75,10 @@ end
 function do_agent_step!(a::SimNE,model)
     #Process OF messages (packet data traffic)
     # log_info(model.ticks,a.id, "start step! $(get_state(a).up) ==> $(get_state(a).rul)")
-    # log_info(model.ticks,a.id,12, "====> ports: $(get_port_edge_list(a))<====")
+    
     is_up(a) && is_ready(a) ? in_packet_processing(a,model) : nothing 
     clear_pending_query!(a,model)
-    # log_info(model.ticks,a.id,"rqsted: $(a.requested_ctl)")
-    # @debug("[$(model.ticks)]($(a.id)) end step")
-    # if model.ticks == 100
-    #     a.maintenance.deterioration_parameter = 0.7 
-    # end
+   
     deteriorate!(a,model)
 end
 
@@ -90,7 +86,7 @@ function do_agent_step!(a::Agent,model)
     #Schedule events regardless of state of ctl agent to make sure that controlled snes are brought back up 
     #This is the first function to make sure that nodes that are down are recognised by others.
     do_events_step!(a,model)
-    if is_up(a) && length(a.queue.data) > 0
+    if is_up(a) && (length(a.msgs_in)> 0 || length(a.queue.data) > 0)
         # for sprt in sne_print
         #     log_info(model.ticks,a.id," step!: {$(sprt.id)} $(get_state(sprt).flow_table) ===> all ports: $(get_port_edge_list(sprt)) ===> paths: $(a.paths)")
         # end        
@@ -98,7 +94,7 @@ function do_agent_step!(a::Agent,model)
         ## Process OF Messages (SimNE to (sdn) control messages)
         is_ready(a) ? in_packet_processing(a,model) : log_info("queue of $(a.id) is empty")
         # Process inter-agent messages
-        # log_info(model.ticks,a.id,"==> a.paths ==> $(a.paths)")
+        # log_info(model.ticks,a.id,"==> a.paths ==> $(a.paths) ===> $(a.msgs_in) <==")
         do_receive_messages(a,model)
         
         # log_info(model.ticks,a.id,"ctl_agent step: $(neighbors(a.ntw_graph,4))")
