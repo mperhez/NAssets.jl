@@ -182,9 +182,9 @@ function get_default_config()
         ntw_topo = 2, # Topology to use from `GraphModel` enum. 2: Ring Topology. 0 Indicates custom topo from CSV file. 
 
         size = 8, # If random topo for underlying network (ntw_topo != 0). Underlying network size for randomly generated networks.
-        k = 1, # If random topo for underlying network (ntw_topo != 0). K parameter to use in randomly generated underlying networks
+        k = 2, # If random topo for underlying network (ntw_topo != 0). K parameter to use in randomly generated underlying networks
         B = 0.5, # If random topo for underlying network (ntw_topo != 0). B parameter to use in randomly generated underlying networks
-        ctl_k = 1, # If random topo for control network (ctl_model != 0). K parameter to use in randomly generated control networks
+        ctl_k = 2, # If random topo for control network (ctl_model != 0). K parameter to use in randomly generated control networks
         ctl_B = 0.5, # If random topo for control network (ctl_model != 0). B parameter to use in randomly generated control networks
         
         ntw_csv_adj_matrix = "", # If custom topo for underlying network (ntw_topo == 0). Location of the CSV file containing the adjancency matrix for the underlying network topology.  
