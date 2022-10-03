@@ -273,7 +273,11 @@ function init_agent!(a::Agent,model)
         a.ctl_graph = ctl_sub_g
         a.params[:delay_ctl_link] = 2 # 1: no delay
         #Init vector of msgs
-        a.msgs_links = init_array_vectors(AGMessage,a.params[:delay_ctl_link],degree(a.ctl_graph,to_local_vertex(a.ctl_graph,a.id,:aid)))
+        if (degree(a.ctl_graph,to_local_vertex(a.ctl_graph,a.id,:aid)) == 0 ) 
+            throw(DomainError(a.ctl_graph, "ERROR: Initial control subgraph has degree 0. Revise ctl_graph parameters."))
+        else
+            a.msgs_links = init_array_vectors(AGMessage,a.params[:delay_ctl_link],degree(a.ctl_graph,to_local_vertex(a.ctl_graph,a.id,:aid)))
+        end
     else
         a.ntw_graph = model.ntw_graph
         a.base_ntw_graph = model.ntw_graph
