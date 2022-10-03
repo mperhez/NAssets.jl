@@ -59,7 +59,7 @@ function generate_traffic!(model)
     #q_pkts = 5 
     # pairs =[(5,14)]
     tpkts = 400 
-    println("$(model.seed)-->[$(model.ticks)] - generating traffic btwn $pairs")
+    #println("$(model.seed)-->[$(model.ticks)] - generating traffic btwn $pairs")
     for p in pairs
         src,dst = p
         #for bipartite sim
