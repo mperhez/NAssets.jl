@@ -21,7 +21,7 @@ function do_query!(msg::OFMessage,a::Agent,model)
                 
         path = do_query(query_time,query,query_graph,query_paths)
         
-        # log_info(model.ticks,a.id,"query: $(query) ----path found: $path ----> in precalc paths: $(query_paths)")
+        # log_info(model.ticks,a.id,"query: $(query) ----path found: $path ----> in precalc paths: $(query_paths) -- query graph: $(nv(query_graph)))")
         
         # For no centralised control topo
         if model.ctrl_model != GraphModel(1) # ¬ centralised
@@ -33,7 +33,7 @@ function do_query!(msg::OFMessage,a::Agent,model)
 
             #valid path not found?, need to send queries to nbs
             if isempty(path)
-                #should always query nbs even if has already queried with no reply?
+                #TODO should always query nbs even if has already queried with no reply?
                 sent_to = query_nbs!(a,msg,query_graph,query,[a.id],model)
                 record_pending_query!(a,model.ticks,sent_to,query)
                 push!(a.pending,(model.ticks,msg,false)) #false:not reprocess next time

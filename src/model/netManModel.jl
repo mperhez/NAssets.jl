@@ -62,6 +62,7 @@ function create_sim_asset_agents!(model)
 
         mnt_policy = typeof(model.init_sne_params) <: NamedTuple && id in model.init_sne_params.ids && Symbol("mnt_policy") in keys(model.init_sne_params) ? model.init_sne_params.mnt_policy[first(indexin(id,model.init_sne_params.ids))] : model.mnt_policy
 
+        log_info(model.ticks,"Prediction in init: $(last(prediction))")
         mnt = @match mnt_policy begin
             1 => MaintenanceInfoPreventive(deterioration,prediction,model)
             2 => MaintenanceInfoPredictive(deterioration,prediction,model)
@@ -260,10 +261,9 @@ end
 Initialise control agents
 """
 function init_agent!(a::Agent,model)
-
+    nodes = sort([get_controlled_assets(a.id,model)...])
     if model.ctrl_model != GraphModel(1)
         #Calculate sub graphs and init msg channels among agents
-        nodes = [get_controlled_assets(a.id,model)...]
         sub_g = get_subgraph(model.ntw_graph,nodes,:eid)
 
         nodes = [a.id]
@@ -284,17 +284,24 @@ function init_agent!(a::Agent,model)
     end
 
     ##
-    if a.maintenance.policy !=  CorrectiveM
-        schedule_event!(a,CTL_Event(4),a.maintenance.predictive_freq,Array{Int64,1}())
-        if a.maintenance.policy ==  PredictiveM
-            if Symbol("py_integration") in keys(model.properties)
-                #conversion to py
-                ajm_py =  model.py_integration.np.matrix(adjacency_matrix(a.ntw_graph))
-                model.py_integration.opt_init.optimisation_initialisation( ajm_py,
-                model.traffic_dist_params
-                #[1,0.05]
-                , model.mnt_bc_cost, model.mnt_bc_duration, model.mnt_wc_cost, model.mnt_wc_duration)
-            end
+    
+    snes = [ getindex(model,ca) for ca in nodes ]
+
+    with_predictions = [ sne.id for sne in snes if sne.maintenance.policy != CorrectiveM ]
+    
+    log_info(model.ticks,a.id,"with_predictions: $(with_predictions)")
+
+    with_py_plan = [ sne.id for sne in snes if sne.maintenance.policy == PredictiveM ]
+       
+    schedule_event!(a,CTL_Event(4),a.maintenance.predictive_freq,with_predictions)
+
+    if !isempty(with_py_plan)
+        if Symbol("py_integration") in keys(model.properties)
+                    #conversion to py
+                    ajm_py =  model.py_integration.np.matrix(adjacency_matrix(a.ntw_graph))
+                    model.py_integration.opt_init.optimisation_initialisation( ajm_py,
+                    model.traffic_dist_params
+                    , model.mnt_bc_cost, model.mnt_bc_duration, model.mnt_wc_cost, model.mnt_wc_duration)
         end
     end
 end

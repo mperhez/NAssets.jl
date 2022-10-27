@@ -202,6 +202,8 @@ function get_default_config()
         
         deterioration = [ (rul,t,a) -> rul - a 0.0 ], # deterioration parameters for network assets. This parameter is used by the `deteriorate!` function in the `physical_model` module.
         prediction = [ (rul,t,a) -> rul - a 0.0 ], # Function used to predict rul of the assets. Default equal to deterioration.
+        predictive_freq = 0, # Frequency for running predictions
+        prediction_window = 0, # How many time steps ahead the prediction to run the prediction
         mnt_policy = 0, # Maintenance policy used in the simulation. 0: Corrective, 1: Preventive, 2: Custom/Optimal
         mnt_wc_duration = 0, # Worst case duration of the maintenance operations (ticks)
         mnt_bc_duration = 0, # Best case duration of the maintenance operations (ticks)

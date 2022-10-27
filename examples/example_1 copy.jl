@@ -3,11 +3,6 @@ using Plots
 using GraphRecipes
 
 
-tst = (rul,t,a) -> begin
-    println("rul: $rul --- a: $a")
-    return last(rul) - ( a * t )
-end
-
 ntw_size = 9
 ntw_topo = 4
 n_steps = 100
@@ -22,33 +17,18 @@ bcfg = (
         # prob_random_walks = 0.8,
         n_steps = n_steps, 
         deterioration = [ (rul,t,a) -> rul - a 1 ],
-        prediction = [ tst 1 ],
         traffic_dist_params = [1.0, 0.07], 
-        traffic_packets = 100,
-        #max_queue_ne = 100,
-        #capacity_factor = 5,
-        link_capacity = 2000,
-        max_msg_live = 10,
+        #max_queue_ne = 4000,
+        #capacity_factor = 1.5,
+        # link_capacity = 1000,
         #clear_cache_graph_freq = 5,
-        pkt_per_tick = 3100,
+        #pkt_per_tick = 5000,
         #  max_msg_live = 5,
-        mnt_bc_duration = 1,
-        mnt_bc_cost = 0.5,
-        mnt_wc_duration = 5,
-        mnt_wc_cost = 5,
-        mnt_policy = 0,
-        predictive_freq = 10,
-        prediction_window = 10,
-        init_sne_params = 
-        #(ids=[9],capacity_factor=[4]),
-        (ids=[9],mnt_policy=[1]),
-        #  init_link_params = (
-        # #     # ids=[(2,5),(4,5),(5,8),(5,6),(1,2),(3,6),(6,9),(8,9)],capacities=[2000,4000,4000,500,4000,5000,500,500]
-        #      ids = [(7,8)],
-        #      capacities = [2000]
-        #      ),
+        init_sne_params = (ids=[5,9],capacity_factor=[2,2]),
+        init_link_params = (ids=[(2,5),(4,5),(5,8),(5,6)],capacities=Int.(ones(4)*1000)),
         ntw_services = [
-            (3, 7),
+            (3, 6),
+            #(1, 4),
             (9,1),
             (8,4)
             ] 
@@ -72,8 +52,7 @@ for ne in 1:size(vnes,1)
     plot!(prul,[ ne_st.rul for ne_st in vnes[ne] ], linestyle= ne == 2 ? :dash : :dot )
 end
 prul
-hline!(prul,[10], linestyle=:dash, c=:red, label="")
-prul
+# hline!(p,[10], linestyle=:dash, c=:red, label="")
 # hline!(p,[0.1], linestyle=:dash, c=:red, label="")
 
 # print(modbin)
@@ -85,8 +64,8 @@ prul
 
 #grid?
 
-# gp = NAssets.get_graph(-1,ntw_size,NAssets.GraphModel(5))
-# graphplot(gp)
+gp = NAssets.get_graph(-1,ntw_size,NAssets.GraphModel(5))
+graphplot(gp)
 
 # tpt_p = plot(
 #         ylabel!(NAssets.plot_tpt_step(rd[1].snes_ts,rd[4].snes_ts,rd[1].model_ts,t),"Throughput\n(MB/time)",guidefontsize=6)
@@ -94,20 +73,10 @@ prul
 #         ,plot_tpt_step(rd[3].snes_ts,rd[4].snes_ts,rd[3].model_ts,t)
 #         ,layout=(1,3))
 
-# p = plot(title="End-to-end Throughput")
-# for ne in 1:size(vnes,1)
-#     plot!(p,NAssets.get_throughput_trj(vnes[ne],n_steps), linestyle= :solid , label = "Asset_$ne", legend = :outerright
-#     )
-# end
-# p
-
-
-
-# pls = plot(title="Packet loss")
-# for ne in 1:size(vnes,1)
-#     plot!(pls,[ vnes[ne][i].drop_pkt for i=1:n_steps ], linestyle= :solid , label = "Asset_$ne", legend = :outerright
-#     )
-# end
-# pls
-
+p = plot(title="End-to-end Throughput")
+for ne in 1:size(vnes,1)
+    plot!(p,NAssets.get_throughput_trj(vnes[ne],n_steps), linestyle= :solid , label = "Asset_$ne", legend = :outerright
+    )
+end
+p
 
