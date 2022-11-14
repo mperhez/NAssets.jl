@@ -6,7 +6,7 @@ using LightGraphs: YenState, complete_graph, add_edge!
 using GraphPlot, GraphRecipes, NetworkLayout
 using Tables, DataFrames
 using CSV, JSON, Serialization, DelimitedFiles
-using BritishNationalGrid
+# using BritishNationalGrid
 using ZipFile, Shapefile
 using Random
 using Match
