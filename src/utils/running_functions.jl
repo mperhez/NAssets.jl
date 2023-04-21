@@ -55,6 +55,7 @@ function get_run_label(config)
         0 => "CORR"
         1 => "PREV"
         2 => "OPT"
+        3 => "CUST"
     end
     return run_label
 end
@@ -80,7 +81,7 @@ function run_sim(config)
     args[:q]=q_agents
     
     adata = [get_state_trj]
-    mdata = [:mapping_ctl_ntw,get_state_trj]
+    mdata = [:mapping_ctl_ntw,:ntw_links_capacity,get_state_trj]
 
     result_agents,result_model = run_model(config.n_steps,args; agent_data = adata, model_data = mdata)
     
@@ -110,6 +111,8 @@ function run_sim(config)
     model_data = [ (m.tick,m.links_load) for m in model_data ]
 
     nelements_header = reshape(vcat(["tick"],string.([i for i in fieldnames(NetworkAssetState)])),1,length(fieldnames(NetworkAssetState))+1)
+    new_ddir = sdir * config.run_label * "_full_model.bin"
+    serialize( new_ddir,result_model)
 
     if config.out_to_file 
         serialize( sdir * config.run_label * "_steps_ctl_agents.bin",ctl_ags)
@@ -240,6 +243,8 @@ function get_default_config()
         init_sne_params = (ids=[],ruls=[], deterioration=[],capacity_factor=[],mnt_policy=[],prediction=[]), # List of node ids and their specific initial parameters. e.g. (ids=[15,19],ruls=[1,0.7],deterioration=[0.2,0.001],capacity_factor=[1.2,5]) This indicates that for node 15, the starting RUL (Remaining Useful Life) will be 1, the deterioration parameter is 0.2 and the packet capacity is 1.2x (pkt_per_tick) . Likewise, for node 19, starting RUL is 0.7, deterioration 0.001 and capacity factor 5x (pkt_per_tick).
 
         init_link_params = (ids=[],capacities=[]), # List of links (node pairs) and their specific initial parameters. e.g. (ids=[(15,17),(8,9)],capacities=[200,400]). Setting a capacity of 200 packets per tick for link 15-17 and 400 packets per tick for link 8-9.
+
+        offline_plan = Array{Int,2}(undef,0,0), #pre-computed plan
 
         ## Python integration
 

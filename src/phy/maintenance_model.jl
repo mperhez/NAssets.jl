@@ -56,7 +56,7 @@ function stop_mnt!(a::Agent,sne::SimNE,model::ABM)
     state = get_state(sne)
     state.up = true
     state.on_maintenance = false
-    state.rul = sne.maintenance.eul
+    state.rul = sne.maintenance.eul - 1.
     state.maintenance_due = sne.maintenance.job_start + sne.maintenance.duration + sne.maintenance.eul - Int(round(sne.maintenance.threshold))
     sne.maintenance.job_start = -1
     set_state!(sne,state)
@@ -94,7 +94,7 @@ end
 
 function get_rul_predictions(sne::SimNE,current_time::Int64,window_size::Int64)::Vector{Float64}
     rul = [ st.rul for st in sne.state_trj ]
-    println("rul on get rul predctions: $rul ")
+    
     return  [ first(sne.maintenance.prediction)(rul,t,(last(sne.maintenance.prediction,size(sne.maintenance.prediction,2)-1)...)) for t = 1 : window_size ]
 end
 
@@ -106,7 +106,6 @@ function schedule_event!(a::Agent,type::CTL_Event,time::Int64,snes::Vector{Int64
     if !haskey(a.events,time)
         a.events[time] = Array{ControlEvent,1}()
     end
-    log_info(time-1,a.id,"scheduled event $type at t: $time for snes: $(snes)")
     push!(a.events[time],ControlEvent(time,type,snes))
 end
 
@@ -125,20 +124,19 @@ It schedules maintenance events (start/stop maintenance) for assets under contro
 
 """
 function update_maintenance_plan!(a::Agent, sne_ids_pred::Array{Int64},model::ABM)
-    log_info(model.ticks,a.id,"Updating mnt plan for $(a.id) ...")
+    
 
     window_size = a.maintenance.prediction_window
     #use the maintenance window from the end - window size
     ruls = a.rul_predictions[:,size(a.rul_predictions,2)-window_size+1:size(a.rul_predictions,2)]
-    #mnt_plan = 
-    log_info(model.ticks,a.id," ruls predicted=> $ruls <==")
+    
     for i=1:size(ruls,1)
         sne = getindex(model,sne_ids_pred[i])
 
         if !get_state(sne).on_maintenance && sne.id in sne_ids_pred
             #sum all where rul is <= threshold, if any > 0, then sum > 0
             cruls = ruls[i,size(ruls,2)-window_size+1:size(ruls,2)]
-            log_info(model.ticks,a.id,"cruls==>$(cruls)")
+            
             threshold_reached = sum(cruls .<= a.maintenance.threshold) > 0
             if threshold_reached#!isempty(threshold_reached)
                 #negative indicates i goes down for maintenance
@@ -241,7 +239,7 @@ end
 It processes scheduled events
 """
 function do_events_step!(a::Agent,model::ABM)
-    log_info(model.ticks,a.id,"processing events: $(a.events) ")
+    
     if haskey(a.events,model.ticks)
         evs = a.events[model.ticks]
         ntw_changes = Array{Int64,1}()
@@ -297,8 +295,7 @@ function do_rul_predictions!(a::Agent,sne_ids_pred::Array{Int64},model::ABM)
     
     #arrange predictions in a matrix of dims: length(snes) x window_size.
     ruls_pred = permutedims(hcat(get_rul_predictions.(snes,[model.ticks],[window_size])...))
-    log_info(model.ticks,a.id,"ruls_pred: $(ruls_pred)")
-    log_info(model.ticks,a.id,"rul predictions: $(a.rul_predictions)")
+    
 
     a.rul_predictions = length(a.rul_predictions) > 0 ? hcat(a.rul_predictions,ruls_pred) : ruls_pred
     # log_info(model.ticks,a.id," length: $(size(a.rul_predictions)) rul pred: $(a.rul_predictions)")
@@ -343,6 +340,13 @@ function MaintenanceInfoPredictive(model)
     MaintenanceInfoPredictive([],[],model)
 end
 
+function MaintenanceInfoCustom(deterioration::Array{Any},prediction::Array{Any},model)
+    return MaintenanceInfo(CustomM,100,-1,model.mnt_bc_duration,model.mnt_bc_cost,10.,prediction,model.predictive_freq,model.prediction_window,deterioration,model.mnt_bc_duration,model.mnt_bc_cost)
+end
+function MaintenanceInfoCustom(model)
+    MaintenanceInfoCustom([],[],model)
+end
+
 ### TODO REVIEW ##
 #maintenance cost
 cost(av) = (1 - av) * 100
@@ -377,5 +381,23 @@ function maintenance_cost(rul_mnt,is_start,is_active,dt_cost,l_cost,p_cost,r_cos
 
     #loss of life costs
     mnt_cost += is_start ? rul_mnt * r_cost : 0.
+    
+end
+
+
+function load_offline_plan!(a::Agent,snes::Array{Int64},model::ABM)
+    mnt_plan = model.offline_plan
+
+    # log_info(model.ticks,a.id,"Update CUSTOM MNT PLAN $mnt_plan")
+    
+    for sne_id in snes
+        # Extract the j-th column
+        sne_plan = filter(x->x!=0,mnt_plan[:, sne_id])
+        for mnt_job in sne_plan 
+            schedule_event!(a,CTL_Event(2),Int(model.ticks+mnt_job),[sne_id])
+        end
+    end
+    
+    
     
 end

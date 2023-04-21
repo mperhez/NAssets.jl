@@ -3,7 +3,6 @@ Basic initialization
 """
 function initialize(user_props;grid_dims=(3,3),seed=0)
   
-
     # Global model props
     default_props = Dict(
         :ticks => 0,# # time unit
@@ -61,11 +60,10 @@ function create_sim_asset_agents!(model)
         prediction = typeof(model.init_sne_params) <: NamedTuple && id in model.init_sne_params.ids && Symbol("prediction") in keys(model.init_sne_params) ? model.init_sne_params.prediction[first(indexin(id,model.init_sne_params.ids))] : model.prediction
 
         mnt_policy = typeof(model.init_sne_params) <: NamedTuple && id in model.init_sne_params.ids && Symbol("mnt_policy") in keys(model.init_sne_params) ? model.init_sne_params.mnt_policy[first(indexin(id,model.init_sne_params.ids))] : model.mnt_policy
-
-        log_info(model.ticks,"Prediction in init: $(last(prediction))")
         mnt = @match mnt_policy begin
             1 => MaintenanceInfoPreventive(deterioration,prediction,model)
             2 => MaintenanceInfoPredictive(deterioration,prediction,model)
+            3 => MaintenanceInfoCustom(deterioration,prediction,model)
             _ => MaintenanceInfoCorrective(deterioration,prediction,model)
         end
         
@@ -287,13 +285,19 @@ function init_agent!(a::Agent,model)
     
     snes = [ getindex(model,ca) for ca in nodes ]
 
-    with_predictions = [ sne.id for sne in snes if sne.maintenance.policy != CorrectiveM ]
+    with_predictions = [ sne.id for sne in snes if sne.maintenance.policy in (PredictiveM,PreventiveM) ]
     
     log_info(model.ticks,a.id,"with_predictions: $(with_predictions)")
 
     with_py_plan = [ sne.id for sne in snes if sne.maintenance.policy == PredictiveM ]
        
     schedule_event!(a,CTL_Event(4),a.maintenance.predictive_freq,with_predictions)
+
+    with_offline_plan = [ sne.id for sne in snes if sne.maintenance.policy == CustomM ]
+
+    if !isempty(with_offline_plan)
+        load_offline_plan!(a,with_offline_plan,model)
+    end
 
     if !isempty(with_py_plan)
         if Symbol("py_integration") in keys(model.properties)

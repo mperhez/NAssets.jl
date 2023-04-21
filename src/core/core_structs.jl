@@ -12,7 +12,7 @@ abstract type MaintenanceType end
 abstract type CorrectiveM <: MaintenanceType end
 abstract type PreventiveM <: MaintenanceType end
 abstract type PredictiveM <: MaintenanceType end
-
+abstract type CustomM <: MaintenanceType end
 
 """
     "Real" state of the asset
