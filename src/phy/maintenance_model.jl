@@ -384,16 +384,28 @@ function maintenance_cost(rul_mnt,is_start,is_active,dt_cost,l_cost,p_cost,r_cos
     
 end
 
-
+# Loads offline plans, it assummes that plans are generated in advance and rerouting takes place before scheduled maintenance.
 function load_offline_plan!(a::Agent,snes::Array{Int64},model::ABM)
     mnt_plan = model.offline_plan
 
     # log_info(model.ticks,a.id,"Update CUSTOM MNT PLAN $mnt_plan")
-    
+
+    #schedule re-routing
+    for trr=10:10:model.n_steps
+        planned_down = mnt_in_range(mnt_plan,0,10)
+        if !isempty(planned_down)
+            #NetworkChange
+            # log_info(a,model.ticks," planned down: schedulling network change as: $(planned_down)")
+            schedule_event!(a,CTL_Event(1), minimum(planned_down) - 4, planned_down .* -1)
+        end
+    end
+    #schedule mnt jobs
     for sne_id in snes
         # Extract the j-th column
         sne_plan = filter(x->x!=0,mnt_plan[:, sne_id])
+        # time_btwn = diff(sne_plan)
         for mnt_job in sne_plan 
+            # log_info(model.ticks,sne_id," ===> mnt to start at: $(Int(model.ticks+mnt_job))")
             schedule_event!(a,CTL_Event(2),Int(model.ticks+mnt_job),[sne_id])
         end
     end
@@ -401,3 +413,20 @@ function load_offline_plan!(a::Agent,snes::Array{Int64},model::ABM)
     
     
 end
+
+"""
+Return mnt jobs in a given range for the passed plan
+"""
+function mnt_in_range(mnt_plan::Array{Int,2}, from::Int, to::Int)
+    snes_mnt = Vector{Int}()
+    for j in 1:size(mnt_plan, 2)
+        for i in 1:size(mnt_plan, 1)
+            if mnt_plan[i, j] >= from && mnt_plan[i, j] <= to
+                push!(snes_mnt, j)
+                break
+            end
+        end
+    end
+    return snes_mnt
+end
+
